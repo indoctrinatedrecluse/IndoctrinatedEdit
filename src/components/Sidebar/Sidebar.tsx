@@ -1,8 +1,20 @@
 import React from 'react'
 import { ActivityView } from '../ActivityBar/ActivityBar'
-import { Folder, FileCode, CheckCircle2, Cpu, ShieldCheck, FolderOpen, Plus } from 'lucide-react'
+import {
+  Folder,
+  FileCode,
+  CheckCircle2,
+  Cpu,
+  ShieldCheck,
+  FolderOpen,
+  Plus,
+  FileText,
+  Code2,
+  Sparkles,
+  Zap,
+} from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
-
+import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { GitGraphView } from '../GitGraph/GitGraphView'
 
 export interface WorkspaceFileItem {
@@ -39,11 +51,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   if (!activeView) return null
 
-  const sampleExtensions = [
-    { id: 'indoctrinated.ext.typescript', name: 'TypeScript & React Engine', status: 'Running', type: 'Built-in' },
-    { id: 'indoctrinated.ext.liquid-glass-fx', name: 'Liquid Glass Shader Shaper', status: 'Running', type: 'Microservice' },
-    { id: 'indoctrinated.ext.linter', name: 'Unified Diagnostics Bus', status: 'Idle', type: 'Microservice' },
-  ]
+  const extensions = extensionRegistry.getAll()
+
+  const renderExtensionIcon = (iconName?: string) => {
+    switch (iconName) {
+      case 'FileText':
+        return <FileText size={16} />
+      case 'Code2':
+        return <Code2 size={16} />
+      case 'Sparkles':
+        return <Sparkles size={16} />
+      case 'Cpu':
+      default:
+        return <Cpu size={16} />
+    }
+  }
 
   return (
     <div className="sidebar glass-panel">
@@ -135,22 +157,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {activeView === 'extensions' && (
         <div className="sidebar-section">
           <div className="sidebar-header">
-            <span className="sidebar-title">MICROSERVICES & EXTENSIONS</span>
+            <span className="sidebar-title">INSTALLED EXTENSIONS</span>
+            <span className="ext-count-badge">{extensions.length} active</span>
           </div>
           <div className="extension-badge-banner">
             <ShieldCheck size={14} className="shield-icon" />
             <span>Process-Isolated Microservices Sandbox</span>
           </div>
           <div className="ext-list">
-            {sampleExtensions.map((ext) => (
-              <div key={ext.id} className="ext-card glass-panel">
+            {extensions.map((ext) => (
+              <div key={ext.id} className="ext-card glass-panel glass-interactive">
                 <div className="ext-header">
-                  <Cpu size={14} className="ext-icon" />
-                  <span className="ext-name">{ext.name}</span>
+                  <div className="ext-icon-wrapper">
+                    {renderExtensionIcon(ext.iconName)}
+                  </div>
+                  <div className="ext-title-col">
+                    <div className="ext-name-row">
+                      <span className="ext-name">{ext.name}</span>
+                      <span className="ext-version-badge">v{ext.version}</span>
+                    </div>
+                    <span className="ext-author">by {ext.author}</span>
+                  </div>
                 </div>
+
+                <p className="ext-desc">{ext.description}</p>
+
+                {ext.languages && ext.languages.length > 0 && (
+                  <div className="ext-languages-grid">
+                    {ext.languages.map((l) => (
+                      <span key={l.id} className="ext-lang-pill">
+                        {l.aliases?.[0] || l.id}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="ext-footer">
-                  <span className="ext-type">{ext.type}</span>
-                  <span className={`ext-status ${ext.status.toLowerCase()}`}>{ext.status}</span>
+                  <div className="ext-tags-row">
+                    <span className="ext-type-badge">{ext.type}</span>
+                    {ext.snippetsCount && (
+                      <span className="ext-snippets-badge">
+                        <Zap size={10} /> {ext.snippetsCount} snippets
+                      </span>
+                    )}
+                  </div>
+                  <span className={`ext-status ${ext.status.toLowerCase()}`}>
+                    <span className="status-dot" /> {ext.status}
+                  </span>
                 </div>
               </div>
             ))}
@@ -364,6 +417,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           line-height: 1.4;
         }
 
+        .ext-count-badge {
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 999px;
+          background: rgba(10, 132, 255, 0.15);
+          border: 1px solid rgba(10, 132, 255, 0.3);
+          color: var(--accent-cyan);
+        }
+
         .extension-badge-banner {
           display: flex;
           align-items: center;
@@ -374,40 +437,177 @@ export const Sidebar: React.FC<SidebarProps> = ({
           background: rgba(48, 209, 88, 0.12);
           border: 1px solid rgba(48, 209, 88, 0.25);
           color: var(--accent-green);
-          font-size: 11px;
-          font-weight: 500;
+          font-size: 10.5px;
+          font-weight: 600;
+        }
+
+        .ext-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .ext-card {
+          padding: 12px;
+          border-radius: var(--radius-md);
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          transition: all var(--transition-fast);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .ext-card:hover {
+          border-color: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.06);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         }
 
         .ext-header {
           display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
+
+        .ext-icon-wrapper {
+          width: 32px;
+          height: 32px;
+          border-radius: var(--radius-sm);
+          background: linear-gradient(135deg, rgba(10, 132, 255, 0.2) 0%, rgba(191, 90, 242, 0.2) 100%);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          display: flex;
           align-items: center;
+          justify-content: center;
+          color: var(--accent-cyan);
+          flex-shrink: 0;
+          box-shadow: 0 0 12px rgba(10, 132, 255, 0.25);
+        }
+
+        .ext-title-col {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .ext-name-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
           gap: 6px;
-          margin-bottom: 6px;
         }
 
         .ext-name {
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 700;
           color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .ext-version-badge {
+          font-family: var(--font-mono);
+          font-size: 9.5px;
+          font-weight: 600;
+          color: var(--text-muted);
+          padding: 1px 4px;
+          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          flex-shrink: 0;
+        }
+
+        .ext-author {
+          font-size: 10px;
+          color: var(--text-muted);
+        }
+
+        .ext-desc {
+          font-size: 11px;
+          color: var(--text-secondary);
+          line-height: 1.45;
+          margin: 0;
+        }
+
+        .ext-languages-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+
+        .ext-lang-pill {
+          font-size: 9.5px;
+          font-weight: 600;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(10, 132, 255, 0.1);
+          border: 1px solid rgba(10, 132, 255, 0.2);
+          color: var(--accent-cyan);
         }
 
         .ext-footer {
           display: flex;
+          align-items: center;
           justify-content: space-between;
-          font-size: 10.5px;
+          gap: 8px;
+          padding-top: 6px;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          font-size: 10px;
         }
 
-        .ext-type {
-          color: var(--text-muted);
+        .ext-tags-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
         }
 
-        .ext-status.running {
-          color: var(--accent-green);
+        .ext-type-badge {
+          font-size: 9.5px;
           font-weight: 600;
+          color: var(--text-muted);
+          padding: 1px 5px;
+          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.04);
+        }
+
+        .ext-snippets-badge {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 9.5px;
+          font-weight: 600;
+          color: #FFD60A;
+          background: rgba(255, 214, 10, 0.1);
+          border: 1px solid rgba(255, 214, 10, 0.25);
+          padding: 1px 5px;
+          border-radius: 3px;
+        }
+
+        .ext-status {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 10px;
+          font-weight: 600;
+        }
+
+        .ext-status.active, .ext-status.running {
+          color: #30D158;
         }
 
         .ext-status.idle {
           color: var(--accent-amber);
+        }
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #30D158;
+          box-shadow: 0 0 6px rgba(48, 209, 88, 0.6);
         }
 
         .glass-input {

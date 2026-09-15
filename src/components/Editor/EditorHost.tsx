@@ -2,9 +2,13 @@ import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
 import Editor, { OnMount, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
+import { extensionRegistry } from '../../extensions/extensionRegistry'
 
 // Force @monaco-editor/react to use local monaco bundle, bypassing cdn.jsdelivr.net completely
 loader.config({ monaco })
+
+// Initialize built-in Monaco language extensions immediately
+extensionRegistry.initializeMonacoExtensions(monaco)
 
 export interface SelectionInfo {
   text: string

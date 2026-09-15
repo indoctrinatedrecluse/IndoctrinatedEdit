@@ -17,6 +17,7 @@ import { toolchainService } from './services/toolchainService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
+  { name: 'project-roadmap.textile', path: 'project-roadmap.textile', isDirectory: false, lang: 'Textile' },
   { name: 'defaultGlassTheme.ts', path: 'defaultGlassTheme.ts', isDirectory: false, lang: 'TypeScript' },
   { name: 'liquidObsidianTheme.ts', path: 'liquidObsidianTheme.ts', isDirectory: false, lang: 'TypeScript' },
   { name: 'README.md', path: 'README.md', isDirectory: false, lang: 'Markdown' },
@@ -24,6 +25,7 @@ const demoFiles: WorkspaceFileItem[] = [
 
 const initialTabs: TabItem[] = [
   { id: 'welcome.ts', name: 'welcome.ts', language: 'typescript' },
+  { id: 'project-roadmap.textile', name: 'project-roadmap.textile', language: 'textile' },
   { id: 'defaultGlassTheme.ts', name: 'defaultGlassTheme.ts', language: 'typescript' },
   { id: 'README.md', name: 'README.md', language: 'markdown' },
 ]
@@ -151,6 +153,48 @@ export class LiquidObsidianGlassTheme extends ThemeDefinition {
   }
 }
 `,
+  'project-roadmap.textile': `h1. IndoctrinatedEdit — Project Roadmap
+
+{{toc}}
+
+h2. 🚀 Overview & Architecture
+
+IndoctrinatedEdit is the flashy, next-generation code editor built with *Liquid Glass* UI design and heavyweight *Monaco Core*.
+Sister project: "RecluseEdit":https://github.com/indoctrinatedrecluse/RecluseEdit (built with WPF & .NET 10).
+
+h2. 📋 Milestone Checklist
+
+* [x] Authentic iOS Liquid Glass Specular Shaders
+* [x] Multi-Model AI Streaming Assistant (#1024)
+* [x] Monaco Transparent Canvas & Translucent Minimap (#1028)
+* [x] Universal Text & Prose Language Pack (Textile, MD, reST, AsciiDoc)
+* [ ] Online Cloud License Activation Server (#2048)
+
+h2. 🔗 Redmine Integration Reference
+
+Related Issues: #1024, #1028, #2048
+Changeset commit: commit:6728b09
+Revision source: source:src/extensions/textSupport/textileGrammar.ts
+
+h2. 📊 Technology & Specification Matrix
+
+|_. Component |_. Technology |_. Status |
+| Editor Core | Monaco Editor & React 19 | *Active* |
+| Aesthetics | iOS Liquid Glass & Specular Glow | *Active* |
+| Language Pack | Textile, Markdown, reST, AsciiDoc | *Active* |
+| Microservices | Out-of-Process Sandbox Bus | *Running* |
+
+bc. // Example configuration
+export const APP_CONFIG = {
+  theme: 'indoctrinated.theme.cupertino-midnight',
+  license: 'INDC-PRO-PERPETUAL',
+};
+
+{{collapse(Click here to view extended architecture details...)
+This section is rendered using Redmine Textile collapse macro.
+All formatting like *bold*, _italic_, +underline+, -strikethrough-, and @inline code@ is fully tokenized!
+}}
+`,
   'README.md': `# ✨ IndoctrinatedEdit
 
 > Crafted with passion by **indoctrinatedrecluse** ❤️✨
@@ -178,8 +222,21 @@ function getLanguageFromFilename(filename: string): string {
       return 'html'
     case 'css':
       return 'css'
+    case 'textile':
+      return 'textile'
     case 'md':
+    case 'markdown':
+    case 'mdown':
+    case 'mkd':
       return 'markdown'
+    case 'rst':
+    case 'rest':
+      return 'rst'
+    case 'adoc':
+    case 'asciidoc':
+      return 'adoc'
+    case 'log':
+      return 'log'
     case 'py':
       return 'python'
     case 'rs':
@@ -192,6 +249,10 @@ function getLanguageFromFilename(filename: string): string {
     case 'c':
     case 'h':
       return 'cpp'
+    case 'csv':
+    case 'tsv':
+    case 'txt':
+    case 'text':
     default:
       return 'plaintext'
   }

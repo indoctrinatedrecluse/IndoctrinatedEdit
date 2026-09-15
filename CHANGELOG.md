@@ -33,11 +33,11 @@ This hotfix resolves critical UI layout rendering bugs, introduces interactive d
 - **Adaptive Header & Truncation**: Pinned action buttons (`Key`, `Clear`, `Close`) with `flex-shrink: 0` and enabled clean model name truncation so header items never overflow or clip.
 - **Enhanced Quick-Action Bar**: Improved chip layout and scroll container to prevent button cutoff.
 
-#### 🧭 Top Menu Bar & Liquid Glass Dialogs
-- **Top Application Menus**: Implemented standard VS Code-like `File`, `View`, and `Help` dropdown menus styled with the authentic Liquid Glass aesthetic, supporting click activation and hover switching.
-- **Unique Shortcut Mapping & Chord Support**: Implemented two-key chord sequences (`Ctrl+K` followed by `Ctrl+O` for Open Workspace Folder) to resolve Monaco outline shortcut collisions (`Ctrl+Shift+O`).
-- **About IndoctrinatedEdit Modal**: Added interactive dialog showcasing version info, project philosophy, author portfolio link (`https://portfolio-flutter-78bcf.web.app/`), and sister project (`RecluseEdit`).
-- **License & Perpetual PRO Activation**: Added Liquid Glass License modal displaying perpetual community entitlement, dynamic version string, lifetime seat validation, and authentic license key generator with one-click clipboard copy.
+#### 🧩 Extensions & Universal Text Support Extension
+- **Universal Text & Prose Language Pack (`indoctrinated.ext.text-pack`)**: Bundled all-in-one text formats extension supporting **Plain Text** (`.txt`), **Markdown** (`.md`, `.markdown`), **Redmine Textile** (`.textile`), **reStructuredText** (`.rst`), **AsciiDoc** (`.adoc`), **Log Files** (`.log`), and **CSV/TSV** (`.csv`, `.tsv`).
+- **Redmine Textile Monarch Tokenizer**: Custom syntax grammar for headers (`h1.`-`h6.`), inline formatting (`*bold*`, `_italic_`, `+underline+`, `-deleted-`, `@code@`), blocks (`bc..`, `bq.`), data tables (`|_. Header |`), Redmine issues (`#123`), commits (`commit:hash`), and macros (`{{toc}}`, `{{collapse}}`).
+- **Comprehensive Snippet Suite**: Embedded Monaco completion item providers with snippet expansions for Markdown tables, GitHub alert callouts (`[!NOTE]`, `[!TIP]`, `[!WARNING]`), Textile tables, code blocks, Redmine macros, frontmatter, and plain text notes.
+- **Extensions Sidebar View**: Upgraded the Extensions tab with rich Liquid Glass cards, custom icons (`FileText`, `Code2`, `Sparkles`, `Cpu`), language tags, snippet counts, and active status indicators.
 
 ---
 
