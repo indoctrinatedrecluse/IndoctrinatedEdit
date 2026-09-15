@@ -84,3 +84,49 @@ export interface IToolchainCheck {
   toolName: string
   checkAsync(): Promise<ToolchainCheckResult>
 }
+
+/* =========================================================================
+ * Git & Visual Graph Contracts
+ * ========================================================================= */
+
+export type GitFileStatusCode = 'M' | 'A' | 'D' | '?' | 'R' | 'U'
+
+export interface GitFileChange {
+  path: string
+  status: GitFileStatusCode
+  isStaged: boolean
+}
+
+export interface GitCommit {
+  hash: string
+  shortHash: string
+  authorName: string
+  authorEmail: string
+  date: string
+  relativeDate: string
+  message: string
+  parents: string[]
+  refs: string[]
+  trackIndex?: number
+}
+
+export interface GitRepoStatus {
+  isRepo: boolean
+  branch: string
+  ahead: number
+  behind: number
+  staged: GitFileChange[]
+  working: GitFileChange[]
+  commits: GitCommit[]
+}
+
+/* =========================================================================
+ * UI View Contribution Contracts
+ * ========================================================================= */
+
+export interface ViewContribution {
+  id: string
+  title: string
+  icon: string
+  location: 'activitybar' | 'panel' | 'bottom'
+}

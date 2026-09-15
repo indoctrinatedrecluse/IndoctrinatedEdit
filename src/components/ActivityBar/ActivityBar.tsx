@@ -1,19 +1,22 @@
 import React from 'react'
-import { Files, Search, Blocks, Palette, Settings } from 'lucide-react'
+import { Files, GitBranch, Search, Blocks, Palette, Settings } from 'lucide-react'
 
-export type ActivityView = 'files' | 'search' | 'extensions' | 'themes' | 'settings'
+export type ActivityView = 'files' | 'git' | 'search' | 'extensions' | 'themes' | 'settings'
 
 interface ActivityBarProps {
   activeView: ActivityView | null
   onSelectView: (view: ActivityView) => void
+  gitChangesCount?: number
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
   activeView,
   onSelectView,
+  gitChangesCount = 0,
 }) => {
-  const topItems: { id: ActivityView; label: string; icon: React.ReactNode }[] = [
+  const topItems: { id: ActivityView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
+    { id: 'git', label: 'Source Control & Git Graph (Ctrl+Shift+G)', icon: <GitBranch size={18} />, badge: gitChangesCount },
     { id: 'search', label: 'Search in Files (Ctrl+Shift+F)', icon: <Search size={18} /> },
     { id: 'extensions', label: 'Extensions & Microservices', icon: <Blocks size={18} /> },
     { id: 'themes', label: 'Liquid Glass Themes', icon: <Palette size={18} /> },
@@ -32,6 +35,9 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
               title={item.label}
             >
               {item.icon}
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className="activity-badge">{item.badge}</span>
+              )}
               {isActive && <div className="active-indicator" />}
             </button>
           )
@@ -94,6 +100,24 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           color: #FFF;
           background: var(--glass-bg-active);
           box-shadow: 0 0 16px rgba(10, 132, 255, 0.35);
+        }
+
+        .activity-badge {
+          position: absolute;
+          top: 3px;
+          right: 3px;
+          font-size: 9px;
+          font-weight: 700;
+          min-width: 14px;
+          height: 14px;
+          padding: 0 3px;
+          border-radius: 999px;
+          background: var(--accent-primary);
+          color: #FFF;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 0 8px var(--accent-primary);
         }
 
         .active-indicator {

@@ -11,6 +11,7 @@ interface ShortcutHandlers {
   onOpenSettings?: () => void
   onCommandPalette?: () => void
   onQuickOpen?: () => void
+  onGitGraph?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -34,6 +35,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.shiftKey && key === 'p') {
         e.preventDefault()
         handlers.onCommandPalette?.()
+        return
+      }
+
+      // Ctrl+Shift+G -> Git Graph / Source Control
+      if (e.shiftKey && key === 'g') {
+        e.preventDefault()
+        handlers.onGitGraph?.()
         return
       }
 

@@ -3,6 +3,8 @@ import { ActivityView } from '../ActivityBar/ActivityBar'
 import { Folder, FileCode, CheckCircle2, Cpu, ShieldCheck, FolderOpen, Plus } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 
+import { GitGraphView } from '../GitGraph/GitGraphView'
+
 export interface WorkspaceFileItem {
   name: string
   path: string
@@ -17,6 +19,7 @@ interface SidebarProps {
   onOpenFile: (file: WorkspaceFileItem) => void
   activeFilePath?: string
   workspaceName: string
+  workspacePath?: string
   workspaceFiles: WorkspaceFileItem[]
   onOpenFolderClick?: () => void
   onNewFileClick?: () => void
@@ -29,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenFile,
   activeFilePath,
   workspaceName,
+  workspacePath,
   workspaceFiles,
   onOpenFolderClick,
   onNewFileClick,
@@ -43,6 +47,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="sidebar glass-panel">
+      {activeView === 'git' && (
+        <GitGraphView
+          workspacePath={workspacePath}
+          onOpenFile={(filePath) =>
+            onOpenFile({ name: filePath.split(/[/\\]/).pop() || filePath, path: filePath, isDirectory: false })
+          }
+        />
+      )}
+
       {activeView === 'files' && (
         <div className="sidebar-section">
           <div className="sidebar-header">

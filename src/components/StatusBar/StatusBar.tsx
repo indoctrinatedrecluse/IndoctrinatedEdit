@@ -8,7 +8,9 @@ interface StatusBarProps {
   themeName: string
   encoding?: string
   indentation?: string
+  gitBranch?: string
   onThemeClick?: () => void
+  onGitClick?: () => void
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -18,16 +20,23 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   themeName,
   encoding = 'UTF-8',
   indentation = 'Spaces: 2',
+  gitBranch = 'master',
   onThemeClick,
+  onGitClick,
 }) => {
   return (
     <footer className="status-bar">
       {/* Left items */}
       <div className="status-group left">
-        <div className="status-item branch" title="Git Branch: master">
+        <button
+          className="status-item branch glass-interactive"
+          onClick={onGitClick}
+          title={`Git Branch: ${gitBranch} (Click to open Git Graph)`}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
+        >
           <GitBranch size={12} />
-          <span>master</span>
-        </div>
+          <span>{gitBranch}</span>
+        </button>
         <div className="status-item diagnostics" title="No syntax errors found">
           <Check size={12} className="check-icon" />
           <span>0 errors</span>

@@ -3,6 +3,8 @@ import {
   IStatusBarItem,
   IInlineCompletionProvider,
   IToolchainCheck,
+  ViewContribution,
+  GitRepoStatus,
 } from './types'
 
 export interface IExtensionHostRegistry {
@@ -10,13 +12,22 @@ export interface IExtensionHostRegistry {
   registerStatusBarItem(item: IStatusBarItem): void
   registerInlineCompletion(provider: IInlineCompletionProvider): void
   registerToolchainCheck(check: IToolchainCheck): void
+  registerView(view: ViewContribution): void
   registerCommand(commandId: string, handler: (...args: unknown[]) => unknown | Promise<unknown>): void
+}
+
+export interface IExtensionGitService {
+  getStatus(): Promise<GitRepoStatus>
+  stageFile(path: string): Promise<boolean>
+  unstageFile(path: string): Promise<boolean>
+  commit(message: string): Promise<boolean>
 }
 
 export interface ExtensionContext {
   readonly extensionId: string
   readonly workspacePath?: string
   readonly registry: IExtensionHostRegistry
+  readonly git: IExtensionGitService
 }
 
 /**

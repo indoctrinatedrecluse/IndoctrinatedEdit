@@ -2,6 +2,13 @@ import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
+import {
+  getRepoStatus,
+  stageFile,
+  unstageFile,
+  commitChanges,
+  initGitRepository,
+} from './git-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -145,6 +152,34 @@ ipcMain.handle('dialog:saveFileAs', async (_, defaultName: string, content: stri
   if (result.canceled || !result.filePath) return null
   await fs.writeFile(result.filePath, content, 'utf-8')
   return { path: result.filePath, name: path.basename(result.filePath) }
+})
+
+// ==========================================
+// Git Microservice IPC Handlers
+// ==========================================
+ipcMain.handle('git:getRepoStatus', async (_, cwd?: string) => {
+  const targetDir = cwd || process.env.APP_ROOT || process.cwd()
+  return await getRepoStatus(targetDir)
+})
+
+ipcMain.handle('git:stageFile', async (_, filePath: string, cwd?: string) => {
+  const targetDir = cwd || process.env.APP_ROOT || process.cwd()
+  return await stageFile(targetDir, filePath)
+})
+
+ipcMain.handle('git:unstageFile', async (_, filePath: string, cwd?: string) => {
+  const targetDir = cwd || process.env.APP_ROOT || process.cwd()
+  return await unstageFile(targetDir, filePath)
+})
+
+ipcMain.handle('git:commit', async (_, message: string, cwd?: string) => {
+  const targetDir = cwd || process.env.APP_ROOT || process.cwd()
+  return await commitChanges(targetDir, message)
+})
+
+ipcMain.handle('git:init', async (_, cwd?: string) => {
+  const targetDir = cwd || process.env.APP_ROOT || process.cwd()
+  return await initGitRepository(targetDir)
 })
 
 app.on('window-all-closed', () => {

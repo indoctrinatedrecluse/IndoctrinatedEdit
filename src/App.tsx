@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { WindowFrame } from './components/WindowFrame/WindowFrame'
 import { ActivityBar, ActivityView } from './components/ActivityBar/ActivityBar'
@@ -194,7 +194,10 @@ function getLanguageFromFilename(filename: string): string {
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ActivityView | null>('files')
   const [workspaceName, setWorkspaceName] = useState<string>('IndoctrinatedEdit')
+  const [workspacePath, setWorkspacePath] = useState<string | undefined>(undefined)
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileItem[]>(demoFiles)
+  const [gitBranch, setGitBranch] = useState<string>('master')
+  const [gitChangesCount, setGitChangesCount] = useState<number>(0)
   const [tabs, setTabs] = useState<TabItem[]>(initialTabs)
   const [activeTabId, setActiveTabId] = useState<string>('welcome.ts')
   const [fileContents, setFileContents] = useState<Record<string, string>>(initialFileContents)
@@ -206,6 +209,27 @@ export const App: React.FC = () => {
   useEffect(() => {
     applyGlassTheme(currentTheme)
   }, [currentTheme])
+
+  // Refresh Git Status for status bar and activity bar badge
+  const refreshGitStatus = useCallback(async () => {
+    if (!window.electronAPI?.git?.getRepoStatus) return
+    try {
+      const status = await window.electronAPI.git.getRepoStatus(workspacePath)
+      if (status.isRepo) {
+        setGitBranch(status.branch || 'HEAD')
+        setGitChangesCount(status.staged.length + status.working.length)
+      } else {
+        setGitBranch('No Git')
+        setGitChangesCount(0)
+      }
+    } catch (err) {
+      console.warn('Failed to refresh git status:', err)
+    }
+  }, [workspacePath])
+
+  useEffect(() => {
+    refreshGitStatus()
+  }, [refreshGitStatus])
 
   const handleSelectTheme = (themeId: string) => {
     const theme = getThemeById(themeId)
@@ -285,6 +309,7 @@ export const App: React.FC = () => {
     if (!res) return
 
     setWorkspaceName(res.folderName)
+    setWorkspacePath(res.folderPath)
     const mapped: WorkspaceFileItem[] = res.files.map((f) => ({
       name: f.name,
       path: f.path,
@@ -353,6 +378,7 @@ export const App: React.FC = () => {
     onOpenSettings: () => setActiveView('settings'),
     onCommandPalette: () => alert('Universal Command Palette (<Ctrl+Shift+P>): Coming in the next iteration!'),
     onQuickOpen: () => setActiveView('files'),
+    onGitGraph: () => setActiveView((prev) => (prev === 'git' ? null : 'git')),
   })
 
   const handleEditorChange = (value: string | undefined) => {
@@ -383,7 +409,11 @@ export const App: React.FC = () => {
       {/* Main Workspace Layout */}
       <div className="workspace-body">
         {/* Left Activity Bar */}
-        <ActivityBar activeView={activeView} onSelectView={handleSelectView} />
+        <ActivityBar
+          activeView={activeView}
+          onSelectView={handleSelectView}
+          gitChangesCount={gitChangesCount}
+        />
 
         {/* Collapsible Frosted Sidebar with Spring Animation */}
         <AnimatePresence initial={false}>
@@ -403,6 +433,7 @@ export const App: React.FC = () => {
                 onOpenFile={handleOpenFileItem}
                 activeFilePath={activeTabId}
                 workspaceName={workspaceName}
+                workspacePath={workspacePath}
                 workspaceFiles={workspaceFiles}
                 onOpenFolderClick={handleOpenFolderNative}
                 onNewFileClick={handleNewFile}
@@ -441,7 +472,9 @@ export const App: React.FC = () => {
         column={cursorPos.col}
         language={currentLanguage.toUpperCase()}
         themeName={currentTheme.name}
+        gitBranch={gitBranch}
         onThemeClick={() => setActiveView('themes')}
+        onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
       />
 
       <style>{`
