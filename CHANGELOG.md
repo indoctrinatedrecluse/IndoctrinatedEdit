@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-09-15
+
+### 🩹 Hotfix Release — Chromium Windows Cache Locking & Cleanup Automation
+
+This hotfix addresses Windows-specific Chromium GPU disk cache file locking (`0x5 Access is denied`) and introduces single instance application locking and automated cache purging utilities.
+
+#### 🛠️ Chromium & Electron Process Hardening
+- **In-Memory GPU Shader Caching**: Configured `disable-gpu-shader-disk-cache` and `disable-gpu-program-cache` switches in the Electron main process, eliminating Chromium's file lock collisions on `%APPDATA%\indoctrinated-edit\GPUCache` and `Cache_Data`.
+- **Single Instance Process Lock**: Enforced `app.requestSingleInstanceLock()`. Duplicate app launches now cleanly quit immediately while focusing the primary existing window (`app.on('second-instance')`), preventing simultaneous profile collisions.
+- **Explicit Application Identity**: Configured `app.name = 'IndoctrinatedEdit'` to enforce structured UserData and LocalAppData folder paths.
+
+#### 🧹 Cache & Artifact Purge Tooling
+- **Automated Cleaner Scripts**: Added `scripts/clean-cache.js` (cross-platform Node.js cleaner) and `scripts/clean-cache.ps1` (native PowerShell cleaner with automatic lock process termination).
+- **NPM Script Integration**: Added `npm run clean:cache` and `npm run clean:cache:win` for on-demand purging of `%APPDATA%`, `%LOCALAPPDATA%`, and local Vite HMR caches.
+
+#### 🪪 License & About Dialog Updates
+- Updated Help -> License and Help -> About modal dialogs to display active `v1.2.1 PRO` release version.
+
+---
+
 ## [1.2.0] - 2026-09-15
 
 ### ⚡ Minor Feature Release — C/C++, Python & AI, Java & JVM, and .NET/C# Universal Extensions
