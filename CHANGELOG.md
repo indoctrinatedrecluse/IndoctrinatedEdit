@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-15
+
+### ⚡ Minor Feature Release — C/C++, Python & AI, Java & JVM, and .NET/C# Universal Extensions
+
+This release introduces four major ecosystem extensions expanding IndoctrinatedEdit into a powerhouse IDE for native systems, AI & numerical computing, enterprise JVM backends, and .NET microservices, all bundled with rich snippet libraries and non-blocking compiler auto-detection.
+
+#### ⚙️ C/C++ Universal Engine & Ecosystem Extension (`indoctrinated.ext.cpp-pack`)
+- **Broad Language Support**: First-class support for C and Modern C++ (`.cpp`, `.cxx`, `.cc`, `.c`, `.hpp`, `.hxx`, `.hh`, `.ixx`, `.cppm`).
+- **Comprehensive Snippet Suite**:
+  - **Modern C++20 / C++23**: `main-cpp`, `class-rule5` (Rule of Five), `concept` (requires clauses), `coroutine-task` (`co_yield` generators), `ranges-pipeline` (`std::views` filtering & mapping), `variant-visit` (`std::variant` & visitor overload pattern).
+  - **C Core & POSIX Systems**: `main-c`, `struct-typedef` (lifecycle patterns), `pthreads-worker` (POSIX threads & mutexes), `mmap-io` (zero-copy memory mapping).
+  - **Low-Level SIMD**: `simd-avx2` (Intel AVX2 vectorized parallel float math).
+  - **Game Dev & Graphics**: `raylib-game` (Raylib desktop window bootstrap & 60fps render loop).
+  - **Web Microservices**: `crow-server` (Crow C++ HTTP API routing with JSON responses).
+  - **GUI**: `imgui-widget` (Immediate mode Dear ImGui window with interactive sliders & controls).
+  - **Modern Build Systems**: `cmake-project` (Target-based CMake 3.25+ configuration).
+- **Toolchain Discovery**: Auto-detects `gcc`, `g++`, `clang`, and `cl` with missing compiler guidance.
+
+#### 🐍 Python & AI Ecosystem Extension (`indoctrinated.ext.python-pack`)
+- **Full Python Language Suite**: Associations for `.py`, `.pyi`, `.pyw`, `.ipynb`, `.pyx`, `.pyd`.
+- **Comprehensive Snippet Suite**:
+  - **Modern Python 3.11 / 3.12+**: `main-py` (`argparse` CLI entrypoint), `dataclass` (`slots=True` & `frozen=True`), `pydantic-model` (Pydantic V2 schemas & validators), `async-taskgroup` (`asyncio.TaskGroup()` concurrency), `context-mgr` (`@contextmanager`), `match-case` (structural pattern matching).
+  - **Web Frameworks**: `fastapi-app` (FastAPI async API with lifespan & CORS), `flask-app` (Flask blueprint), `django-view` (DRF class-based `APIView`).
+  - **Data Science, AI & ML**: `pandas-pipeline` (DataFrame query, aggregation, Parquet IO), `numpy-vectorized` (vectorized matrix math & softmax), `pytorch-model` (PyTorch `nn.Module` classifier & training loop), `scikit-pipeline` (`StandardScaler` & `RandomForestClassifier`).
+  - **Testing & CLI**: `pytest-fixture` (fixtures with parameterized tests), `click-cli` (Click command group).
+- **Toolchain Discovery**: Auto-detects `python`, `python3`, and `py` with missing interpreter guidance.
+
+#### ☕ Java & JVM Universal Suite (`indoctrinated.ext.java-pack`)
+- **Enterprise JVM Support**: Associations for `.java`, `.jav`, `.class`, `.jar`, `.gradle`, `.pom`.
+- **Comprehensive Snippet Suite**:
+  - **Modern Java 17 / 21 LTS**: `main-java`, `record` (immutable data carriers), `sealed-interface` (sealed domain hierarchies), `virtual-threads` (Project Loom virtual thread per-task executor), `stream-pipeline` (`Collectors.groupingBy`).
+  - **Enterprise Frameworks**: `spring-boot-app` (Spring Boot 3 REST controller), `quarkus-resource` (Quarkus reactive endpoints), `jpa-entity` (Jakarta Persistence / Hibernate entity with auditing).
+  - **Testing & Build Systems**: `junit5-test` (JUnit 5 parameterized tests), `maven-pom` (Java 21 Maven POM), `gradle-build` (Kotlin DSL `build.gradle.kts`).
+- **Toolchain Discovery**: Auto-detects JDK binaries (`javac`, `java`) with download guidance.
+
+#### 🔷 .NET & C# Enterprise Suite (`indoctrinated.ext.dotnet-pack`)
+- **Enterprise .NET Support**: Associations for `.cs`, `.csx`, `.csproj`, `.sln`, `.fsproj`, `.vb`.
+- **Comprehensive Snippet Suite**:
+  - **Modern C# 12 / 13 & .NET 8 / 9**: `program-top-level` (WebApplication top-level statements), `primary-ctor` (C# 12 primary constructors with DI), `record-class` (positional immutable records), `pattern-matching` (switch expressions), `async-enumerable` (`IAsyncEnumerable<T>` streaming).
+  - **ASP.NET Core & Microservices**: `minimal-api` (`MapGroup` & `TypedResults`), `controller-api` (`[ApiController]`), `middleware` (custom latency logger middleware), `efcore-dbcontext` & `efcore-entity` (EF Core with fluent mappings), `masstransit-consumer` (event-driven messaging).
+  - **Cross-Platform MVVM, Testing & Build**: `mvvm-viewmodel` (CommunityToolkit.Mvvm `[ObservableProperty]`), `xunit-test` (xUnit `[Theory]` & `[InlineData]`), `csproj-modern` (SDK-style `.csproj` targeting `net8.0`).
+- **Toolchain Discovery**: Auto-detects `dotnet` (.NET SDK) with download guidance.
+
+#### 🪪 License & About Dialog Updates
+- Updated Help -> License and Help -> About modal dialogs to display active `v1.2.0 PRO` release version.
+
+---
+
 ## [1.1.0] - 2026-09-15
 
 ### 🚀 Minor Feature Release — Extensions, Top Menus, Toolchain Auto-Detect & Notification Center

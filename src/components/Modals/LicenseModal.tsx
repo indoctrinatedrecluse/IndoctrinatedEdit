@@ -12,7 +12,7 @@ interface LicenseModalProps {
 export const LicenseModal: React.FC<LicenseModalProps> = ({
   isOpen,
   onClose,
-  version = '1.1.0',
+  version = '1.2.0',
 }) => {
   const [licenseKey, setLicenseKey] = useState('')
   const [copied, setCopied] = useState(false)
