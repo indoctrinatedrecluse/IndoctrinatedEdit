@@ -31,6 +31,20 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+// Set application identity
+app.name = 'IndoctrinatedEdit'
+
+// Prevent Windows disk cache file lock & shader cache movement collisions (0x5 Access is denied)
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+app.commandLine.appendSwitch('disable-gpu-program-cache')
+
+// Single instance locking to prevent duplicate processes from fighting over %APPDATA% cache files
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
 let win: BrowserWindow | null = null
 let splashWin: BrowserWindow | null = null
 
@@ -313,6 +327,14 @@ ipcMain.handle('toolchain:detectAll', async (_, customDefinitions) => {
 
 ipcMain.handle('toolchain:getDefaultDefinitions', async () => {
   return DEFAULT_TOOLCHAINS
+})
+
+app.on('second-instance', () => {
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
 })
 
 app.on('window-all-closed', () => {
