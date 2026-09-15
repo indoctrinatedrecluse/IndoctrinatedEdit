@@ -147,6 +147,7 @@ npm run pack:linux
 - [x] **Phase 4: Custom Frameless UI Bars & Traffic Light Capsules + Cyberpunk Theme**
 - [x] **Phase 5: Multi-Model AI Chat Right Dock (BYOK, Ollama, Streaming, Code Attachment)**
 - [x] **Phase 6: Liquid Glass Splash Screen (Instant launch screen with graphic & author footer)**
+- [ ] **Next Milestone: Comprehensive Release Compliance Test Suite** (Pending Workitem — automated testing suite for packaging compliance, cross-platform shader & glass integrity, IPC validation, and Monaco contract tests)
 
 ---
 
