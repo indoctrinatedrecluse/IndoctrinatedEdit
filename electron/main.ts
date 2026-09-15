@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import fs from 'node:fs/promises'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -76,6 +77,74 @@ ipcMain.handle('window:close', () => {
 
 ipcMain.handle('window:isMaximized', () => {
   return win?.isMaximized() ?? false
+})
+
+// IPC Handlers for native file system dialogs and operations
+ipcMain.handle('dialog:openFile', async () => {
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Open File',
+    properties: ['openFile'],
+    filters: [
+      { name: 'All Files', extensions: ['*'] },
+      { name: 'Source Files', extensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'html', 'css', 'md', 'py', 'rs', 'go', 'cs', 'cpp', 'c'] },
+    ],
+  })
+
+  if (result.canceled || result.filePaths.length === 0) return null
+  const filePath = result.filePaths[0]
+  const content = await fs.readFile(filePath, 'utf-8')
+  const fileName = path.basename(filePath)
+  return { path: filePath, name: fileName, content }
+})
+
+ipcMain.handle('dialog:openFolder', async () => {
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Open Workspace Folder',
+    properties: ['openDirectory'],
+  })
+
+  if (result.canceled || result.filePaths.length === 0) return null
+  const folderPath = result.filePaths[0]
+  const folderName = path.basename(folderPath)
+
+  try {
+    const entries = await fs.readdir(folderPath, { withFileTypes: true })
+    const files = entries
+      .filter((e) => !e.name.startsWith('.git') && e.name !== 'node_modules' && e.name !== 'dist' && e.name !== 'dist-electron')
+      .map((e) => ({
+        name: e.name,
+        path: path.join(folderPath, e.name),
+        isDirectory: e.isDirectory(),
+      }))
+
+    return { folderPath, folderName, files }
+  } catch (err) {
+    console.error('Failed to read workspace folder:', err)
+    return { folderPath, folderName, files: [] }
+  }
+})
+
+ipcMain.handle('fs:readFile', async (_, filePath: string) => {
+  return await fs.readFile(filePath, 'utf-8')
+})
+
+ipcMain.handle('fs:saveFile', async (_, filePath: string, content: string) => {
+  await fs.writeFile(filePath, content, 'utf-8')
+  return true
+})
+
+ipcMain.handle('dialog:saveFileAs', async (_, defaultName: string, content: string) => {
+  if (!win) return null
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Save File As',
+    defaultPath: defaultName,
+  })
+
+  if (result.canceled || !result.filePath) return null
+  await fs.writeFile(result.filePath, content, 'utf-8')
+  return { path: result.filePath, name: path.basename(result.filePath) }
 })
 
 app.on('window-all-closed', () => {

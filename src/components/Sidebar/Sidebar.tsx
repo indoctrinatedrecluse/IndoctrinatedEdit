@@ -1,13 +1,25 @@
 import React from 'react'
 import { ActivityView } from '../ActivityBar/ActivityBar'
-import { Folder, FileCode, CheckCircle2, Cpu, ShieldCheck } from 'lucide-react'
+import { Folder, FileCode, CheckCircle2, Cpu, ShieldCheck, FolderOpen, Plus } from 'lucide-react'
+import { registeredThemes } from '@/themes/themeRegistry'
+
+export interface WorkspaceFileItem {
+  name: string
+  path: string
+  isDirectory: boolean
+  lang?: string
+}
 
 interface SidebarProps {
   activeView: ActivityView | null
   currentThemeId: string
   onSelectTheme: (id: string) => void
-  onOpenFile: (filename: string) => void
-  activeFile: string
+  onOpenFile: (file: WorkspaceFileItem) => void
+  activeFilePath?: string
+  workspaceName: string
+  workspaceFiles: WorkspaceFileItem[]
+  onOpenFolderClick?: () => void
+  onNewFileClick?: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -15,22 +27,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentThemeId,
   onSelectTheme,
   onOpenFile,
-  activeFile,
+  activeFilePath,
+  workspaceName,
+  workspaceFiles,
+  onOpenFolderClick,
+  onNewFileClick,
 }) => {
   if (!activeView) return null
-
-  const demoFiles = [
-    { name: 'welcome.ts', path: 'src/welcome.ts', lang: 'TypeScript' },
-    { name: 'defaultGlassTheme.ts', path: 'src/themes/defaultGlassTheme.ts', lang: 'TypeScript' },
-    { name: 'ExtensionPlugin.ts', path: 'packages/sdk/ExtensionPlugin.ts', lang: 'TypeScript' },
-    { name: 'README.md', path: 'README.md', lang: 'Markdown' },
-  ]
-
-  const themes = [
-    { id: 'indoctrinated.theme.cupertino-midnight', name: 'Cupertino Midnight Glass', desc: 'Vibrant specular dark glass (Default)' },
-    { id: 'indoctrinated.theme.liquid-obsidian', name: 'Liquid Obsidian', desc: 'Deep black glass with emerald neon accents' },
-    { id: 'indoctrinated.theme.frosted-amber', name: 'Frosted Amber Glow', desc: 'Warm titanium refraction with amber highlights' },
-  ]
 
   const sampleExtensions = [
     { id: 'indoctrinated.ext.typescript', name: 'TypeScript & React Engine', status: 'Running', type: 'Built-in' },
@@ -44,23 +47,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-section">
           <div className="sidebar-header">
             <span className="sidebar-title">EXPLORER</span>
+            <div className="sidebar-actions">
+              <button
+                className="icon-action-btn"
+                onClick={onNewFileClick}
+                title="New File (Ctrl+N)"
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                className="icon-action-btn"
+                onClick={onOpenFolderClick}
+                title="Open Folder (Ctrl+Shift+O)"
+              >
+                <FolderOpen size={14} />
+              </button>
+            </div>
           </div>
+
           <div className="sidebar-group-title">
             <Folder size={14} className="folder-icon" />
-            <span>INDOCTRINATEDEDIT</span>
+            <span>{workspaceName.toUpperCase()}</span>
           </div>
+
           <div className="file-list">
-            {demoFiles.map((file) => (
-              <button
-                key={file.name}
-                className={`file-item glass-interactive ${activeFile === file.name ? 'active' : ''}`}
-                onClick={() => onOpenFile(file.name)}
-              >
-                <FileCode size={14} className="file-icon" />
-                <span className="file-name">{file.name}</span>
-                <span className="file-lang">{file.lang}</span>
-              </button>
-            ))}
+            {workspaceFiles.map((file) => {
+              const isSelected = activeFilePath === file.path || activeFilePath === file.name
+              return (
+                <button
+                  key={file.path || file.name}
+                  className={`file-item glass-interactive ${isSelected ? 'active' : ''}`}
+                  onClick={() => onOpenFile(file)}
+                >
+                  {file.isDirectory ? (
+                    <Folder size={14} className="folder-icon" />
+                  ) : (
+                    <FileCode size={14} className="file-icon" />
+                  )}
+                  <span className="file-name">{file.name}</span>
+                  {file.lang && <span className="file-lang">{file.lang}</span>}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -71,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="sidebar-title">LIQUID GLASS THEMES</span>
           </div>
           <div className="theme-list">
-            {themes.map((theme) => {
+            {registeredThemes.map((theme) => {
               const isSelected = currentThemeId === theme.id
               return (
                 <div
@@ -83,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span className="theme-name">{theme.name}</span>
                     {isSelected && <CheckCircle2 size={15} className="theme-check" />}
                   </div>
-                  <p className="theme-desc">{theme.desc}</p>
+                  <p className="theme-desc">{theme.description}</p>
                 </div>
               )
             })}
@@ -147,7 +175,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <input type="checkbox" defaultChecked className="glass-checkbox" />
             </label>
             <label className="settings-row">
-              <span>Smooth Cursor Caret</span>
+              <span>Smooth Caret Animation</span>
+              <input type="checkbox" defaultChecked className="glass-checkbox" />
+            </label>
+            <label className="settings-row">
+              <span>Minimap Code Preview</span>
               <input type="checkbox" defaultChecked className="glass-checkbox" />
             </label>
           </div>
@@ -176,6 +208,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           align-items: center;
           justify-content: space-between;
           margin-bottom: 12px;
+        }
+
+        .sidebar-actions {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .icon-action-btn {
+          width: 22px;
+          height: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary);
+          border-radius: var(--radius-xs);
+          cursor: pointer;
+        }
+
+        .icon-action-btn:hover {
+          background: var(--glass-bg-hover);
+          color: var(--text-primary);
         }
 
         .sidebar-title {
@@ -212,11 +268,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           gap: 8px;
           padding: 6px 10px;
           border-radius: var(--radius-sm);
-          border: none;
+          border: 1px solid transparent;
           background: transparent;
           color: var(--text-secondary);
           font-size: 12px;
           text-align: left;
+          cursor: pointer;
         }
 
         .file-item:hover {
@@ -227,7 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         .file-item.active {
           color: #FFF;
           background: var(--glass-bg-active);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.12);
         }
 
         .file-icon {
@@ -236,6 +293,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         .file-name {
           flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .file-lang {
@@ -254,6 +314,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           border-radius: var(--radius-md);
           background: rgba(255, 255, 255, 0.04);
           border: var(--specular-border-subtle);
+          cursor: pointer;
         }
 
         .theme-card:hover {
