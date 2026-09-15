@@ -491,6 +491,7 @@ export const App: React.FC = () => {
             activeTabId={activeTabId}
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
+            onNewTab={handleNewFile}
           />
           {activeTab ? (
             <EditorHost

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Minus, Square, Copy, X, FolderOpen } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 import { AppIcon } from '../Brand/AppIcon'
+import { WindowControls } from './WindowControls'
 
 interface WindowFrameProps {
   activeFileName?: string
@@ -31,11 +32,12 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
 
   return (
     <header className="window-frame window-drag-region">
-      {/* Left branding & traffic lights / controls */}
+      {/* Left branding badge */}
       <div className="window-frame-left window-no-drag">
-        <div className="app-badge">
+        <div className="app-brand-badge glass-pill">
           <AppIcon size={18} />
           <span className="app-title">IndoctrinatedEdit</span>
+          <span className="app-tag">PRO</span>
         </div>
       </div>
 
@@ -44,89 +46,101 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
         <button
           className="search-pill glass-pill"
           onClick={onCommandPaletteToggle}
-          title="Open Command Palette (Ctrl+Shift+P)"
+          title="Open Quick Search & Command Palette (Ctrl+P / Ctrl+Shift+P)"
         >
           <FolderOpen size={13} className="search-pill-icon" />
           <span className="search-pill-workspace">{workspaceName}</span>
           <span className="search-pill-separator">/</span>
           <span className="search-pill-file">{activeFileName}</span>
-          <span className="search-pill-shortcut">Ctrl+P</span>
+          <div className="search-pill-shortcuts">
+            <kbd>Ctrl+P</kbd>
+          </div>
         </button>
       </div>
 
-      {/* Right window control buttons */}
+      {/* Right custom Liquid Glass window control capsules */}
       <div className="window-frame-right window-no-drag">
-        <button
-          className="window-control-btn minimize"
-          onClick={handleMinimize}
-          title="Minimize"
-        >
-          <Minus size={13} />
-        </button>
-        <button
-          className="window-control-btn maximize"
-          onClick={handleMaximize}
-          title={isMaximized ? 'Restore' : 'Maximize'}
-        >
-          {isMaximized ? <Copy size={12} /> : <Square size={11} />}
-        </button>
-        <button
-          className="window-control-btn close"
-          onClick={handleClose}
-          title="Close"
-        >
-          <X size={14} />
-        </button>
+        <WindowControls
+          isMaximized={isMaximized}
+          onMinimize={handleMinimize}
+          onMaximize={handleMaximize}
+          onClose={handleClose}
+        />
       </div>
+
+      {/* Dynamic specular rim line */}
+      <div className="window-rim-line" />
 
       <style>{`
         .window-frame {
-          height: 38px;
+          height: 40px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 10px;
-          background: var(--glass-bg-subtle);
-          border-bottom: var(--specular-border-subtle);
+          padding: 0 14px;
+          background: rgba(10, 14, 24, 0.55);
+          backdrop-filter: var(--glass-blur);
+          -webkit-backdrop-filter: var(--glass-blur);
           z-index: 100;
           position: relative;
+        }
+
+        .window-rim-line {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.18) 20%,
+            rgba(0, 240, 255, 0.3) 50%,
+            rgba(255, 255, 255, 0.18) 80%,
+            transparent 100%
+          );
+          pointer-events: none;
         }
 
         .window-frame-left, .window-frame-right {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
 
-        .app-badge {
+        .app-brand-badge {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 3px 10px;
-          border-radius: var(--radius-sm);
+          padding: 3px 10px 3px 6px;
           background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .app-badge-icon {
-          color: var(--accent-cyan);
-          filter: drop-shadow(0 0 8px rgba(100, 210, 255, 0.6));
+          border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .app-title {
           font-size: 12px;
-          font-weight: 600;
-          letter-spacing: 0.3px;
-          background: linear-gradient(135deg, #FFF 0%, #A1A1A6 100%);
+          font-weight: 700;
+          letter-spacing: 0.4px;
+          background: linear-gradient(135deg, #FFFFFF 0%, #B0B5C0 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
+        }
+
+        .app-tag {
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.6px;
+          padding: 1px 4px;
+          border-radius: 3px;
+          background: linear-gradient(135deg, var(--accent-primary) 0%, #BF5AF2 100%);
+          color: #FFF;
         }
 
         .window-frame-center {
           flex: 1;
           display: flex;
           justify-content: center;
-          max-width: 480px;
+          max-width: 460px;
           margin: 0 16px;
         }
 
@@ -135,17 +149,21 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 6px;
-          height: 24px;
-          padding: 0 14px;
+          gap: 7px;
+          height: 26px;
+          padding: 0 12px;
           font-size: 11.5px;
           color: var(--text-secondary);
           cursor: pointer;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(0, 0, 0, 0.2);
         }
 
         .search-pill:hover {
           color: var(--text-primary);
-          box-shadow: 0 0 14px rgba(10, 132, 255, 0.2);
+          border-color: rgba(255, 255, 255, 0.22);
+          background: rgba(255, 255, 255, 0.06);
+          box-shadow: 0 0 16px rgba(10, 132, 255, 0.25);
         }
 
         .search-pill-icon {
@@ -154,49 +172,34 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
 
         .search-pill-workspace {
           color: var(--text-muted);
+          font-weight: 500;
         }
 
         .search-pill-separator {
           color: var(--text-muted);
-          opacity: 0.5;
+          opacity: 0.4;
         }
 
         .search-pill-file {
-          font-weight: 500;
+          font-weight: 600;
           color: var(--text-primary);
         }
 
-        .search-pill-shortcut {
+        .search-pill-shortcuts {
           margin-left: auto;
-          font-size: 10px;
-          padding: 1px 5px;
-          border-radius: 4px;
-          background: rgba(255, 255, 255, 0.08);
-          color: var(--text-muted);
-        }
-
-        .window-control-btn {
-          width: 28px;
-          height: 24px;
           display: flex;
           align-items: center;
-          justify-content: center;
-          border: none;
-          background: transparent;
-          color: var(--text-secondary);
-          border-radius: var(--radius-xs);
-          cursor: pointer;
-          transition: all 0.15s ease;
+          gap: 3px;
         }
 
-        .window-control-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--text-primary);
-        }
-
-        .window-control-btn.close:hover {
-          background: var(--accent-red);
-          color: #FFF;
+        .search-pill-shortcuts kbd {
+          font-family: var(--font-mono);
+          font-size: 9.5px;
+          padding: 1px 5px;
+          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-muted);
+          border: 1px solid rgba(255, 255, 255, 0.1);
         }
       `}</style>
     </header>
