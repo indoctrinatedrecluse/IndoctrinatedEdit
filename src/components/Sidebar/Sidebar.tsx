@@ -71,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 className="icon-action-btn"
                 onClick={onOpenFolderClick}
-                title="Open Folder (Ctrl+Shift+O)"
+                title="Open Folder (Ctrl+K Ctrl+O)"
               >
                 <FolderOpen size={14} />
               </button>

@@ -33,6 +33,12 @@ This hotfix resolves critical UI layout rendering bugs, introduces interactive d
 - **Adaptive Header & Truncation**: Pinned action buttons (`Key`, `Clear`, `Close`) with `flex-shrink: 0` and enabled clean model name truncation so header items never overflow or clip.
 - **Enhanced Quick-Action Bar**: Improved chip layout and scroll container to prevent button cutoff.
 
+#### 🧭 Top Menu Bar & Liquid Glass Dialogs
+- **Top Application Menus**: Implemented standard VS Code-like `File`, `View`, and `Help` dropdown menus styled with the authentic Liquid Glass aesthetic, supporting click activation and hover switching.
+- **Unique Shortcut Mapping & Chord Support**: Implemented two-key chord sequences (`Ctrl+K` followed by `Ctrl+O` for Open Workspace Folder) to resolve Monaco outline shortcut collisions (`Ctrl+Shift+O`).
+- **About IndoctrinatedEdit Modal**: Added interactive dialog showcasing version info, project philosophy, author portfolio link (`https://portfolio-flutter-78bcf.web.app/`), and sister project (`RecluseEdit`).
+- **License & Perpetual PRO Activation**: Added Liquid Glass License modal displaying perpetual community entitlement, dynamic version string, lifetime seat validation, and authentic license key generator with one-click clipboard copy.
+
 ---
 
 ## [1.0.0] - 2026-09-15 (Archived)

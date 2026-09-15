@@ -2,17 +2,20 @@ import React, { useEffect, useState } from 'react'
 import { FolderOpen } from 'lucide-react'
 import { AppIcon } from '../Brand/AppIcon'
 import { WindowControls } from './WindowControls'
+import { MenuBar, MenuActionHandlers } from '../MenuBar/MenuBar'
 
 interface WindowFrameProps {
   activeFileName?: string
   workspaceName?: string
   onCommandPaletteToggle?: () => void
+  menuHandlers?: MenuActionHandlers
 }
 
 export const WindowFrame: React.FC<WindowFrameProps> = ({
   activeFileName = 'welcome.ts',
   workspaceName = 'IndoctrinatedEdit',
   onCommandPaletteToggle,
+  menuHandlers,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
 
@@ -39,13 +42,14 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
 
   return (
     <header className="window-frame">
-      {/* Left branding badge */}
+      {/* Left branding badge & Top Menus */}
       <div className="window-frame-left window-no-drag">
         <div className="app-brand-badge glass-pill">
           <AppIcon size={18} />
           <span className="app-title">IndoctrinatedEdit</span>
           <span className="app-tag">PRO</span>
         </div>
+        {menuHandlers && <MenuBar handlers={menuHandlers} />}
       </div>
 
       {/* Draggable spacer between left badge and center search */}

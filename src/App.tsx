@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { WindowFrame } from './components/WindowFrame/WindowFrame'
 import { ActivityBar, ActivityView } from './components/ActivityBar/ActivityBar'
@@ -8,6 +8,8 @@ import { EditorHost, EditorHostHandle, SelectionInfo } from './components/Editor
 import { StatusBar } from './components/StatusBar/StatusBar'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { AiChatPanel } from './components/AiChat/AiChatPanel'
+import { AboutModal } from './components/Modals/AboutModal'
+import { LicenseModal } from './components/Modals/LicenseModal'
 import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -456,6 +458,9 @@ export const App: React.FC = () => {
     setActiveTabId(res.path)
   }
 
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false)
+  const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false)
+
   const handleToggleSidebar = () => {
     setActiveView((prev) => (prev ? null : 'files'))
   }
@@ -468,18 +473,63 @@ export const App: React.FC = () => {
     setIsPaletteOpen(true)
   }, [])
 
+  // Top Menu Handlers
+  const menuHandlers = useMemo(
+    () => ({
+      onNewFile: handleNewFile,
+      onOpenFile: handleOpenFileNative,
+      onOpenFolder: handleOpenFolderNative,
+      onSaveFile: handleSaveFile,
+      onSaveFileAs: handleSaveFileAs,
+      onCloseTab: () => handleCloseTab(activeTabId),
+      onExit: () => window.electronAPI?.close?.(),
+      onCommandPalette: () => openPalette('>'),
+      onQuickOpen: () => openPalette(''),
+      onShowExplorer: () => setActiveView('files'),
+      onShowGitGraph: () => setActiveView('git'),
+      onShowSearch: () => setActiveView('search'),
+      onToggleAi: handleToggleAi,
+      onToggleSidebar: handleToggleSidebar,
+      onOpenSettings: () => setActiveView('settings'),
+      onWelcomeGuide: () => {
+        const welcomeTab = tabs.find((t) => t.id === 'welcome.ts')
+        if (welcomeTab) {
+          setActiveTabId(welcomeTab.id)
+        } else {
+          handleNewFile()
+        }
+      },
+      onOpenLicense: () => setIsLicenseOpen(true),
+      onOpenAbout: () => setIsAboutOpen(true),
+    }),
+    [
+      handleNewFile,
+      handleOpenFileNative,
+      handleOpenFolderNative,
+      handleSaveFile,
+      handleSaveFileAs,
+      handleCloseTab,
+      activeTabId,
+      openPalette,
+      handleToggleAi,
+      handleToggleSidebar,
+      tabs,
+    ]
+  )
+
   // Register commands into the centralized CommandRegistry
   useEffect(() => {
     return commandRegistry.registerMany([
       { id: 'file.new', title: 'New Untitled File', category: 'File', shortcut: 'Ctrl+N', handler: handleNewFile },
       { id: 'file.open', title: 'Open File...', category: 'File', shortcut: 'Ctrl+O', handler: handleOpenFileNative },
-      { id: 'file.openFolder', title: 'Open Workspace Folder...', category: 'File', shortcut: 'Ctrl+Shift+O', handler: handleOpenFolderNative },
+      { id: 'file.openFolder', title: 'Open Workspace Folder...', category: 'File', shortcut: 'Ctrl+K Ctrl+O', handler: handleOpenFolderNative },
       { id: 'file.save', title: 'Save File', category: 'File', shortcut: 'Ctrl+S', handler: handleSaveFile },
       { id: 'file.saveAs', title: 'Save File As...', category: 'File', shortcut: 'Ctrl+Shift+S', handler: handleSaveFileAs },
       { id: 'file.close', title: 'Close Current Tab', category: 'File', shortcut: 'Ctrl+W', handler: () => handleCloseTab(activeTabId) },
       { id: 'view.toggleSidebar', title: 'Toggle Primary Sidebar', category: 'View', shortcut: 'Ctrl+B', handler: handleToggleSidebar },
       { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', handler: () => setActiveView('files') },
       { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', handler: () => setActiveView('git') },
+      { id: 'view.search', title: 'Search in Workspace', category: 'View', shortcut: 'Ctrl+Shift+F', handler: () => setActiveView('search') },
       { id: 'view.themes', title: 'Open Liquid Glass Themes', category: 'View', handler: () => setActiveView('themes') },
       { id: 'view.settings', title: 'Open Preferences', category: 'View', shortcut: 'Ctrl+,', handler: () => setActiveView('settings') },
       { id: 'theme.cupertino', title: 'Theme: Cupertino Midnight Glass', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cupertino-midnight') },
@@ -492,6 +542,8 @@ export const App: React.FC = () => {
       { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', handler: () => setIsAiPanelOpen(true) },
       { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', handler: () => setIsAiPanelOpen(true) },
       { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', handler: () => setIsAiPanelOpen(true) },
+      { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', handler: () => setIsLicenseOpen(true) },
+      { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', handler: () => setIsAboutOpen(true) },
     ])
   }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, refreshGitStatus, handleToggleAi])
 
@@ -508,6 +560,8 @@ export const App: React.FC = () => {
     onCommandPalette: () => openPalette('>'),
     onQuickOpen: () => openPalette(''),
     onGitGraph: () => setActiveView((prev) => (prev === 'git' ? null : 'git')),
+    onShowExplorer: () => setActiveView((prev) => (prev === 'files' ? null : 'files')),
+    onShowSearch: () => setActiveView((prev) => (prev === 'search' ? null : 'search')),
     onToggleAi: handleToggleAi,
   })
 
@@ -539,11 +593,24 @@ export const App: React.FC = () => {
         onOpenFile={(f) => handleOpenFileItem({ name: f.name, path: f.path, isDirectory: false })}
       />
 
+      {/* About & License Modals */}
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        version="1.0.1"
+      />
+      <LicenseModal
+        isOpen={isLicenseOpen}
+        onClose={() => setIsLicenseOpen(false)}
+        version="1.0.1"
+      />
+
       {/* Top Frameless Title Bar */}
       <WindowFrame
         activeFileName={activeTab?.name}
         workspaceName={workspaceName}
         onCommandPaletteToggle={() => openPalette('')}
+        menuHandlers={menuHandlers}
       />
 
       {/* Main Workspace Layout */}
