@@ -5,6 +5,8 @@ import { goExtensionManifest, registerGoExtension } from './goSupport/goExtensio
 import { rustExtensionManifest, registerRustExtension } from './rustSupport/rustExtension'
 import { cppExtensionManifest, registerCppExtension } from './cppSupport/cppExtension'
 import { pythonExtensionManifest, registerPythonExtension } from './pythonSupport/pythonExtension'
+import { javaExtensionManifest, registerJavaExtension } from './javaSupport/javaExtension'
+import { dotnetExtensionManifest, registerDotnetExtension } from './dotnetSupport/dotnetExtension'
 
 class ExtensionRegistry {
   private extensions: Map<string, ExtensionManifest> = new Map()
@@ -25,7 +27,13 @@ class ExtensionRegistry {
     // 5. Python & AI Ecosystem Extension
     this.register(pythonExtensionManifest)
 
-    // 6. TypeScript & React Engine
+    // 6. Java & JVM Universal Suite
+    this.register(javaExtensionManifest)
+
+    // 7. .NET & C# Enterprise Suite
+    this.register(dotnetExtensionManifest)
+
+    // 8. TypeScript & React Engine
     this.register({
       id: 'indoctrinated.ext.typescript',
       name: 'TypeScript & React Engine',
@@ -39,7 +47,7 @@ class ExtensionRegistry {
       snippetsCount: 32,
     })
 
-    // 7. Liquid Glass Shader Shaper
+    // 9. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -52,7 +60,7 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 8. Unified Diagnostics & Toolchain Bus
+    // 10. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
@@ -84,6 +92,8 @@ class ExtensionRegistry {
     registerRustExtension(monacoInstance)
     registerCppExtension(monacoInstance)
     registerPythonExtension(monacoInstance)
+    registerJavaExtension(monacoInstance)
+    registerDotnetExtension(monacoInstance)
   }
 }
 
