@@ -1,0 +1,134 @@
+:root {
+  /* Liquid Glass Base Tokens */
+  --glass-bg: rgba(14, 18, 30, 0.68);
+  --glass-bg-elevated: rgba(22, 28, 46, 0.72);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.04);
+  --glass-bg-hover: rgba(255, 255, 255, 0.08);
+  --glass-bg-active: rgba(255, 255, 255, 0.14);
+
+  --glass-blur: blur(28px) saturate(190%) brightness(1.12);
+  --glass-blur-sm: blur(16px) saturate(170%);
+  
+  --specular-border: 1px solid rgba(255, 255, 255, 0.14);
+  --specular-border-strong: 1px solid rgba(255, 255, 255, 0.24);
+  --specular-border-subtle: 1px solid rgba(255, 255, 255, 0.08);
+
+  --specular-highlight: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+
+  /* Apple System Palette */
+  --accent-primary: #0A84FF;
+  --accent-cyan: #64D2FF;
+  --accent-green: #30D158;
+  --accent-amber: #FFD60A;
+  --accent-red: #FF453A;
+  --accent-purple: #BF5AF2;
+
+  --accent-glow: 0 0 24px rgba(10, 132, 255, 0.45);
+  --accent-gradient: linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%);
+
+  --text-primary: #F5F5F7;
+  --text-secondary: rgba(235, 235, 245, 0.65);
+  --text-muted: rgba(235, 235, 245, 0.35);
+
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --shadow-ambient: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  --shadow-glass: 0 12px 40px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* Reset & Base Setup */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  background: transparent;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Glass Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: var(--glass-blur-sm);
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* Utility Glass Classes */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--specular-border);
+  box-shadow: var(--shadow-glass);
+}
+
+.glass-pill {
+  background: var(--glass-bg-subtle);
+  border: var(--specular-border-subtle);
+  border-radius: 999px;
+  backdrop-filter: var(--glass-blur-sm);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-pill:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.glass-interactive {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-interactive:hover {
+  background: var(--glass-bg-hover);
+}
+
+.glass-interactive:active {
+  background: var(--glass-bg-active);
+  transform: scale(0.98);
+}
+
+/* Electron Window Drag Regions */
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.window-no-drag {
+  -webkit-app-region: no-drag;
+}
