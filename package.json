@@ -9,7 +9,35 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pack:win": "npm run build && electron-builder --win",
+    "pack:linux": "npm run build && electron-builder --linux",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.indoctrinatedrecluse.indoctrinatededit",
+    "productName": "IndoctrinatedEdit",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": ["nsis", "zip"],
+      "icon": "public/icon.png"
+    },
+    "linux": {
+      "target": ["AppImage", "tar.gz"],
+      "icon": "public/icon.png",
+      "category": "Development"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "indoctrinatedrecluse",
+      "repo": "IndoctrinatedEdit"
+    }
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -26,6 +54,7 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^34.2.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vite-plugin-electron": "^0.29.0",

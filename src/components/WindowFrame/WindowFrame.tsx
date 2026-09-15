@@ -123,6 +123,7 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           letter-spacing: 0.4px;
           background: linear-gradient(135deg, #FFFFFF 0%, #B0B5C0 100%);
           -webkit-background-clip: text;
+          background-clip: text;
           -webkit-text-fill-color: transparent;
         }
 

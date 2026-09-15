@@ -7,25 +7,87 @@
 ### 🔗 Sister Project
 
 > **Looking for our ultra-lightweight Windows counterpart?**  
-> Check out **[RecluseEdit](https://github.com/indoctrinatedrecluse/RecluseEdit)** — a lightning-fast, ultra-lean web application code editor crafted with WPF, C#, and .NET 10.
+> Check out **[RecluseEdit](https://github.com/indoctrinatedrecluse/RecluseEdit)** — a lightning-fast, ultra-lean web application code editor crafted with WPF, C#, and .NET 10 for Windows.
 
 ---
 
-## 🌟 Overview & Vision
+## 🌟 Overview
 
-**IndoctrinatedEdit** is a hyper-modern, flashy, general-purpose desktop text and code editor built for both **Linux** and **Windows**. 
+**IndoctrinatedEdit** is a hyper-modern, flashy, feature-packed general-purpose desktop text and code editor built for both **Linux** and **Windows**. 
 
-Where its sister project **RecluseEdit** focuses on an ultra-minimal footprint and lightweight Windows native execution, **IndoctrinatedEdit** flips the equation: bundle size is unconstrained, performance is GPU-accelerated, and visual aesthetics take center stage. Built with a signature **iOS "Liquid Glass"** frosted aesthetic, physics-based fluid spring animations, and an uncompromised multi-process microservices extension architecture, IndoctrinatedEdit delivers a desktop editing experience that feels genuinely alive.
+Where its sister project **RecluseEdit** prioritizes an ultra-minimal binary footprint and native Windows execution, **IndoctrinatedEdit** flips the equation: bundle size is unconstrained, visuals are GPU-accelerated, and aesthetics take center stage. Built with a signature **iOS "Liquid Glass"** frosted aesthetic, physics-based spring animations, Monaco Editor core, out-of-process Git subway-map visualization, universal command palette, and a multi-model AI assistant dock, IndoctrinatedEdit delivers a desktop editing experience that feels genuinely alive.
 
 ---
 
-## 🎯 Key Architectural Pillars
+## 🎯 Key Features
 
-- 🪟 **The "Liquid Glass" Aesthetic**: Multi-layered hardware-accelerated frosted glass (`backdrop-filter: blur()`), dynamic specular rim lighting, subtle ambient glow shaders, and authentic Apple-grade spring physics powered by Framer Motion.
-- ⚡ **Heavyweight Text Engine (Monaco Editor)**: Integrates the battle-tested editor core of VS Code — offering multi-cursor editing, minimap, rich diff views, bracket pair colorization, parameter hints, code folding, and native Language Server Protocol (LSP) support for 80+ programming languages.
-- 🧩 **Microservices & Isolated Plugin Model**: Extensions and themes do not run on the main UI thread. A dedicated, out-of-process **Extension Host** executes community plugins in sandboxed child processes over high-speed typed JSON-RPC, ensuring plugins can never freeze or crash the user interface.
-- 🎨 **First-Class Class-Based Theme & Extension SDK**: A clean, typed API (`@indoctrinated/sdk`) where community developers create custom themes, syntax providers, inline autocompletion microservices, and status bar contributions by implementing well-defined classes.
-- 🐧🪟 **Complete Linux & Windows Parity**: Identical visual presentation, glass shader rendering, and keyboard shortcut behaviors across modern Linux desktop environments (Wayland & X11) and Windows 10/11.
+### 🪟 Authentic "Liquid Glass" Cupertino Aesthetic
+- **Frosted Glass Canvas**: Multi-layered hardware-accelerated materials (`backdrop-filter: blur(28px) saturate(200%)`), specular rim highlights, and ambient glow shaders.
+- **Cross-Platform Translucency**: Native Windows 11 DWM Acrylic composition and Linux Wayland/X11 transparent compositor compatibility.
+- **Custom Traffic Light Capsule Controls**: Frosted glass capsule with Apple-grade traffic light buttons (Minimize `#FF9F0A`, Maximize/Restore `#30D158`, Close `#FF453A`) revealing micro-icons on hover with neon bloom.
+- **Segmented Glass UI Bars**: Custom frameless header with search pill and specular cyan rim line, dynamic floating tab bar, and segmented status bar with branch, diagnostics, microservices pulse orb, and encoding chips.
+
+### ⚡ Heavyweight Monaco Editor Core
+- **100% Transparent Canvas**: Custom syntax grammar and token rules rendered directly over dynamic frosted glass.
+- **Full IDE Capabilities**: Multi-cursor editing, bracket pair colorization, indentation guides, code folding, and smooth caret animations.
+- **Frosted Minimap Preview**: High-density typography rendering with frosted glass viewport slider and specular boundary lines.
+
+### 🎨 4 Dynamic Liquid Glass Themes
+Switchable in real-time with full Monaco token and CSS variable re-theming:
+1. **Cupertino Midnight Glass**: Royal blue accent (`#0A84FF`) on deep navy glass canvas.
+2. **Liquid Obsidian**: Emerald obsidian glow (`#30D158`) with vibrant teal highlights (`#00F5D4`).
+3. **Frosted Amber Glow**: Warm amber radiance (`#FF9F0A`) with golden specular rim lighting.
+4. **Cyberpunk 2077 Neon**: High-voltage synthwave aesthetic with neon magenta (`#FF0055`), electric cyan (`#00F0FF`), and night-city yellow (`#FFD600`).
+
+### 🌿 Out-of-Process Git Microservice & Subway-Map Graph
+- Dedicated background Git CLI backend for calculating branch states, topological lanes, ahead/behind counts, and staged/working tree modifications.
+- Visual subway-map commit graph with glowing SVG branch rails, circular commit nodes, relative commit timestamps, and author details.
+- One-click file staging/unstaging and commit controls.
+- Uncommitted changes counter badge in the Activity Bar.
+
+### 🔍 Universal Command Palette (<kbd>Ctrl+Shift+P</kbd> / <kbd>Ctrl+P</kbd>)
+- Floating spring modal with fuzzy search.
+- **`>` Commands Mode** (<kbd>Ctrl+Shift+P</kbd> / <kbd>F1</kbd>): Instant access to File, View, Preferences, Themes, Git, and AI commands.
+- **Files Mode** (<kbd>Ctrl+P</kbd>): Instant fuzzy jumping across open tabs and workspace files.
+
+### 🤖 Multi-Model AI Chat Right Dock (<kbd>Ctrl+Alt+A</kbd>)
+- **Multi-Provider BYOK & Local Models**:
+  - **DeepSeek**: `deepseek-chat` (V3) and `deepseek-reasoner` (R1 with chain-of-thought tokens).
+  - **OpenAI**: `gpt-4o`, `gpt-4o-mini`, and `o3-mini`.
+  - **Google Gemini**: `gemini-2.5-flash` and `gemini-2.5-pro` (via OpenAI-compatible API).
+  - **Anthropic Claude**: `claude-3-7-sonnet` and `claude-3-5-sonnet`.
+  - **Ollama**: Automatic local model discovery at `http://localhost:11434`.
+  - **Antigravity / Custom Proxy**: ADC session and reverse proxy endpoints.
+- **Real-Time Streaming**: Zero CORS restrictions via Electron backend bridge with `AbortController` cancellation.
+- **Reasoning Process Viewer**: Expandable chain-of-thought accordion with animated thinking spinner.
+- **Deep Editor Integration**: One-click **Attach Selection** (with line numbers), **Attach File**, **Insert at Cursor**, and **Replace Selection**.
+- **Quick Action Chips**: *Explain*, *Bugs & Security*, *Refactor*, *Tests*.
+
+### 🚀 Instant Liquid Glass Splash Screen
+- Synchronous frameless transparent launch window with 3D cybernetic prism brand graphic.
+- Shimmering neon loading progress bar with dynamic subsystem status messages.
+- Author attribution footer: **`by indoctrinatedrecluse ✨`**.
+- Seamless 350ms fade-out transition upon Monaco editor and React DOM readiness.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Action | Shortcut (Windows/Linux) |
+| :--- | :--- |
+| **Universal Command Palette** | <kbd>Ctrl+Shift+P</kbd> or <kbd>F1</kbd> |
+| **Quick Open File** | <kbd>Ctrl+P</kbd> |
+| **Toggle AI Assistant Right Dock** | <kbd>Ctrl+Alt+A</kbd> or <kbd>Ctrl+Shift+A</kbd> |
+| **Source Control & Git Graph** | <kbd>Ctrl+Shift+G</kbd> |
+| **Toggle Primary Sidebar** | <kbd>Ctrl+B</kbd> |
+| **Show Explorer** | <kbd>Ctrl+Shift+E</kbd> |
+| **New Untitled File** | <kbd>Ctrl+N</kbd> |
+| **Open File...** | <kbd>Ctrl+O</kbd> |
+| **Open Workspace Folder...** | <kbd>Ctrl+Shift+O</kbd> |
+| **Save File** | <kbd>Ctrl+S</kbd> |
+| **Save File As...** | <kbd>Ctrl+Shift+S</kbd> |
+| **Close Current Tab** | <kbd>Ctrl+W</kbd> |
+| **Preferences / Settings** | <kbd>Ctrl+,</kbd> |
 
 ---
 
@@ -33,77 +95,62 @@ Where its sister project **RecluseEdit** focuses on an ultra-minimal footprint a
 
 | Layer | Technology |
 | :--- | :--- |
-| **Desktop Shell / Host** | [Electron](https://www.electronjs.org/) + Node.js |
+| **Desktop Host / Runtime** | [Electron 34](https://www.electronjs.org/) + Node.js |
 | **Frontend UI Framework** | [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) |
-| **Editor Core Engine** | [Monaco Editor](https://microsoft.github.io/monaco-editor/) |
-| **Animation & Motion Physics** | [Framer Motion](https://www.framer.com/motion/) |
-| **UI Primitives & Icons** | [Radix UI](https://www.radix-ui.com/) & [Lucide Icons](https://lucide.dev/) |
-| **Styling Engine** | Vanilla CSS Glassmorphism Design System (Backdrop Filters, Specular Lights, CSS Tokens) |
-| **Extension Microservice Bus** | Out-of-process Node.js Child Process Host + Typed JSON-RPC |
-| **Build & Bundling Toolchain** | [Vite](https://vitejs.dev/) + Electron Builder / Vite Plugin Electron |
+| **Editor Core Engine** | [Monaco Editor](https://microsoft.github.io/monaco-editor/) (`@monaco-editor/react`) |
+| **Motion Physics** | [Framer Motion](https://www.framer.com/motion/) |
+| **UI Icons** | [Lucide Icons](https://lucide.dev/) |
+| **Styling Engine** | Vanilla CSS Cupertino Glassmorphism Design System |
+| **Packaging & Distribution**| [Electron Builder](https://www.electron.build/) (NSIS, ZIP, AppImage, Tarball) |
+| **Build Toolchain** | [Vite 6](https://vitejs.dev/) + Vite Plugin Electron |
 
 ---
 
-## 🏗️ Architecture Overview
+## 🚀 Getting Started
 
-```mermaid
-graph TD
-    subgraph HostProcess ["Main Process (Electron / Node.js)"]
-        WindowMgr["Window & Glass Compositor Manager"]
-        NativeFS["Native File System & PTY Terminals"]
-        IPCBroker["IPC Message Broker (JSON-RPC)"]
-    end
+### Prerequisites
+- Node.js 20+ installed
+- Git installed and accessible in your system PATH
 
-    subgraph UIProcess ["Renderer Process (React 19 + Chromium)"]
-        GlassShell["iOS Liquid Glass Shell & Framer Motion"]
-        MonacoCore["Monaco Editor (Transparent Canvas)"]
-        ThemeManager["Dynamic Glass Theme System"]
-    end
+### Installation & Local Run
+```bash
+# Clone the repository
+git clone https://github.com/indoctrinatedrecluse/IndoctrinatedEdit.git
+cd IndoctrinatedEdit
 
-    subgraph ExtMicroservice ["Extension Microservice Host (Isolated Process)"]
-        PluginRuntime["Plugin Sandbox & Class Loader"]
-        ExtA["Language Extensions (Class-based)"]
-        ThemeB["Theme Packs (GlassPalette)"]
-        ExtRPC["RPC Client (@indoctrinated/sdk)"]
-    end
+# Install dependencies
+npm install
 
-    IPCBroker <-->|IPC / ContextBridge| UIProcess
-    IPCBroker <-->|Pipes / JSON-RPC| ExtMicroservice
+# Run locally in development mode
+npm run dev
+```
+
+### Packaging & Distribution
+```bash
+# Compile and build production bundles
+npm run build
+
+# Package for Windows (NSIS Installer & Portable ZIP)
+npm run pack:win
+
+# Package for Linux (AppImage & Tarball)
+npm run pack:linux
 ```
 
 ---
 
-## 📐 Project Scope & Roadmap
+## 🗺️ Roadmap & Milestones
 
-### Phase 1: Shell & Liquid Glass Design System
-- [ ] Electron + Vite + React 19 workspace scaffolding.
-- [ ] Frameless window with transparent composition on Windows 10/11 and Linux.
-- [ ] Liquid Glass design system (multi-stage blur, specular borders, noise texture, and spring physics).
-- [ ] Custom window frame, title bar, tabs manager, and collapsible glassy panels.
-
-### Phase 2: Monaco Editor Integration & Custom Glass Canvas
-- [ ] Transparent Monaco Editor integration with theme synchronization.
-- [ ] Floating glassy hover cards, parameter hints, and autocomplete widgets.
-- [ ] Minimap, line numbers gutter, and diagnostic squiggle rendering.
-
-### Phase 3: Extension & Themes Microservice Architecture
-- [ ] Core SDK (`@indoctrinated/sdk`) exposing class-based contracts:
-  - `ExtensionPlugin`
-  - `ThemeDefinition` & `GlassPalette`
-  - `InlineCompletionProvider`
-  - `StatusBarProvider`
-  - `ToolchainCheck`
-- [ ] Isolated out-of-process Extension Host daemon.
-- [ ] Bidirectional JSON-RPC communication bus and capability permissions.
-
-### Phase 4: Integrated Developer Tooling & Terminals
-- [ ] Glassy multi-tab terminal dock powered by `xterm.js` and `node-pty`.
-- [ ] Universal Command Palette (<kbd>Ctrl+Shift+P</kbd> / <kbd>F1</kbd>) with fuzzy search.
-- [ ] File tree explorer with live file system watchers.
+- [x] **Phase 1: Git Microservice & Visual Subway-Map Graph**
+- [x] **Phase 2: Flashy Custom Icon & Software Branding**
+- [x] **Phase 3: Universal Command Palette (<kbd>Ctrl+Shift+P</kbd> / <kbd>Ctrl+P</kbd>)**
+- [x] **Phase 4: Custom Frameless UI Bars & Traffic Light Capsules + Cyberpunk Theme**
+- [x] **Phase 5: Multi-Model AI Chat Right Dock (BYOK, Ollama, Streaming, Code Attachment)**
+- [x] **Phase 6: Liquid Glass Splash Screen (Instant launch screen with graphic & author footer)**
 
 ---
 
-## 📜 Author & License
+## 📄 License & Attribution
 
-Developed and maintained by **[indoctrinatedrecluse](https://github.com/indoctrinatedrecluse)**.  
-All rights reserved.
+Crafted with passion by **[indoctrinatedrecluse](https://github.com/indoctrinatedrecluse)**.  
+See [CHANGELOG.md](CHANGELOG.md) for full release notes and feature breakdown.
