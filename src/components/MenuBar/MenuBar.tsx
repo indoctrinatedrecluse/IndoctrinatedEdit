@@ -16,6 +16,7 @@ import {
   Sparkles,
   KeyRound,
   Info,
+  Bell,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -34,6 +35,7 @@ export interface MenuActionHandlers {
   onToggleAi?: () => void
   onToggleSidebar?: () => void
   onOpenSettings?: () => void
+  onToggleNotifications?: () => void
   onWelcomeGuide?: () => void
   onOpenLicense?: () => void
   onOpenAbout?: () => void
@@ -176,6 +178,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+B',
           icon: <PanelLeft size={14} />,
           onClick: handlers.onToggleSidebar,
+        },
+        {
+          id: 'view.notifications',
+          label: 'Notifications & Alerts',
+          shortcut: 'Ctrl+Shift+N',
+          icon: <Bell size={14} />,
+          onClick: handlers.onToggleNotifications,
         },
         { id: 'sep6', label: '', isSeparator: true },
         {

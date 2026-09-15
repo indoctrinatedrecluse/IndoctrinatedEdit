@@ -33,11 +33,19 @@ This hotfix resolves critical UI layout rendering bugs, introduces interactive d
 - **Adaptive Header & Truncation**: Pinned action buttons (`Key`, `Clear`, `Close`) with `flex-shrink: 0` and enabled clean model name truncation so header items never overflow or clip.
 - **Enhanced Quick-Action Bar**: Improved chip layout and scroll container to prevent button cutoff.
 
-#### 🧩 Extensions & Universal Text Support Extension
-- **Universal Text & Prose Language Pack (`indoctrinated.ext.text-pack`)**: Bundled all-in-one text formats extension supporting **Plain Text** (`.txt`), **Markdown** (`.md`, `.markdown`), **Redmine Textile** (`.textile`), **reStructuredText** (`.rst`), **AsciiDoc** (`.adoc`), **Log Files** (`.log`), and **CSV/TSV** (`.csv`, `.tsv`).
-- **Redmine Textile Monarch Tokenizer**: Custom syntax grammar for headers (`h1.`-`h6.`), inline formatting (`*bold*`, `_italic_`, `+underline+`, `-deleted-`, `@code@`), blocks (`bc..`, `bq.`), data tables (`|_. Header |`), Redmine issues (`#123`), commits (`commit:hash`), and macros (`{{toc}}`, `{{collapse}}`).
-- **Comprehensive Snippet Suite**: Embedded Monaco completion item providers with snippet expansions for Markdown tables, GitHub alert callouts (`[!NOTE]`, `[!TIP]`, `[!WARNING]`), Textile tables, code blocks, Redmine macros, frontmatter, and plain text notes.
-- **Extensions Sidebar View**: Upgraded the Extensions tab with rich Liquid Glass cards, custom icons (`FileText`, `Code2`, `Sparkles`, `Cpu`), language tags, snippet counts, and active status indicators.
+#### 🔔 Notification Center & Toolchain Auto-Detect
+- **Interactive Notification Center**: Liquid Glass floating drawer/popover accessed via the main title bar bell icon (with unread badge counter), `View -> Notifications` (`Ctrl+Shift+N`), and Command Palette.
+- **"Dismiss All" & Batch Management**: One-click dismissal resetting unread and pending notification counters to zero instantly.
+- **Compiler Auto-Detection Alerts**: Integrates with `toolchainService` to run non-blocking background compiler checks when extensions load, notifying users if `go` or `rustc`/`cargo` is missing from PATH with direct download/install actions.
+- **Human-Readable Error Dispatcher**: Unified error logging (`notificationService.notifyError`) presenting friendly diagnostics for agent crashes and service failures.
+
+#### 🐹 Go Universal Suite & Toolchain Extension
+- **Go Ecosystem Pack (`indoctrinated.ext.go-pack`)**: Full Go language support with rich snippets for standard library (`goroutine`, `channel`, `select`, `table-test`) and popular frameworks (**Gin**, **Fiber**, **Echo**, **GORM**, **Cobra**).
+- **Toolchain Discovery**: Auto-detects `go` binary and toolchain status in the background.
+
+#### 🦀 Rust & Cargo Ecosystem Extension
+- **Rust Development Pack (`indoctrinated.ext.rust-pack`)**: Complete Rust language and Cargo support with snippets for core idioms (`derive`, `impl`, `trait`, `match`, `testmod`) and ecosystems (**Tokio**, **Axum**, **Actix-Web**, **Serde**, **Clap**).
+- **Toolchain Discovery**: Auto-detects `rustc` and `cargo` toolchains with missing compiler guidance (`https://rustup.rs`).
 
 ---
 

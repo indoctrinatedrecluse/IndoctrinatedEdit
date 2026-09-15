@@ -10,6 +10,8 @@ import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { AiChatPanel } from './components/AiChat/AiChatPanel'
 import { AboutModal } from './components/Modals/AboutModal'
 import { LicenseModal } from './components/Modals/LicenseModal'
+import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
+import { notificationService, NotificationItem } from './services/notificationService'
 import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -521,6 +523,20 @@ export const App: React.FC = () => {
 
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false)
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false)
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false)
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => notificationService.getNotifications())
+
+  useEffect(() => {
+    return notificationService.subscribe((list) => {
+      setNotifications(list)
+    })
+  }, [])
+
+  const unreadNotificationsCount = notifications.filter((n) => !n.read).length
+
+  const handleToggleNotifications = useCallback(() => {
+    setIsNotificationCenterOpen((prev) => !prev)
+  }, [])
 
   const handleToggleSidebar = () => {
     setActiveView((prev) => (prev ? null : 'files'))
@@ -552,6 +568,7 @@ export const App: React.FC = () => {
       onToggleAi: handleToggleAi,
       onToggleSidebar: handleToggleSidebar,
       onOpenSettings: () => setActiveView('settings'),
+      onToggleNotifications: handleToggleNotifications,
       onWelcomeGuide: () => {
         const welcomeTab = tabs.find((t) => t.id === 'welcome.ts')
         if (welcomeTab) {
@@ -574,6 +591,7 @@ export const App: React.FC = () => {
       openPalette,
       handleToggleAi,
       handleToggleSidebar,
+      handleToggleNotifications,
       tabs,
     ]
   )
@@ -591,6 +609,7 @@ export const App: React.FC = () => {
       { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', handler: () => setActiveView('files') },
       { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', handler: () => setActiveView('git') },
       { id: 'view.search', title: 'Search in Workspace', category: 'View', shortcut: 'Ctrl+Shift+F', handler: () => setActiveView('search') },
+      { id: 'view.notifications', title: 'Show Notifications & System Alerts', category: 'View', shortcut: 'Ctrl+Shift+N', handler: handleToggleNotifications },
       { id: 'view.themes', title: 'Open Liquid Glass Themes', category: 'View', handler: () => setActiveView('themes') },
       { id: 'view.settings', title: 'Open Preferences', category: 'View', shortcut: 'Ctrl+,', handler: () => setActiveView('settings') },
       { id: 'theme.cupertino', title: 'Theme: Cupertino Midnight Glass', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cupertino-midnight') },
@@ -606,7 +625,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, refreshGitStatus, handleToggleAi])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, refreshGitStatus, handleToggleAi])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -624,6 +643,7 @@ export const App: React.FC = () => {
     onShowExplorer: () => setActiveView((prev) => (prev === 'files' ? null : 'files')),
     onShowSearch: () => setActiveView((prev) => (prev === 'search' ? null : 'search')),
     onToggleAi: handleToggleAi,
+    onToggleNotifications: handleToggleNotifications,
   })
 
   const handleEditorChange = (value: string | undefined) => {
@@ -666,12 +686,24 @@ export const App: React.FC = () => {
         version="1.0.1"
       />
 
+      {/* Notification Center Popover */}
+      <NotificationCenter
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setIsNotificationCenterOpen(false)}
+        notifications={notifications}
+        onDismiss={(id) => notificationService.removeNotification(id)}
+        onDismissAll={() => notificationService.dismissAll()}
+        onMarkAllAsRead={() => notificationService.markAllAsRead()}
+      />
+
       {/* Top Frameless Title Bar */}
       <WindowFrame
         activeFileName={activeTab?.name}
         workspaceName={workspaceName}
         onCommandPaletteToggle={() => openPalette('')}
         menuHandlers={menuHandlers}
+        unreadNotificationsCount={unreadNotificationsCount}
+        onNotificationToggle={handleToggleNotifications}
       />
 
       {/* Main Workspace Layout */}

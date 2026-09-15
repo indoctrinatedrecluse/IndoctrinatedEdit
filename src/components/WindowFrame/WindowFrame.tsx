@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, Bell } from 'lucide-react'
 import { AppIcon } from '../Brand/AppIcon'
 import { WindowControls } from './WindowControls'
 import { MenuBar, MenuActionHandlers } from '../MenuBar/MenuBar'
@@ -9,6 +9,8 @@ interface WindowFrameProps {
   workspaceName?: string
   onCommandPaletteToggle?: () => void
   menuHandlers?: MenuActionHandlers
+  unreadNotificationsCount?: number
+  onNotificationToggle?: () => void
 }
 
 export const WindowFrame: React.FC<WindowFrameProps> = ({
@@ -16,6 +18,8 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
   workspaceName = 'IndoctrinatedEdit',
   onCommandPaletteToggle,
   menuHandlers,
+  unreadNotificationsCount = 0,
+  onNotificationToggle,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
 
@@ -81,8 +85,20 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
         onDoubleClick={handleMaximize}
       />
 
-      {/* Right custom Liquid Glass window control capsules */}
+      {/* Right custom Liquid Glass window control capsules & Notification Bell */}
       <div className="window-frame-right window-no-drag">
+        <button
+          className={`notif-bell-btn glass-pill ${unreadNotificationsCount > 0 ? 'has-unread' : ''}`}
+          onClick={onNotificationToggle}
+          title={`Notifications (${unreadNotificationsCount} unread)`}
+          aria-label="Toggle Notifications"
+        >
+          <Bell size={13} className="bell-icon" />
+          {unreadNotificationsCount > 0 && (
+            <span className="notif-badge">{unreadNotificationsCount}</span>
+          )}
+        </button>
+
         <WindowControls
           isMaximized={isMaximized}
           onMinimize={handleMinimize}
@@ -145,6 +161,44 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           flex-shrink: 0;
           pointer-events: auto !important;
           -webkit-app-region: no-drag !important;
+        }
+
+        .notif-bell-btn {
+          height: 26px;
+          padding: 0 8px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+          position: relative;
+        }
+
+        .notif-bell-btn:hover {
+          color: var(--text-primary);
+          border-color: rgba(255, 255, 255, 0.22);
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .notif-bell-btn.has-unread {
+          color: #64D2FF;
+          border-color: rgba(100, 210, 255, 0.35);
+          background: rgba(10, 132, 255, 0.12);
+        }
+
+        .notif-badge {
+          font-family: var(--font-mono);
+          font-size: 9.5px;
+          font-weight: 700;
+          padding: 0 4px;
+          border-radius: 999px;
+          background: #FF375F;
+          color: #FFF;
+          line-height: 14px;
+          box-shadow: 0 0 8px rgba(255, 55, 95, 0.5);
         }
 
         .app-brand-badge {

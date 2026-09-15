@@ -15,6 +15,7 @@ interface ShortcutHandlers {
   onShowExplorer?: () => void
   onShowSearch?: () => void
   onToggleAi?: () => void
+  onToggleNotifications?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -60,6 +61,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.shiftKey && key === 'p') {
         e.preventDefault()
         handlers.onCommandPalette?.()
+        return
+      }
+
+      // Ctrl+Shift+N -> Notifications & Alerts
+      if (e.shiftKey && key === 'n') {
+        e.preventDefault()
+        handlers.onToggleNotifications?.()
         return
       }
 
