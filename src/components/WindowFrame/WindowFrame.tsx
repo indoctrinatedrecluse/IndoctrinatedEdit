@@ -38,7 +38,7 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
   const handleClose = () => window.electronAPI?.close()
 
   return (
-    <header className="window-frame window-drag-region">
+    <header className="window-frame">
       {/* Left branding badge */}
       <div className="window-frame-left window-no-drag">
         <div className="app-brand-badge glass-pill">
@@ -47,6 +47,12 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           <span className="app-tag">PRO</span>
         </div>
       </div>
+
+      {/* Draggable spacer between left badge and center search */}
+      <div
+        className="window-title-drag-spacer window-drag-region"
+        onDoubleClick={handleMaximize}
+      />
 
       {/* Center active file / search pill */}
       <div className="window-frame-center window-no-drag">
@@ -64,6 +70,12 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           </div>
         </button>
       </div>
+
+      {/* Draggable spacer between center search and right window controls */}
+      <div
+        className="window-title-drag-spacer window-drag-region"
+        onDoubleClick={handleMaximize}
+      />
 
       {/* Right custom Liquid Glass window control capsules */}
       <div className="window-frame-right window-no-drag">
@@ -93,6 +105,16 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           -webkit-backdrop-filter: var(--glass-blur);
           z-index: 1000;
           position: relative;
+          -webkit-app-region: no-drag;
+          user-select: none;
+        }
+
+        .window-title-drag-spacer {
+          flex: 1;
+          height: 100%;
+          min-width: 24px;
+          -webkit-app-region: drag !important;
+          cursor: default;
         }
 
         .window-rim-line {

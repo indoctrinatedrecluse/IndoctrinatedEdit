@@ -15,12 +15,19 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
   onClose,
 }) => {
   return (
-    <div className="window-controls-capsule window-no-drag">
+    <div className="window-controls-capsule">
       {/* Minimize Button (Amber) */}
       <button
         type="button"
         className="ctrl-btn btn-amber"
-        onClick={onMinimize}
+        onMouseDown={(e) => {
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onMinimize()
+        }}
         title="Minimize Window"
         aria-label="Minimize"
       >
@@ -31,7 +38,14 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
       <button
         type="button"
         className="ctrl-btn btn-green"
-        onClick={onMaximize}
+        onMouseDown={(e) => {
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onMaximize()
+        }}
         title={isMaximized ? 'Restore Window' : 'Maximize Window'}
         aria-label={isMaximized ? 'Restore' : 'Maximize'}
       >
@@ -46,7 +60,14 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
       <button
         type="button"
         className="ctrl-btn btn-red"
-        onClick={onClose}
+        onMouseDown={(e) => {
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onClose()
+        }}
         title="Close Window"
         aria-label="Close"
       >
@@ -60,14 +81,21 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
           gap: 9px;
           padding: 4px 10px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.16);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
           pointer-events: auto !important;
           -webkit-app-region: no-drag !important;
           user-select: none;
+          z-index: 1001;
+        }
+
+        .window-controls-capsule *,
+        .ctrl-btn,
+        .ctrl-btn * {
+          -webkit-app-region: no-drag !important;
         }
 
         .ctrl-btn {
@@ -79,7 +107,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
+          cursor: pointer !important;
           padding: 0;
           outline: none;
           pointer-events: auto !important;
@@ -98,7 +126,7 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
         .ctrl-icon {
           color: rgba(0, 0, 0, 0.85);
           display: block;
-          transition: transform 0.15s ease;
+          pointer-events: none !important;
         }
 
         /* Amber / Minimize */
