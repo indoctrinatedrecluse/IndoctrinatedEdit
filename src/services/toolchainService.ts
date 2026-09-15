@@ -89,6 +89,7 @@ export class ToolchainService implements IToolchainRegistry {
         language: 'cpp',
         binaryNames: ['gcc', 'clang', 'g++', 'cl'],
         versionFlag: '--version',
+        versionPattern: '(?:gcc|clang|g\\+\\+)\\s+(?:version\\s+)?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)',
         downloadUrl: 'https://gcc.gnu.org',
         description: 'High performance native systems compiler',
       },
