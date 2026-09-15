@@ -27,7 +27,14 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
   }, [])
 
   const handleMinimize = () => window.electronAPI?.minimize()
-  const handleMaximize = () => window.electronAPI?.maximize()
+  const handleMaximize = async () => {
+    if (window.electronAPI?.maximize) {
+      const isMax = await window.electronAPI.maximize()
+      if (typeof isMax === 'boolean') {
+        setIsMaximized(isMax)
+      }
+    }
+  }
   const handleClose = () => window.electronAPI?.close()
 
   return (

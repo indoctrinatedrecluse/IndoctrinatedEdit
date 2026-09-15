@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, screen } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
@@ -97,6 +97,54 @@ function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 
+  // Transparent Frameless Window State Management
+  let isCustomMaximized = false
+  let unmaximizedBounds: Electron.Rectangle = { x: 100, y: 100, width: 1280, height: 820 }
+
+  const maximizeWindow = (targetWin: BrowserWindow | null = win): boolean => {
+    if (!targetWin || targetWin.isDestroyed()) return true
+    isCustomMaximized = true
+    try {
+      unmaximizedBounds = targetWin.getBounds()
+    } catch {}
+    try {
+      targetWin.maximize()
+    } catch {}
+    try {
+      const currentScreen = screen.getDisplayMatching(targetWin.getBounds())
+      if (currentScreen?.workArea) {
+        targetWin.setBounds(currentScreen.workArea)
+      }
+    } catch {}
+    targetWin.webContents.send('window-maximized-state', true)
+    return true
+  }
+
+  const unmaximizeWindow = (targetWin: BrowserWindow | null = win): boolean => {
+    if (!targetWin || targetWin.isDestroyed()) return false
+    isCustomMaximized = false
+    try {
+      targetWin.unmaximize()
+    } catch {}
+    try {
+      if (unmaximizedBounds) {
+        targetWin.setBounds(unmaximizedBounds)
+      }
+    } catch {}
+    targetWin.webContents.send('window-maximized-state', false)
+    return false
+  }
+
+  const toggleMaximizeWindow = (targetWin: BrowserWindow | null = win): boolean => {
+    if (!targetWin || targetWin.isDestroyed()) return false
+    const currentlyMaximized = isCustomMaximized || targetWin.isMaximized()
+    if (currentlyMaximized) {
+      return unmaximizeWindow(targetWin)
+    } else {
+      return maximizeWindow(targetWin)
+    }
+  }
+
   // Smooth transition from Splash Screen to Main Window when React DOM is fully ready
   let hasShownMainWindow = false
   const showMainWindow = () => {
@@ -111,14 +159,14 @@ function createWindow() {
           splashWin = null
         }
         if (win && !win.isDestroyed()) {
-          win.maximize()
+          maximizeWindow(win)
           win.show()
           win.focus()
         }
       }, 320)
     } else {
       if (win && !win.isDestroyed()) {
-        win.maximize()
+        maximizeWindow(win)
         win.show()
         win.focus()
       }
@@ -135,34 +183,36 @@ function createWindow() {
 
   // Window control event forwarders
   win.on('maximize', () => {
+    isCustomMaximized = true
     win?.webContents.send('window-maximized-state', true)
   })
 
   win.on('unmaximize', () => {
+    isCustomMaximized = false
     win?.webContents.send('window-maximized-state', false)
   })
+
+  // IPC Handlers for frameless window controls
+  ipcMain.handle('window:minimize', (event) => {
+    const target = BrowserWindow.fromWebContents(event.sender) || win
+    target?.minimize()
+  })
+
+  ipcMain.handle('window:maximize', (event) => {
+    const target = BrowserWindow.fromWebContents(event.sender) || win
+    return toggleMaximizeWindow(target)
+  })
+
+  ipcMain.handle('window:close', (event) => {
+    const target = BrowserWindow.fromWebContents(event.sender) || win
+    target?.close()
+  })
+
+  ipcMain.handle('window:isMaximized', (event) => {
+    const target = BrowserWindow.fromWebContents(event.sender) || win
+    return isCustomMaximized || (target?.isMaximized() ?? false)
+  })
 }
-
-// IPC Handlers for frameless window controls
-ipcMain.handle('window:minimize', () => {
-  win?.minimize()
-})
-
-ipcMain.handle('window:maximize', () => {
-  if (win?.isMaximized()) {
-    win.unmaximize()
-  } else {
-    win?.maximize()
-  }
-})
-
-ipcMain.handle('window:close', () => {
-  win?.close()
-})
-
-ipcMain.handle('window:isMaximized', () => {
-  return win?.isMaximized() ?? false
-})
 
 // IPC Handlers for native file system dialogs and operations
 ipcMain.handle('dialog:openFile', async () => {

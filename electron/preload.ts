@@ -51,7 +51,7 @@ export interface ElectronToolchainAPI {
 
 export interface ElectronAPI {
   minimize: () => Promise<void>
-  maximize: () => Promise<void>
+  maximize: () => Promise<boolean>
   close: () => Promise<void>
   isMaximized: () => Promise<boolean>
   onMaximizedChange: (callback: (isMax: boolean) => void) => () => void
