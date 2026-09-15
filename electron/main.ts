@@ -27,6 +27,35 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null = null
+let splashWin: BrowserWindow | null = null
+
+function createSplashWindow() {
+  splashWin = new BrowserWindow({
+    width: 500,
+    height: 340,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    alwaysOnTop: true,
+    center: true,
+    show: false,
+    skipTaskbar: true,
+    hasShadow: true,
+    icon: path.join(__dirname, '../public/icon.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  const publicDir = process.env.VITE_PUBLIC || path.join(__dirname, '../public')
+  const splashPath = path.join(publicDir, 'splash.html')
+  splashWin.loadFile(splashPath)
+  splashWin.once('ready-to-show', () => {
+    splashWin?.show()
+  })
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -39,6 +68,7 @@ function createWindow() {
     backgroundColor: '#00000000',
     backgroundMaterial: process.platform === 'win32' ? 'acrylic' : undefined,
     hasShadow: true,
+    show: false,
     icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -61,6 +91,26 @@ function createWindow() {
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
+
+  // Smooth transition from Splash Screen to Main Window
+  win.once('ready-to-show', () => {
+    setTimeout(() => {
+      if (splashWin && !splashWin.isDestroyed()) {
+        splashWin.webContents.postMessage('fade-out', '*')
+        setTimeout(() => {
+          if (splashWin && !splashWin.isDestroyed()) {
+            splashWin.destroy()
+            splashWin = null
+          }
+          win?.show()
+          win?.focus()
+        }, 350)
+      } else {
+        win?.show()
+        win?.focus()
+      }
+    }, 700)
+  })
 
   // Window control event forwarders
   win.on('maximize', () => {
@@ -218,8 +268,12 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
+    createSplashWindow()
     createWindow()
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createSplashWindow()
+  createWindow()
+})

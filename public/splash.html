@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IndoctrinatedEdit</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-app-region: drag;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    }
+
+    .splash-card {
+      width: 460px;
+      height: 310px;
+      border-radius: 28px;
+      background: rgba(10, 14, 26, 0.88);
+      backdrop-filter: blur(40px) saturate(220%);
+      -webkit-backdrop-filter: blur(40px) saturate(220%);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 
+        0 24px 64px rgba(0, 0, 0, 0.65),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        0 0 40px rgba(0, 240, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 32px 28px 20px;
+      position: relative;
+      overflow: hidden;
+      animation: splashEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    .splash-card.fade-out {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+
+    @keyframes splashEnter {
+      0% {
+        opacity: 0;
+        transform: scale(0.92) translateY(12px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Ambient specular glow orbs */
+    .glow-orb-1 {
+      position: absolute;
+      top: -40px;
+      left: 30px;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 240, 255, 0.28) 0%, transparent 70%);
+      filter: blur(30px);
+      pointer-events: none;
+    }
+
+    .glow-orb-2 {
+      position: absolute;
+      bottom: -30px;
+      right: 40px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(191, 90, 242, 0.25) 0%, transparent 70%);
+      filter: blur(30px);
+      pointer-events: none;
+    }
+
+    /* Center Branding Section */
+    .brand-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    .icon-wrapper {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-glow-ring {
+      position: absolute;
+      width: 86px;
+      height: 86px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.5), rgba(191, 90, 242, 0.5));
+      filter: blur(10px);
+      animation: pulseGlow 2.5s ease-in-out infinite alternate;
+    }
+
+    .brand-icon {
+      width: 76px;
+      height: 76px;
+      border-radius: 20px;
+      position: relative;
+      z-index: 2;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    @keyframes pulseGlow {
+      0% {
+        opacity: 0.4;
+        transform: scale(0.96);
+      }
+      100% {
+        opacity: 0.85;
+        transform: scale(1.06);
+      }
+    }
+
+    .title-group {
+      text-align: center;
+    }
+
+    .brand-title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #FFFFFF 20%, #64D2FF 65%, #C084FC 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: rgba(235, 235, 245, 0.55);
+      margin-top: 3px;
+    }
+
+    /* Progress & Loading State */
+    .progress-section {
+      width: 82%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 45%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #00F0FF, #0A84FF, #BF5AF2);
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
+      animation: progressAnim 1.6s ease-in-out infinite;
+    }
+
+    @keyframes progressAnim {
+      0% {
+        transform: translateX(-100%);
+        width: 30%;
+      }
+      50% {
+        width: 60%;
+      }
+      100% {
+        transform: translateX(350%);
+        width: 30%;
+      }
+    }
+
+    .status-text {
+      font-size: 10.5px;
+      color: rgba(235, 235, 245, 0.65);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      letter-spacing: 0.2px;
+      transition: opacity 0.2s;
+    }
+
+    /* Author Attribution Footer */
+    .author-footer {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: rgba(235, 235, 245, 0.45);
+      letter-spacing: 0.3px;
+      z-index: 10;
+    }
+
+    .author-name {
+      color: rgba(235, 235, 245, 0.75);
+      font-weight: 600;
+    }
+
+    .author-sparkle {
+      color: #FF2D55;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-card" id="splashCard">
+    <!-- Ambient glowing backgrounds -->
+    <div class="glow-orb-1"></div>
+    <div class="glow-orb-2"></div>
+
+    <!-- Center Branding Graphic -->
+    <div class="brand-section">
+      <div class="icon-wrapper">
+        <div class="icon-glow-ring"></div>
+        <img src="icon.png" alt="IndoctrinatedEdit" class="brand-icon">
+      </div>
+      <div class="title-group">
+        <h1 class="brand-title">IndoctrinatedEdit</h1>
+        <p class="brand-subtitle">Liquid Glass Desktop Code Editor</p>
+      </div>
+    </div>
+
+    <!-- Animated Loading Bar -->
+    <div class="progress-section">
+      <div class="progress-track">
+        <div class="progress-fill"></div>
+      </div>
+      <span class="status-text" id="statusText">Initializing Liquid Glass Engine...</span>
+    </div>
+
+    <!-- Small author attribution footer -->
+    <footer class="author-footer">
+      <span>by</span>
+      <span class="author-name">indoctrinatedrecluse</span>
+      <span class="author-sparkle">✨</span>
+    </footer>
+  </div>
+
+  <script>
+    const stages = [
+      "Initializing Liquid Glass Engine...",
+      "Mounting Monaco Editor Core...",
+      "Starting Git & AI Microservices...",
+      "Restoring Workspace State...",
+      "Ready!"
+    ];
+    let stageIdx = 0;
+    const statusEl = document.getElementById('statusText');
+
+    const interval = setInterval(() => {
+      stageIdx = (stageIdx + 1) % stages.length;
+      if (statusEl) {
+        statusEl.style.opacity = '0';
+        setTimeout(() => {
+          statusEl.textContent = stages[stageIdx];
+          statusEl.style.opacity = '1';
+        }, 150);
+      }
+    }, 450);
+
+    // Listen for fade-out message from main process
+    window.addEventListener('message', (event) => {
+      if (event.data === 'fade-out') {
+        const card = document.getElementById('splashCard');
+        if (card) {
+          card.classList.add('fade-out');
+        }
+      }
+    });
+  </script>
+</body>
+</html>
