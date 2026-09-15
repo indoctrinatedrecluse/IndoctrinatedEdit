@@ -7,40 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.1] - 2026-09-15
-
-### 🚀 Performance & Critical Startup Fixes
-- **Eliminated 3–5 Minute Launch Delay & Gray Screen**:
-  - **Local Monaco Bundling**: Configured `loader.config({ monaco })` to bypass external CDN fetches from `cdn.jsdelivr.net`, guaranteeing 100% offline, instantaneous (<300ms) startup.
-  - **Monaco Web Workers in Vite**: Added `src/monacoWorker.ts` with `self.MonacoEnvironment` and Vite `?worker` imports, preventing fallback AMD `require.toUrl` crashes (`TypeError: Cannot read properties of undefined (reading 'toUrl')`).
-  - **Monaco Theme Name Validation Fix**: Sanitized theme names using `.replace(/[^a-zA-Z0-9-]/g, '-')` to strictly satisfy Monaco's `/^[a-z0-9\-]+$/i` naming regex, eliminating React mount crashes (`Uncaught Error: Illegal theme name!`).
-  - **CommonJS Preload Output**: Configured Rollup to emit `dist-electron/preload.cjs` in CommonJS format, resolving `ReferenceError: require is not defined in ES module scope` in Electron's preload context.
-  - **Relative Asset Resolution**: Configured `base: './'` in `vite.config.ts` for consistent `file:///` asset resolution.
-- **Splash Screen to Main Window Handshake**:
-  - Replaced timer-based window revelation with an explicit IPC `app:ready` handshake emitted once React DOM and Monaco have fully mounted.
-  - Keeps main window hidden behind the splash screen until 100% painted, followed by a smooth 300ms cross-fade, completely eliminating the gray window flash.
-
-### 🛠️ Compiler & SDK Auto-Detection Framework
-- **Non-Blocking Background Detection Engine**:
-  - Built `electron/toolchain-service.ts` with asynchronous, timeout-guarded executable resolution using PATH scanning, `where.exe` (Windows), and `which` (Linux/macOS).
-  - Built-in detection for **Node.js**, **TypeScript**, **Python**, **Rust**, **Go**, **C/C++ (GCC/Clang)**, **.NET SDK**, **Java JDK**, and **Git**.
-  - Background scheduler in `src/services/toolchainService.ts` executing during browser idle time (`requestIdleCallback`) without impacting startup or editing performance.
-  - Local caching with 15-minute TTL to minimize shell execution overhead.
-- **Extensible Extension API**:
-  - Added `registerToolchain(definition: ToolchainDefinition)` to `IExtensionHostRegistry` and `packages/sdk/types.ts`, allowing future language extensions to auto-register compilers and SDKs.
-
-### 🧪 Comprehensive Release Compliance Test Suite
-- **Vitest Automated Testing Framework**:
-  - Added full test suite executed via `npm test` with 100% pass rate (24/24 tests).
-  - **`test/sdk.test.ts`**: Verifies plugin lifecycle contracts, context interfaces, and type schemas.
-  - **`test/themes.test.ts`**: Verifies theme contracts, color token presence, and strictly validates all theme names against Monaco's naming regex.
-  - **`test/commandRegistry.test.ts`**: Verifies command registration, unregistration, category filtering, and execution.
-  - **`test/gitService.test.ts`**: Verifies repository detection, branch extraction, and commit history topological lane assignment.
-  - **`test/aiService.test.ts`**: Verifies stream error handling and graceful offline host fallback.
-  - **`test/toolchain.test.ts`**: Verifies toolchain resolution, version pattern regexes, and registry management.
-
----
-
 ## [1.0.0] - 2026-09-15
 
 ### ✨ Initial Release — The Liquid Glass Era
@@ -49,9 +15,10 @@ The inaugural release of **IndoctrinatedEdit**, the flashy, feature-packed gener
 
 #### 🪟 Liquid Glass UI & Design System
 - **Authentic Cupertino Frosted Glass**: Multi-layered hardware-accelerated glass materials (`backdrop-filter: blur(28px) saturate(200%)`), specular rim highlights, and ambient glow shaders.
-- **OS Translucency Parity**: Native Windows 11 DWM Acrylic composition and Linux Wayland/X11 transparent compositor compatibility.
 - **Physics-Based Spring Motion**: Natural, fluid interactions powered by Framer Motion.
 - **Custom Traffic Light Window Controls**: Floating frosted glass capsule with Apple-grade traffic light dots (Minimize `#FF9F0A`, Maximize/Restore `#30D158`, Close `#FF453A`) revealing micro-icons on hover with neon bloom.
+- **Window Hit-Test & Control Fixes**: Dedicated draggable title bar spacers flanking the search pill preventing Chromium hit-test caching conflicts, with full native minimize, maximize, and restore support on Windows and Linux.
+- **Default Maximized Launch**: Automatically opens in maximized mode on launch for immediate full-width workspace editing.
 - **Segmented Liquid Glass UI Bars**:
   - Frameless window frame with interactive workspace/file search pill and specular cyan rim line.
   - Segmented status bar with interactive Git branch chip, syntax diagnostics counters, microservice status pulse orb, cursor position, encoding, and dynamic theme switcher.
@@ -98,13 +65,41 @@ The inaugural release of **IndoctrinatedEdit**, the flashy, feature-packed gener
   - One-click **Insert at Cursor** and **Replace Selection** directly targeting the Monaco editor.
   - Quick action chips: *Explain*, *Bugs & Security*, *Refactor*, *Tests*.
 
-#### 🚀 Instant Liquid Glass Splash Screen
-- Synchronous frameless transparent launch window with 3D cybernetic prism brand graphic.
+#### 🚀 Instant Liquid Glass Splash Screen & Zero-Flash Handshake
+- Synchronous frameless launch window with 3D cybernetic prism brand graphic.
 - Shimmering neon loading progress bar with dynamic subsystem status messages.
 - Author footer: **`by indoctrinatedrecluse ✨`**.
-- Seamless 350ms fade-out transition upon Monaco editor and React DOM readiness.
+- Persists until Monaco Editor and React DOM are 100% mounted, compiled, and painted.
+- Seamless cross-fade transition revealing the main window with zero gray flash.
 
 #### 🧩 Extensibility SDK
 - `@sdk/index` exposing `ExtensionPlugin` and `ThemeDefinition` base classes with complete TypeScript definitions.
+- Dynamic plugin registry with lifecycle hooks (`activate`, `deactivate`).
+
+#### 🚀 Performance & Critical Startup Optimizations
+- **Local Monaco Bundling**: Configured `loader.config({ monaco })` to bypass external CDN fetches from `cdn.jsdelivr.net`, guaranteeing 100% offline, instantaneous (<300ms) startup.
+- **Monaco Web Workers in Vite**: Added `src/monacoWorker.ts` with `self.MonacoEnvironment` and Vite `?worker` imports, preventing AMD `require.toUrl` runtime crashes.
+- **Monaco Theme Name Validation**: Sanitized theme names using `.replace(/[^a-zA-Z0-9-]/g, '-')` to strictly satisfy Monaco's `/^[a-z0-9\-]+$/i` naming regex, eliminating React mount crashes.
+- **CommonJS Preload Output**: Configured Rollup to emit `dist-electron/preload.cjs` in CommonJS format for Electron preload security.
+- **Relative Asset Resolution**: Configured `base: './'` in `vite.config.ts` for clean desktop file loading.
+
+#### 🛠️ Compiler & SDK Auto-Detection Framework
+- **Non-Blocking Background Detection Engine**:
+  - Built `electron/toolchain-service.ts` with asynchronous, timeout-guarded executable resolution using PATH scanning, `where.exe` (Windows), and `which` (Linux/macOS).
+  - Built-in detection for **Node.js**, **TypeScript**, **Python**, **Rust**, **Go**, **C/C++ (GCC/Clang)**, **.NET SDK**, **Java JDK**, and **Git**.
+  - Background scheduler in `src/services/toolchainService.ts` executing during browser idle time (`requestIdleCallback`) without impacting startup or editing performance.
+  - Local caching with 15-minute TTL to minimize shell execution overhead.
+- **Extensible Extension API**:
+  - Added `registerToolchain(definition: ToolchainDefinition)` to `IExtensionHostRegistry` and `packages/sdk/types.ts`, allowing future language extensions to auto-register compilers and SDKs.
+
+#### 🧪 Comprehensive Release Compliance Test Suite
+- **Vitest Automated Testing Framework**:
+  - Full test suite executed via `npm test` with 100% pass rate (24/24 tests across 6 files).
+  - **`test/sdk.test.ts`**: Verifies plugin lifecycle contracts, context interfaces, and type schemas.
+  - **`test/themes.test.ts`**: Verifies theme contracts, color token presence, and strictly validates all theme names against Monaco's naming regex.
+  - **`test/commandRegistry.test.ts`**: Verifies command registration, unregistration, category filtering, and execution.
+  - **`test/gitService.test.ts`**: Verifies repository detection, branch extraction, and commit history topological lane assignment.
+  - **`test/aiService.test.ts`**: Verifies stream error handling and graceful offline host fallback.
+  - **`test/toolchain.test.ts`**: Verifies toolchain resolution, version pattern regexes, and registry management.
 
 ---

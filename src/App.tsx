@@ -232,8 +232,10 @@ export const App: React.FC = () => {
   }, [currentTheme])
 
   const handleEditorReady = useCallback(() => {
-    // Monaco editor canvas is fully mounted and painted
-    window.electronAPI?.notifyReady?.()
+    // Monaco editor canvas is fully mounted and painted; give brief grace period for full DOM painting
+    setTimeout(() => {
+      window.electronAPI?.notifyReady?.()
+    }, 250)
   }, [])
 
   // Mount initialization
@@ -241,10 +243,10 @@ export const App: React.FC = () => {
     // Non-blocking background toolchain detection (idle time)
     toolchainService.scheduleBackgroundDetection(1500)
 
-    // Safety fallback in case no editor tab is open
+    // Safety fallback only in case no editor tab is opened within 8 seconds
     const fallbackTimer = setTimeout(() => {
       window.electronAPI?.notifyReady?.()
-    }, 800)
+    }, 8000)
     return () => clearTimeout(fallbackTimer)
   }, [])
 

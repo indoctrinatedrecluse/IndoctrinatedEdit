@@ -152,7 +152,12 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     })
 
     // Signal that Monaco editor has mounted and applied initial theme
-    onEditorReady?.()
+    // Double RAF ensures Monaco canvas and syntax highlighting are composited to the screen
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onEditorReady?.()
+      })
+    })
   }
 
   // Update theme dynamically whenever theme changes

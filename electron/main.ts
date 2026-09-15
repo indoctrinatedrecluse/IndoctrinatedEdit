@@ -103,19 +103,22 @@ function createWindow() {
     hasShownMainWindow = true
 
     if (splashWin && !splashWin.isDestroyed()) {
+      // Reveal main window while splash is still on top so it paints underneath
+      if (win && !win.isDestroyed()) {
+        win.maximize()
+        win.show()
+        win.focus()
+        sendMaxState()
+      }
+
+      // Smoothly fade out the splash card
       splashWin.webContents.postMessage('fade-out', '*')
       setTimeout(() => {
         if (splashWin && !splashWin.isDestroyed()) {
           splashWin.destroy()
           splashWin = null
         }
-        if (win && !win.isDestroyed()) {
-          win.maximize()
-          win.show()
-          win.focus()
-          sendMaxState()
-        }
-      }, 320)
+      }, 400)
     } else {
       if (win && !win.isDestroyed()) {
         win.maximize()
@@ -126,8 +129,8 @@ function createWindow() {
     }
   }
 
-  // Safety fallback: reveal window after 6s if renderer hangs
-  const safetyTimeout = setTimeout(showMainWindow, 6000)
+  // Safety fallback: reveal window after 8s if renderer hangs
+  const safetyTimeout = setTimeout(showMainWindow, 8000)
 
   ipcMain.handle('app:ready', () => {
     clearTimeout(safetyTimeout)
