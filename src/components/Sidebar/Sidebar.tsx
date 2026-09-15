@@ -12,6 +12,7 @@ import {
   Code2,
   Sparkles,
   Zap,
+  Terminal,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
@@ -61,6 +62,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return <Code2 size={16} />
       case 'Sparkles':
         return <Sparkles size={16} />
+      case 'Zap':
+        return <Zap size={16} />
+      case 'Terminal':
+        return <Terminal size={16} />
       case 'Cpu':
       default:
         return <Cpu size={16} />
