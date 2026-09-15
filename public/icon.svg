@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Glass Gradients -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0A84FF" stop-opacity="0.35" />
+      <stop offset="60%" stop-color="#BF5AF2" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    
+    <linearGradient id="glassBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.5" />
+      <stop offset="35%" stop-color="#00F0FF" stop-opacity="0.25" />
+      <stop offset="70%" stop-color="#BF5AF2" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.1" />
+    </linearGradient>
+
+    <linearGradient id="bodyGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141926" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#070A10" stop-opacity="0.95" />
+    </linearGradient>
+
+    <!-- Neon Ray Gradients -->
+    <linearGradient id="cyanRay" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#0A84FF" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="magentaRay" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF007F" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#BF5AF2" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="emeraldRay" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#30D158" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#00F5D4" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Prism Gradients -->
+    <linearGradient id="prismFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.4" />
+      <stop offset="50%" stop-color="#00F0FF" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#BF5AF2" stop-opacity="0.3" />
+    </linearGradient>
+
+    <!-- Filters -->
+    <filter id="bloom" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Ambient Glow -->
+  <rect width="512" height="512" fill="url(#bgGlow)" />
+
+  <!-- Outer Glass Squircle Bevel -->
+  <rect x="44" y="44" width="424" height="424" rx="100" fill="url(#bodyGlass)" stroke="url(#glassBorder)" stroke-width="4" filter="drop-shadow(0 20px 30px rgba(0,0,0,0.7))" />
+
+  <!-- Inner Refraction Rim -->
+  <rect x="52" y="52" width="408" height="408" rx="92" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+
+  <!-- Neon Laser Beams Crossing -->
+  <line x1="80" y1="110" x2="432" y2="400" stroke="url(#cyanRay)" stroke-width="3.5" filter="url(#bloom)" />
+  <line x1="432" y1="110" x2="80" y2="400" stroke="url(#magentaRay)" stroke-width="3.5" filter="url(#bloom)" />
+  <line x1="70" y1="256" x2="442" y2="256" stroke="url(#emeraldRay)" stroke-width="2.5" filter="url(#bloom)" />
+
+  <!-- Center Hexagonal / Octahedral Crystal Prism -->
+  <g filter="url(#bloom)">
+    <!-- Outer Octahedron Edges -->
+    <polygon points="256,120 376,190 376,322 256,392 136,322 136,190" fill="url(#prismFace)" stroke="#00F0FF" stroke-width="2.5" stroke-opacity="0.8" />
+
+    <!-- Internal Facet Lines -->
+    <line x1="256" y1="120" x2="256" y2="392" stroke="rgba(255,255,255,0.7)" stroke-width="2" />
+    <line x1="136" y1="190" x2="376" y2="322" stroke="rgba(191,90,242,0.6)" stroke-width="1.5" />
+    <line x1="376" y1="190" x2="136" y2="322" stroke="rgba(0,240,255,0.6)" stroke-width="1.5" />
+    <polygon points="256,165 336,215 336,297 256,347 176,297 176,215" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-opacity="0.5" />
+
+    <!-- Cybernetic Code Chevron Sigil (The "Indoctrinated" Emblem) -->
+    <path d="M 200 230 L 256 265 L 312 230" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 200 260 L 256 295 L 312 260" fill="none" stroke="#00F0FF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 216 290 L 256 315 L 296 290" fill="none" stroke="#FF007F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Glowing Node Core -->
+    <circle cx="256" cy="256" r="6" fill="#FFFFFF" filter="drop-shadow(0 0 8px #00F0FF)" />
+  </g>
+</svg>

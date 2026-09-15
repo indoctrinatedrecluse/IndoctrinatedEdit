@@ -33,6 +33,7 @@ function createWindow() {
     backgroundColor: '#00000000',
     backgroundMaterial: process.platform === 'win32' ? 'acrylic' : undefined,
     hasShadow: true,
+    icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,

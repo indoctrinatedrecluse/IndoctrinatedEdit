@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Minus, Square, Copy, X, Sparkles, FolderOpen } from 'lucide-react'
+import { Minus, Square, Copy, X, FolderOpen } from 'lucide-react'
+import { AppIcon } from '../Brand/AppIcon'
 
 interface WindowFrameProps {
   activeFileName?: string
@@ -33,7 +34,7 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
       {/* Left branding & traffic lights / controls */}
       <div className="window-frame-left window-no-drag">
         <div className="app-badge">
-          <Sparkles size={15} className="app-badge-icon" />
+          <AppIcon size={18} />
           <span className="app-title">IndoctrinatedEdit</span>
         </div>
       </div>
