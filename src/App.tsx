@@ -678,12 +678,12 @@ export const App: React.FC = () => {
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
-        version="1.0.1"
+        version="1.1.0"
       />
       <LicenseModal
         isOpen={isLicenseOpen}
         onClose={() => setIsLicenseOpen(false)}
-        version="1.0.1"
+        version="1.1.0"
       />
 
       {/* Notification Center Popover */}

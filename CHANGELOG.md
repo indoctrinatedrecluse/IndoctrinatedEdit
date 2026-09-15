@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-09-15
+
+### 🚀 Minor Feature Release — Extensions, Top Menus, Toolchain Auto-Detect & Notification Center
+
+This minor release introduces comprehensive top application menus, full extension support with rich language packs (Textile/Markdown/reST/AsciiDoc, Go, and Rust), background compiler auto-detection with missing toolchain warnings, and the authentic iOS Liquid Glass Notification Center.
+
+#### 🧭 Top Menu Bar & Interactive Dialogs
+- **Top Application Menus**: Implemented standard VS Code-like `File`, `View`, and `Help` dropdown menus with Liquid Glass styling, click activation, hover switching, and keyboard shortcuts.
+- **Unique Shortcut Mapping & Chord Support**: Implemented two-key chord sequences (`Ctrl+K` followed by `Ctrl+O` for Open Workspace Folder) to resolve Monaco outline shortcut collisions (`Ctrl+Shift+O`).
+- **About IndoctrinatedEdit Modal**: Added interactive dialog showcasing version info (`v1.1.0 PRO`), project philosophy, author portfolio link (`https://portfolio-flutter-78bcf.web.app/`), and sister project (`RecluseEdit`).
+- **License & Perpetual PRO Activation**: Added Liquid Glass License modal displaying perpetual community entitlement, dynamic version string, lifetime seat validation, and authentic license key generator (`INDC-PRO-XXXX-XXXX-GLAS`) with one-click clipboard copy.
+
+#### 🔔 Notification Center & Toolchain Auto-Detect
+- **Interactive Notification Center**: Liquid Glass floating drawer/popover accessed via the main title bar bell icon (with unread badge counter), `View -> Notifications` (`Ctrl+Shift+N`), and Command Palette.
+- **"Dismiss All" & Batch Management**: One-click dismissal resetting unread and pending notification counters to zero instantly.
+- **Compiler Auto-Detection Alerts**: Integrates with `toolchainService` to run non-blocking background compiler checks when extensions load, notifying users if `go` or `rustc`/`cargo` is missing from PATH with direct download/install actions.
+- **Human-Readable Error Dispatcher**: Unified error logging (`notificationService.notifyError`) presenting friendly diagnostics for agent crashes and service failures.
+
+#### 🧩 Extensions & Universal Text Support Extension
+- **Universal Text & Prose Language Pack (`indoctrinated.ext.text-pack`)**: Bundled all-in-one text formats extension supporting **Plain Text** (`.txt`), **Markdown** (`.md`, `.markdown`), **Redmine Textile** (`.textile`), **reStructuredText** (`.rst`), **AsciiDoc** (`.adoc`), **Log Files** (`.log`), and **CSV/TSV** (`.csv`, `.tsv`).
+- **Redmine Textile Monarch Tokenizer**: Custom syntax grammar for headers (`h1.`-`h6.`), inline formatting (`*bold*`, `_italic_`, `+underline+`, `-deleted-`, `@code@`), blocks (`bc..`, `bq.`), data tables (`|_. Header |`), Redmine issues (`#123`), commits (`commit:hash`), and macros (`{{toc}}`, `{{collapse}}`).
+- **Comprehensive Snippet Suite**: Embedded Monaco completion item providers with snippet expansions for Markdown tables, GitHub alert callouts (`[!NOTE]`, `[!TIP]`, `[!WARNING]`), Textile tables, code blocks, Redmine macros, frontmatter, and plain text notes.
+
+#### 🐹 Go Universal Suite & Toolchain Extension
+- **Go Ecosystem Pack (`indoctrinated.ext.go-pack`)**: Full Go language support with rich snippets for standard library (`goroutine`, `channel`, `select`, `table-test`) and popular frameworks (**Gin**, **Fiber**, **Echo**, **GORM**, **Cobra**).
+- **Toolchain Discovery**: Auto-detects `go` binary and toolchain status in the background.
+
+#### 🦀 Rust & Cargo Ecosystem Extension
+- **Rust Development Pack (`indoctrinated.ext.rust-pack`)**: Complete Rust language and Cargo support with snippets for core idioms (`derive`, `impl`, `trait`, `match`, `testmod`) and ecosystems (**Tokio**, **Axum**, **Actix-Web**, **Serde**, **Clap**).
+- **Toolchain Discovery**: Auto-detects `rustc` and `cargo` toolchains with missing compiler guidance (`https://rustup.rs`).
+
+---
+
 ## [1.0.1] - 2026-09-15
 
 ### 🩹 Hotfix Release — Minimap Glass, Title Bar Fix & Resizable Panes
@@ -32,20 +65,6 @@ This hotfix resolves critical UI layout rendering bugs, introduces interactive d
 - **Expanded Default Width**: Increased initial AI chat panel width from 380px to 420px for comfortable reading without cramped line breaks.
 - **Adaptive Header & Truncation**: Pinned action buttons (`Key`, `Clear`, `Close`) with `flex-shrink: 0` and enabled clean model name truncation so header items never overflow or clip.
 - **Enhanced Quick-Action Bar**: Improved chip layout and scroll container to prevent button cutoff.
-
-#### 🔔 Notification Center & Toolchain Auto-Detect
-- **Interactive Notification Center**: Liquid Glass floating drawer/popover accessed via the main title bar bell icon (with unread badge counter), `View -> Notifications` (`Ctrl+Shift+N`), and Command Palette.
-- **"Dismiss All" & Batch Management**: One-click dismissal resetting unread and pending notification counters to zero instantly.
-- **Compiler Auto-Detection Alerts**: Integrates with `toolchainService` to run non-blocking background compiler checks when extensions load, notifying users if `go` or `rustc`/`cargo` is missing from PATH with direct download/install actions.
-- **Human-Readable Error Dispatcher**: Unified error logging (`notificationService.notifyError`) presenting friendly diagnostics for agent crashes and service failures.
-
-#### 🐹 Go Universal Suite & Toolchain Extension
-- **Go Ecosystem Pack (`indoctrinated.ext.go-pack`)**: Full Go language support with rich snippets for standard library (`goroutine`, `channel`, `select`, `table-test`) and popular frameworks (**Gin**, **Fiber**, **Echo**, **GORM**, **Cobra**).
-- **Toolchain Discovery**: Auto-detects `go` binary and toolchain status in the background.
-
-#### 🦀 Rust & Cargo Ecosystem Extension
-- **Rust Development Pack (`indoctrinated.ext.rust-pack`)**: Complete Rust language and Cargo support with snippets for core idioms (`derive`, `impl`, `trait`, `match`, `testmod`) and ecosystems (**Tokio**, **Axum**, **Actix-Web**, **Serde**, **Clap**).
-- **Toolchain Discovery**: Auto-detects `rustc` and `cargo` toolchains with missing compiler guidance (`https://rustup.rs`).
 
 ---
 
