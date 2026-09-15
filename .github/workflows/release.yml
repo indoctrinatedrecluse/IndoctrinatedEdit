@@ -41,15 +41,11 @@ jobs:
 
       - name: Package with Electron Builder (Windows)
         if: runner.os == 'Windows'
-        run: npx electron-builder --win
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish never
 
       - name: Package with Electron Builder (Linux)
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --publish never
 
       - name: Publish Artifacts to GitHub Release
         uses: softprops/action-gh-release@v2

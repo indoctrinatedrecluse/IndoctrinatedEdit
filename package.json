@@ -30,7 +30,14 @@
         "nsis",
         "zip"
       ],
-      "icon": "public/icon.png"
+      "icon": "public/icon.png",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "linux": {
       "target": [
@@ -38,7 +45,8 @@
         "tar.gz"
       ],
       "icon": "public/icon.png",
-      "category": "Development"
+      "category": "Development",
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "publish": {
       "provider": "github",
