@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { WindowFrame } from './components/WindowFrame/WindowFrame'
 import { ActivityBar, ActivityView } from './components/ActivityBar/ActivityBar'
 import { Sidebar, WorkspaceFileItem } from './components/Sidebar/Sidebar'
 import { TabBar, TabItem } from './components/TabBar/TabBar'
-import { EditorHost } from './components/Editor/EditorHost'
+import { EditorHost, EditorHostHandle, SelectionInfo } from './components/Editor/EditorHost'
 import { StatusBar } from './components/StatusBar/StatusBar'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
+import { AiChatPanel } from './components/AiChat/AiChatPanel'
 import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -207,6 +208,23 @@ export const App: React.FC = () => {
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
   const [untitledCount, setUntitledCount] = useState<number>(1)
 
+  // AI Multi-Model Chat Panel & Editor Integration State
+  const editorHostRef = useRef<EditorHostHandle>(null)
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState<boolean>(false)
+  const [currentSelection, setCurrentSelection] = useState<SelectionInfo | null>(null)
+
+  const handleToggleAi = useCallback(() => {
+    setIsAiPanelOpen((prev) => !prev)
+  }, [])
+
+  const handleInsertAtCursor = useCallback((code: string) => {
+    editorHostRef.current?.insertAtCursor(code)
+  }, [])
+
+  const handleReplaceSelection = useCallback((code: string) => {
+    editorHostRef.current?.replaceSelection(code)
+  }, [])
+
   // Initialize and apply theme CSS tokens
   useEffect(() => {
     applyGlassTheme(currentTheme)
@@ -395,8 +413,13 @@ export const App: React.FC = () => {
       { id: 'theme.amber', title: 'Theme: Frosted Amber Glow', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.frosted-amber') },
       { id: 'theme.cyberpunk', title: 'Theme: Cyberpunk 2077 Neon', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cyberpunk-neon') },
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', handler: refreshGitStatus },
+      { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', handler: handleToggleAi },
+      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', handler: () => setIsAiPanelOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, refreshGitStatus])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, refreshGitStatus, handleToggleAi])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -411,6 +434,7 @@ export const App: React.FC = () => {
     onCommandPalette: () => openPalette('>'),
     onQuickOpen: () => openPalette(''),
     onGitGraph: () => setActiveView((prev) => (prev === 'git' ? null : 'git')),
+    onToggleAi: handleToggleAi,
   })
 
   const handleEditorChange = (value: string | undefined) => {
@@ -455,6 +479,8 @@ export const App: React.FC = () => {
           activeView={activeView}
           onSelectView={handleSelectView}
           gitChangesCount={gitChangesCount}
+          isAiOpen={isAiPanelOpen}
+          onToggleAi={handleToggleAi}
         />
 
         {/* Collapsible Frosted Sidebar with Spring Animation */}
@@ -495,11 +521,13 @@ export const App: React.FC = () => {
           />
           {activeTab ? (
             <EditorHost
+              ref={editorHostRef}
               content={currentContent}
               language={currentLanguage}
               theme={currentTheme}
               onChange={handleEditorChange}
               onCursorChange={(line, col) => setCursorPos({ line, col })}
+              onSelectionChange={setCurrentSelection}
             />
           ) : (
             <div className="empty-workspace">
@@ -507,6 +535,30 @@ export const App: React.FC = () => {
             </div>
           )}
         </main>
+
+        {/* Right Multi-Model AI Assistant Dock */}
+        <AnimatePresence initial={false}>
+          {isAiPanelOpen && (
+            <motion.div
+              key="ai-dock-motion"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 380, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+              style={{ overflow: 'hidden', height: '100%', display: 'flex' }}
+            >
+              <AiChatPanel
+                isOpen={isAiPanelOpen}
+                onClose={() => setIsAiPanelOpen(false)}
+                activeFileName={activeTab?.name || 'untitled.ts'}
+                activeFileContent={currentContent}
+                currentSelection={currentSelection}
+                onInsertAtCursor={handleInsertAtCursor}
+                onReplaceSelection={handleReplaceSelection}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Bottom Status Bar */}

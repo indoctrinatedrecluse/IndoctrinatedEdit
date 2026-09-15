@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { GitRepoStatus } from '../packages/sdk/types'
+import { GitRepoStatus, AiProvider, AiStreamChunk } from '../packages/sdk/types'
 
 export interface FileOpenResult {
   path: string
@@ -21,6 +21,22 @@ export interface ElectronGitAPI {
   initRepo: (cwd?: string) => Promise<boolean>
 }
 
+export interface ElectronAiAPI {
+  listOllamaModels: (host?: string) => Promise<string[]>
+  cancelStream: (requestId: string) => Promise<void>
+  startStream: (
+    requestId: string,
+    options: {
+      provider: AiProvider
+      model: string
+      messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+      apiKey?: string
+      endpoint?: string
+    },
+    onChunk: (chunk: AiStreamChunk) => void
+  ) => () => void
+}
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<void>
@@ -38,6 +54,9 @@ export interface ElectronAPI {
 
   // Git microservice operations
   git: ElectronGitAPI
+
+  // AI Multi-Model service operations
+  ai: ElectronAiAPI
 }
 
 const api: ElectronAPI = {
@@ -66,6 +85,21 @@ const api: ElectronAPI = {
     unstageFile: (filePath: string, cwd?: string) => ipcRenderer.invoke('git:unstageFile', filePath, cwd),
     commit: (message: string, cwd?: string) => ipcRenderer.invoke('git:commit', message, cwd),
     initRepo: (cwd?: string) => ipcRenderer.invoke('git:init', cwd),
+  },
+
+  ai: {
+    listOllamaModels: (host?: string) => ipcRenderer.invoke('ai:listOllamaModels', host),
+    cancelStream: (requestId: string) => ipcRenderer.invoke('ai:cancelStream', requestId),
+    startStream: (requestId, options, onChunk) => {
+      const channel = `ai:chunk:${requestId}`
+      const handler = (_: unknown, chunk: AiStreamChunk) => onChunk(chunk)
+      ipcRenderer.on(channel, handler)
+      ipcRenderer.invoke('ai:startStream', requestId, options)
+      return () => {
+        ipcRenderer.removeListener(channel, handler)
+        ipcRenderer.invoke('ai:cancelStream', requestId)
+      }
+    },
   },
 }
 

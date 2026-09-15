@@ -12,6 +12,7 @@ interface ShortcutHandlers {
   onCommandPalette?: () => void
   onQuickOpen?: () => void
   onGitGraph?: () => void
+  onToggleAi?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -42,6 +43,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.shiftKey && key === 'g') {
         e.preventDefault()
         handlers.onGitGraph?.()
+        return
+      }
+
+      // Ctrl+Alt+A or Ctrl+Shift+A -> Toggle AI Assistant Panel
+      if ((e.altKey && key === 'a') || (e.shiftKey && key === 'a')) {
+        e.preventDefault()
+        handlers.onToggleAi?.()
         return
       }
 

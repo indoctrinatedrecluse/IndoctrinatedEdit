@@ -1,7 +1,19 @@
-import React, { useRef, useEffect } from 'react'
+import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
 import Editor, { OnMount } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
+
+export interface SelectionInfo {
+  text: string
+  startLine: number
+  endLine: number
+}
+
+export interface EditorHostHandle {
+  insertAtCursor: (text: string) => void
+  replaceSelection: (text: string) => void
+  getSelectedText: () => string
+}
 
 interface EditorHostProps {
   content: string
@@ -9,17 +21,61 @@ interface EditorHostProps {
   theme: ThemeDefinition
   onChange?: (value: string | undefined) => void
   onCursorChange?: (line: number, column: number) => void
+  onSelectionChange?: (selection: SelectionInfo | null) => void
 }
 
-export const EditorHost: React.FC<EditorHostProps> = ({
+export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   content,
   language,
   theme,
   onChange,
   onCursorChange,
-}) => {
+  onSelectionChange,
+}, ref) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    insertAtCursor: (text: string) => {
+      const editor = editorRef.current
+      if (editor && monacoRef.current) {
+        const position = editor.getPosition()
+        if (position) {
+          editor.executeEdits('ai-assistant', [{
+            range: new monacoRef.current.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+            text,
+            forceMoveMarkers: true,
+          }])
+          editor.focus()
+        }
+      }
+    },
+    replaceSelection: (text: string) => {
+      const editor = editorRef.current
+      if (editor) {
+        const selection = editor.getSelection()
+        if (selection) {
+          editor.executeEdits('ai-assistant', [{
+            range: selection,
+            text,
+            forceMoveMarkers: true,
+          }])
+          editor.focus()
+        }
+      }
+    },
+    getSelectedText: () => {
+      const editor = editorRef.current
+      if (editor) {
+        const model = editor.getModel()
+        const selection = editor.getSelection()
+        if (model && selection && !selection.isEmpty()) {
+          return model.getValueInRange(selection)
+        }
+      }
+      return ''
+    },
+  }))
 
   const registerAndApplyTheme = (monacoInstance: typeof monaco, targetTheme: ThemeDefinition) => {
     const themeName = `indoctrinated-${targetTheme.id}`
@@ -66,6 +122,22 @@ export const EditorHost: React.FC<EditorHostProps> = ({
     // Track cursor position for reactive status bar updates
     editor.onDidChangeCursorPosition((e) => {
       onCursorChange?.(e.position.lineNumber, e.position.column)
+    })
+
+    // Track text selection for AI chat context attachment
+    editor.onDidChangeCursorSelection((e) => {
+      const selection = e.selection
+      const model = editor.getModel()
+      if (model && selection && !selection.isEmpty()) {
+        const text = model.getValueInRange(selection)
+        onSelectionChange?.({
+          text,
+          startLine: selection.startLineNumber,
+          endLine: selection.endLineNumber,
+        })
+      } else {
+        onSelectionChange?.(null)
+      }
     })
   }
 
@@ -162,4 +234,6 @@ export const EditorHost: React.FC<EditorHostProps> = ({
       `}</style>
     </div>
   )
-}
+})
+
+EditorHost.displayName = 'EditorHost'

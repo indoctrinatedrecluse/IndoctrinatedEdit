@@ -130,3 +130,46 @@ export interface ViewContribution {
   icon: string
   location: 'activitybar' | 'panel' | 'bottom'
 }
+
+/* =========================================================================
+ * AI Multi-Model & Chat Contracts
+ * ========================================================================= */
+
+export type AiProvider = 'openai' | 'deepseek' | 'gemini' | 'claude' | 'ollama' | 'antigravity'
+
+export interface AiModelOption {
+  id: string
+  name: string
+  provider: AiProvider
+  description?: string
+  supportsReasoning?: boolean
+}
+
+export interface AiChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  reasoning?: string
+  timestamp: number
+  attachment?: {
+    type: 'selection' | 'file'
+    fileName: string
+    code: string
+    startLine?: number
+    endLine?: number
+  }
+}
+
+export interface AiProviderConfig {
+  provider: AiProvider
+  apiKey?: string
+  endpoint?: string
+  modelId?: string
+}
+
+export interface AiStreamChunk {
+  text?: string
+  reasoning?: string
+  done?: boolean
+  error?: string
+}

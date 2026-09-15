@@ -1,5 +1,5 @@
 import React from 'react'
-import { Files, GitBranch, Search, Blocks, Palette, Settings } from 'lucide-react'
+import { Files, GitBranch, Search, Blocks, Palette, Settings, Bot } from 'lucide-react'
 
 export type ActivityView = 'files' | 'git' | 'search' | 'extensions' | 'themes' | 'settings'
 
@@ -7,12 +7,16 @@ interface ActivityBarProps {
   activeView: ActivityView | null
   onSelectView: (view: ActivityView) => void
   gitChangesCount?: number
+  isAiOpen?: boolean
+  onToggleAi?: () => void
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
   activeView,
   onSelectView,
   gitChangesCount = 0,
+  isAiOpen = false,
+  onToggleAi,
 }) => {
   const topItems: { id: ActivityView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
@@ -42,6 +46,17 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
             </button>
           )
         })}
+
+        {onToggleAi && (
+          <button
+            className={`activity-btn glass-interactive ai-bar-btn ${isAiOpen ? 'active' : ''}`}
+            onClick={onToggleAi}
+            title="AI Multi-Model Assistant (Ctrl+Alt+A)"
+          >
+            <Bot size={18} />
+            {isAiOpen && <div className="active-indicator" />}
+          </button>
+        )}
       </div>
 
       <div className="activity-bar-group bottom">

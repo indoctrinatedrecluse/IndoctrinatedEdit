@@ -9,6 +9,12 @@ import {
   commitChanges,
   initGitRepository,
 } from './git-service'
+import {
+  streamAiResponse,
+  cancelAiStream,
+  listOllamaModels,
+  AiRequestOptions,
+} from './ai-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -181,6 +187,26 @@ ipcMain.handle('git:commit', async (_, message: string, cwd?: string) => {
 ipcMain.handle('git:init', async (_, cwd?: string) => {
   const targetDir = cwd || process.env.APP_ROOT || process.cwd()
   return await initGitRepository(targetDir)
+})
+
+// ==========================================
+// AI Multi-Model Service IPC Handlers
+// ==========================================
+ipcMain.handle('ai:listOllamaModels', async (_, host?: string) => {
+  return await listOllamaModels(host)
+})
+
+ipcMain.handle('ai:cancelStream', async (_, requestId: string) => {
+  cancelAiStream(requestId)
+})
+
+ipcMain.handle('ai:startStream', async (event, requestId: string, options: AiRequestOptions) => {
+  streamAiResponse(requestId, options, (chunk) => {
+    if (!event.sender.isDestroyed()) {
+      event.sender.send(`ai:chunk:${requestId}`, chunk)
+    }
+  })
+  return true
 })
 
 app.on('window-all-closed', () => {
