@@ -125,6 +125,12 @@ npm install
 npm run dev
 ```
 
+### Automated Testing
+```bash
+# Run the automated release compliance test suite
+npm test
+```
+
 ### Packaging & Distribution
 ```bash
 # Compile and build production bundles
@@ -147,7 +153,9 @@ npm run pack:linux
 - [x] **Phase 4: Custom Frameless UI Bars & Traffic Light Capsules + Cyberpunk Theme**
 - [x] **Phase 5: Multi-Model AI Chat Right Dock (BYOK, Ollama, Streaming, Code Attachment)**
 - [x] **Phase 6: Liquid Glass Splash Screen (Instant launch screen with graphic & author footer)**
-- [ ] **Next Milestone: Comprehensive Release Compliance Test Suite** (Pending Workitem — automated testing suite for packaging compliance, cross-platform shader & glass integrity, IPC validation, and Monaco contract tests)
+- [x] **Phase 7: Startup Optimization & Zero-Flash Handshake (<300ms launch, local Monaco bundling & Vite web workers)**
+- [x] **Phase 8: Compiler & SDK Auto-Detection Framework (Non-blocking background runner & extension registration API)**
+- [x] **Phase 9: Comprehensive Release Compliance Test Suite (Automated tests for SDK, Monaco theme contracts, Git topology, and toolchains)**
 
 ---
 

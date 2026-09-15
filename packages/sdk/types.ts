@@ -86,6 +86,50 @@ export interface IToolchainCheck {
 }
 
 /* =========================================================================
+ * Compiler & SDK Auto-Detection Contracts
+ * ========================================================================= */
+
+export interface ToolchainDefinition {
+  /** Unique identifier, e.g. 'toolchain.rust', 'toolchain.python' */
+  id: string
+  /** Display name, e.g. 'Rust Compiler (rustc)' */
+  name: string
+  /** Associated language id, e.g. 'rust', 'python', 'typescript' */
+  language: string
+  /** Binary executable names to search in PATH, e.g. ['rustc', 'cargo'] */
+  binaryNames: string[]
+  /** Argument used to query version (defaults to '--version') */
+  versionFlag?: string
+  /** Optional regex pattern string to extract version string from output */
+  versionPattern?: string
+  /** Official documentation or installation URL */
+  downloadUrl?: string
+  /** Description or category */
+  description?: string
+}
+
+export interface DetectedToolchain {
+  id: string
+  name: string
+  language: string
+  found: boolean
+  binaryName?: string
+  path?: string
+  version?: string
+  lastChecked: number
+  error?: string
+}
+
+export interface IToolchainRegistry {
+  registerToolchain(definition: ToolchainDefinition): void
+  unregisterToolchain(id: string): void
+  getDefinitions(): ToolchainDefinition[]
+  getDetectedToolchains(): DetectedToolchain[]
+  detectAll(): Promise<DetectedToolchain[]>
+  detectOne(id: string): Promise<DetectedToolchain | null>
+}
+
+/* =========================================================================
  * Git & Visual Graph Contracts
  * ========================================================================= */
 

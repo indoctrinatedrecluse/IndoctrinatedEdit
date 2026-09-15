@@ -15,6 +15,11 @@ import {
   listOllamaModels,
   AiRequestOptions,
 } from './ai-service'
+import {
+  detectToolchain,
+  detectAllToolchains,
+  DEFAULT_TOOLCHAINS,
+} from './toolchain-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -71,7 +76,7 @@ function createWindow() {
     show: false,
     icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
@@ -92,24 +97,40 @@ function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 
-  // Smooth transition from Splash Screen to Main Window
-  win.once('ready-to-show', () => {
-    setTimeout(() => {
-      if (splashWin && !splashWin.isDestroyed()) {
-        splashWin.webContents.postMessage('fade-out', '*')
-        setTimeout(() => {
-          if (splashWin && !splashWin.isDestroyed()) {
-            splashWin.destroy()
-            splashWin = null
-          }
-          win?.show()
-          win?.focus()
-        }, 350)
-      } else {
-        win?.show()
-        win?.focus()
+  // Smooth transition from Splash Screen to Main Window when React DOM is fully ready
+  let hasShownMainWindow = false
+  const showMainWindow = () => {
+    if (hasShownMainWindow) return
+    hasShownMainWindow = true
+
+    if (splashWin && !splashWin.isDestroyed()) {
+      splashWin.webContents.postMessage('fade-out', '*')
+      setTimeout(() => {
+        if (splashWin && !splashWin.isDestroyed()) {
+          splashWin.destroy()
+          splashWin = null
+        }
+        if (win && !win.isDestroyed()) {
+          win.maximize()
+          win.show()
+          win.focus()
+        }
+      }, 320)
+    } else {
+      if (win && !win.isDestroyed()) {
+        win.maximize()
+        win.show()
+        win.focus()
       }
-    }, 700)
+    }
+  }
+
+  // Safety fallback: reveal window after 6s if renderer hangs
+  const safetyTimeout = setTimeout(showMainWindow, 6000)
+
+  ipcMain.handle('app:ready', () => {
+    clearTimeout(safetyTimeout)
+    showMainWindow()
   })
 
   // Window control event forwarders
@@ -257,6 +278,24 @@ ipcMain.handle('ai:startStream', async (event, requestId: string, options: AiReq
     }
   })
   return true
+})
+
+// ==========================================
+// Compiler & SDK Auto-Detection IPC Handlers
+// ==========================================
+ipcMain.handle('toolchain:detectOne', async (_, definition) => {
+  return await detectToolchain(definition)
+})
+
+ipcMain.handle('toolchain:detectAll', async (_, customDefinitions) => {
+  const definitions = customDefinitions && customDefinitions.length > 0
+    ? customDefinitions
+    : DEFAULT_TOOLCHAINS
+  return await detectAllToolchains(definitions)
+})
+
+ipcMain.handle('toolchain:getDefaultDefinitions', async () => {
+  return DEFAULT_TOOLCHAINS
 })
 
 app.on('window-all-closed', () => {

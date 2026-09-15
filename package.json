@@ -1,6 +1,6 @@
 {
   "name": "indoctrinated-edit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Next-generation general-purpose desktop code editor with iOS Liquid Glass aesthetic",
   "main": "dist-electron/main.js",
   "author": "indoctrinatedrecluse",
@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "pack:win": "npm run build && electron-builder --win",
     "pack:linux": "npm run build && electron-builder --linux",
@@ -25,11 +26,17 @@
       "dist-electron/**/*"
     ],
     "win": {
-      "target": ["nsis", "zip"],
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "icon": "public/icon.png"
     },
     "linux": {
-      "target": ["AppImage", "tar.gz"],
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
       "icon": "public/icon.png",
       "category": "Development"
     },
@@ -58,6 +65,7 @@
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6"
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^5.0.1"
   }
 }

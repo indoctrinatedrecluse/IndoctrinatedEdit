@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { GitRepoStatus, AiProvider, AiStreamChunk } from '../packages/sdk/types'
+import {
+  GitRepoStatus,
+  AiProvider,
+  AiStreamChunk,
+  ToolchainDefinition,
+  DetectedToolchain,
+} from '../packages/sdk/types'
 
 export interface FileOpenResult {
   path: string
@@ -37,6 +43,12 @@ export interface ElectronAiAPI {
   ) => () => void
 }
 
+export interface ElectronToolchainAPI {
+  detectOne: (definition: ToolchainDefinition) => Promise<DetectedToolchain>
+  detectAll: (definitions?: ToolchainDefinition[]) => Promise<DetectedToolchain[]>
+  getDefaultDefinitions: () => Promise<ToolchainDefinition[]>
+}
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<void>
@@ -57,6 +69,12 @@ export interface ElectronAPI {
 
   // AI Multi-Model service operations
   ai: ElectronAiAPI
+
+  // Toolchain & SDK auto-detection operations
+  toolchain: ElectronToolchainAPI
+
+  // Lifecycle notification
+  notifyReady: () => Promise<void>
 }
 
 const api: ElectronAPI = {
@@ -101,6 +119,14 @@ const api: ElectronAPI = {
       }
     },
   },
+
+  toolchain: {
+    detectOne: (definition) => ipcRenderer.invoke('toolchain:detectOne', definition),
+    detectAll: (definitions) => ipcRenderer.invoke('toolchain:detectAll', definitions),
+    getDefaultDefinitions: () => ipcRenderer.invoke('toolchain:getDefaultDefinitions'),
+  },
+
+  notifyReady: () => ipcRenderer.invoke('app:ready'),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

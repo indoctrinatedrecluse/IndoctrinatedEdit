@@ -1,7 +1,10 @@
 import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
-import Editor, { OnMount } from '@monaco-editor/react'
+import Editor, { OnMount, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
+
+// Force @monaco-editor/react to use local monaco bundle, bypassing cdn.jsdelivr.net completely
+loader.config({ monaco })
 
 export interface SelectionInfo {
   text: string
@@ -22,6 +25,7 @@ interface EditorHostProps {
   onChange?: (value: string | undefined) => void
   onCursorChange?: (line: number, column: number) => void
   onSelectionChange?: (selection: SelectionInfo | null) => void
+  onEditorReady?: () => void
 }
 
 export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
@@ -31,6 +35,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   onChange,
   onCursorChange,
   onSelectionChange,
+  onEditorReady,
 }, ref) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
@@ -78,39 +83,45 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   }))
 
   const registerAndApplyTheme = (monacoInstance: typeof monaco, targetTheme: ThemeDefinition) => {
-    const themeName = `indoctrinated-${targetTheme.id}`
+    try {
+      const sanitizedId = targetTheme.id.replace(/[^a-zA-Z0-9-]/g, '-')
+      const themeName = `indoctrinated-${sanitizedId}`
 
-    monacoInstance.editor.defineTheme(themeName, {
-      base: targetTheme.type === 'light' ? 'vs' : 'vs-dark',
-      inherit: true,
-      rules: targetTheme.colors.tokenRules.map((rule) => ({
-        token: rule.token,
-        foreground: rule.foreground.replace('#', ''),
-        fontStyle: rule.fontStyle,
-      })),
-      colors: {
-        'editor.background': '#00000000', // 100% transparent canvas for frosted glass
-        'editor.foreground': targetTheme.colors.textPrimary,
-        'editor.lineHighlightBackground': 'rgba(255, 255, 255, 0.035)',
-        'editor.lineHighlightBorder': 'rgba(255, 255, 255, 0.06)',
-        'editorCursor.foreground': targetTheme.colors.accentGlow ? targetTheme.colors.textPrimary : '#0A84FF',
-        'editorWhitespace.foreground': 'rgba(255, 255, 255, 0.08)',
-        'editorLineNumber.foreground': 'rgba(235, 235, 245, 0.28)',
-        'editorLineNumber.activeForeground': targetTheme.colors.textPrimary,
-        'editor.selectionBackground': 'rgba(10, 132, 255, 0.25)',
-        'editor.selectionHighlightBackground': 'rgba(10, 132, 255, 0.15)',
-        'editorGutter.background': '#00000000',
-        'editorBracketMatch.background': 'rgba(10, 132, 255, 0.2)',
-        'editorBracketMatch.border': '#0A84FF',
-        'editorStickyScroll.background': targetTheme.colors.glassBackground,
-        'editorStickyScroll.border': targetTheme.colors.specularBorder,
-        'scrollbarSlider.background': 'rgba(255, 255, 255, 0.12)',
-        'scrollbarSlider.hoverBackground': 'rgba(255, 255, 255, 0.24)',
-        'scrollbarSlider.activeBackground': 'rgba(255, 255, 255, 0.35)',
-      },
-    })
+      monacoInstance.editor.defineTheme(themeName, {
+        base: targetTheme.type === 'light' ? 'vs' : 'vs-dark',
+        inherit: true,
+        rules: targetTheme.colors.tokenRules.map((rule) => ({
+          token: rule.token,
+          foreground: rule.foreground.replace('#', ''),
+          fontStyle: rule.fontStyle,
+        })),
+        colors: {
+          'editor.background': '#00000000', // 100% transparent canvas for frosted glass
+          'editor.foreground': targetTheme.colors.textPrimary,
+          'editor.lineHighlightBackground': 'rgba(255, 255, 255, 0.035)',
+          'editor.lineHighlightBorder': 'rgba(255, 255, 255, 0.06)',
+          'editorCursor.foreground': targetTheme.colors.accentGlow ? targetTheme.colors.textPrimary : '#0A84FF',
+          'editorWhitespace.foreground': 'rgba(255, 255, 255, 0.08)',
+          'editorLineNumber.foreground': 'rgba(235, 235, 245, 0.28)',
+          'editorLineNumber.activeForeground': targetTheme.colors.textPrimary,
+          'editor.selectionBackground': 'rgba(10, 132, 255, 0.25)',
+          'editor.selectionHighlightBackground': 'rgba(10, 132, 255, 0.15)',
+          'editorGutter.background': '#00000000',
+          'editorBracketMatch.background': 'rgba(10, 132, 255, 0.2)',
+          'editorBracketMatch.border': '#0A84FF',
+          'editorStickyScroll.background': targetTheme.colors.glassBackground,
+          'editorStickyScroll.border': targetTheme.colors.specularBorder,
+          'scrollbarSlider.background': 'rgba(255, 255, 255, 0.12)',
+          'scrollbarSlider.hoverBackground': 'rgba(255, 255, 255, 0.24)',
+          'scrollbarSlider.activeBackground': 'rgba(255, 255, 255, 0.35)',
+        },
+      })
 
-    monacoInstance.editor.setTheme(themeName)
+      monacoInstance.editor.setTheme(themeName)
+    } catch (err) {
+      console.warn('Failed to define or set custom Monaco theme:', err)
+      monacoInstance.editor.setTheme('vs-dark')
+    }
   }
 
   const handleEditorDidMount: OnMount = (editor, monacoInstance) => {
@@ -139,6 +150,9 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         onSelectionChange?.(null)
       }
     })
+
+    // Signal that Monaco editor has mounted and applied initial theme
+    onEditorReady?.()
   }
 
   // Update theme dynamically whenever theme changes

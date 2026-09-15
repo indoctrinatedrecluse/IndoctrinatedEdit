@@ -3,6 +3,7 @@ import {
   IStatusBarItem,
   IInlineCompletionProvider,
   IToolchainCheck,
+  ToolchainDefinition,
   ViewContribution,
   GitRepoStatus,
 } from './types'
@@ -12,6 +13,7 @@ export interface IExtensionHostRegistry {
   registerStatusBarItem(item: IStatusBarItem): void
   registerInlineCompletion(provider: IInlineCompletionProvider): void
   registerToolchainCheck(check: IToolchainCheck): void
+  registerToolchain(definition: ToolchainDefinition): void
   registerView(view: ViewContribution): void
   registerCommand(commandId: string, handler: (...args: unknown[]) => unknown | Promise<unknown>): void
 }

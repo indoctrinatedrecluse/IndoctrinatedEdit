@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Minus, Plus, X, Copy } from 'lucide-react'
+import React from 'react'
+import { Minus, Square, X, Copy } from 'lucide-react'
 
 interface WindowControlsProps {
   isMaximized: boolean
@@ -14,144 +14,124 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
   onMaximize,
   onClose,
 }) => {
-  const [hovered, setHovered] = useState<boolean>(false)
-
   return (
-    <div
-      className="window-controls-capsule window-no-drag"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* Minimize Button */}
+    <div className="window-controls-capsule window-no-drag">
+      {/* Minimize Button (Amber) */}
       <button
-        className="capsule-btn minimize"
+        type="button"
+        className="ctrl-btn btn-amber"
         onClick={onMinimize}
-        title="Minimize"
+        title="Minimize Window"
+        aria-label="Minimize"
       >
-        <span className="dot dot-amber" />
-        <span className={`icon ${hovered ? 'visible' : ''}`}>
-          <Minus size={9} strokeWidth={3} />
-        </span>
+        <Minus size={11} strokeWidth={3} className="ctrl-icon" />
       </button>
 
-      {/* Maximize Button */}
+      {/* Maximize / Restore Button (Green) */}
       <button
-        className="capsule-btn maximize"
+        type="button"
+        className="ctrl-btn btn-green"
         onClick={onMaximize}
-        title={isMaximized ? 'Restore' : 'Maximize'}
+        title={isMaximized ? 'Restore Window' : 'Maximize Window'}
+        aria-label={isMaximized ? 'Restore' : 'Maximize'}
       >
-        <span className="dot dot-green" />
-        <span className={`icon ${hovered ? 'visible' : ''}`}>
-          {isMaximized ? <Copy size={8} strokeWidth={2.5} /> : <Plus size={9} strokeWidth={3} />}
-        </span>
+        {isMaximized ? (
+          <Copy size={10} strokeWidth={2.5} className="ctrl-icon" />
+        ) : (
+          <Square size={9} strokeWidth={3} className="ctrl-icon" />
+        )}
       </button>
 
-      {/* Close Button */}
+      {/* Close Button (Red) */}
       <button
-        className="capsule-btn close"
+        type="button"
+        className="ctrl-btn btn-red"
         onClick={onClose}
-        title="Close"
+        title="Close Window"
+        aria-label="Close"
       >
-        <span className="dot dot-red" />
-        <span className={`icon ${hovered ? 'visible' : ''}`}>
-          <X size={9} strokeWidth={3} />
-        </span>
+        <X size={11} strokeWidth={3} className="ctrl-icon" />
       </button>
 
       <style>{`
         .window-controls-capsule {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: 9px;
           padding: 4px 10px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+          pointer-events: auto !important;
+          -webkit-app-region: no-drag !important;
+          user-select: none;
         }
 
-        .window-controls-capsule:hover {
-          background: rgba(255, 255, 255, 0.07);
-          border-color: rgba(255, 255, 255, 0.18);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 4px 16px rgba(0, 0, 0, 0.3);
-        }
-
-        .capsule-btn {
+        .ctrl-btn {
           position: relative;
-          width: 14px;
-          height: 14px;
+          width: 17px;
+          height: 17px;
           border-radius: 50%;
-          border: none;
-          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.35);
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           padding: 0;
-          transition: transform 0.15s ease, filter 0.2s ease;
+          outline: none;
+          pointer-events: auto !important;
+          -webkit-app-region: no-drag !important;
+          transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, filter 0.2s ease;
         }
 
-        .capsule-btn:hover {
-          transform: scale(1.15);
+        .ctrl-btn:hover {
+          transform: scale(1.18);
         }
 
-        .capsule-btn:active {
-          transform: scale(0.95);
+        .ctrl-btn:active {
+          transform: scale(0.92);
         }
 
-        .dot {
-          position: absolute;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          transition: all 0.2s ease;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4);
+        .ctrl-icon {
+          color: rgba(0, 0, 0, 0.85);
+          display: block;
+          transition: transform 0.15s ease;
         }
 
-        .dot-red {
-          background: #FF453A;
-          box-shadow: 0 0 6px rgba(255, 69, 58, 0.6);
+        /* Amber / Minimize */
+        .btn-amber {
+          background: linear-gradient(135deg, #FFD60A 0%, #FF9F0A 100%);
+          box-shadow: 0 0 6px rgba(255, 214, 10, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         }
 
-        .dot-amber {
-          background: #FFD60A;
-          box-shadow: 0 0 6px rgba(255, 214, 10, 0.6);
+        .btn-amber:hover {
+          box-shadow: 0 0 12px rgba(255, 214, 10, 0.9), 0 0 20px rgba(255, 159, 10, 0.6);
+          border-color: #FFFFFF;
         }
 
-        .dot-green {
-          background: #30D158;
-          box-shadow: 0 0 6px rgba(48, 209, 88, 0.6);
+        /* Green / Maximize */
+        .btn-green {
+          background: linear-gradient(135deg, #30D158 0%, #248A3D 100%);
+          box-shadow: 0 0 6px rgba(48, 209, 88, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         }
 
-        .capsule-btn.close:hover .dot-red {
-          box-shadow: 0 0 10px rgba(255, 69, 58, 0.9), 0 0 16px rgba(255, 69, 58, 0.6);
+        .btn-green:hover {
+          box-shadow: 0 0 12px rgba(48, 209, 88, 0.9), 0 0 20px rgba(48, 209, 88, 0.6);
+          border-color: #FFFFFF;
         }
 
-        .capsule-btn.minimize:hover .dot-amber {
-          box-shadow: 0 0 10px rgba(255, 214, 10, 0.9), 0 0 16px rgba(255, 214, 10, 0.6);
+        /* Red / Close */
+        .btn-red {
+          background: linear-gradient(135deg, #FF453A 0%, #D70015 100%);
+          box-shadow: 0 0 6px rgba(255, 69, 58, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         }
 
-        .capsule-btn.maximize:hover .dot-green {
-          box-shadow: 0 0 10px rgba(48, 209, 88, 0.9), 0 0 16px rgba(48, 209, 88, 0.6);
-        }
-
-        .icon {
-          position: relative;
-          z-index: 2;
-          color: rgba(0, 0, 0, 0.75);
-          opacity: 0;
-          transition: opacity 0.15s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .icon.visible {
-          opacity: 1;
+        .btn-red:hover {
+          box-shadow: 0 0 12px rgba(255, 69, 58, 0.9), 0 0 20px rgba(215, 0, 21, 0.6);
+          border-color: #FFFFFF;
         }
       `}</style>
     </div>

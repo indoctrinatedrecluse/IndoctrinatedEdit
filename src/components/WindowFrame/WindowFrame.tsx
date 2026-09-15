@@ -73,15 +73,18 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
 
       <style>{`
         .window-frame {
-          height: 40px;
+          height: 42px;
+          min-height: 42px;
+          width: 100%;
+          flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 14px;
-          background: rgba(10, 14, 24, 0.55);
+          padding: 0 16px;
+          background: rgba(10, 14, 24, 0.70);
           backdrop-filter: var(--glass-blur);
           -webkit-backdrop-filter: var(--glass-blur);
-          z-index: 100;
+          z-index: 1000;
           position: relative;
         }
 
@@ -94,9 +97,9 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           background: linear-gradient(
             90deg,
             transparent 0%,
-            rgba(255, 255, 255, 0.18) 20%,
-            rgba(0, 240, 255, 0.3) 50%,
-            rgba(255, 255, 255, 0.18) 80%,
+            rgba(255, 255, 255, 0.22) 20%,
+            rgba(0, 240, 255, 0.45) 50%,
+            rgba(255, 255, 255, 0.22) 80%,
             transparent 100%
           );
           pointer-events: none;
@@ -106,6 +109,9 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
           display: flex;
           align-items: center;
           gap: 10px;
+          flex-shrink: 0;
+          pointer-events: auto !important;
+          -webkit-app-region: no-drag !important;
         }
 
         .app-brand-badge {

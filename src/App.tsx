@@ -11,6 +11,7 @@ import { AiChatPanel } from './components/AiChat/AiChatPanel'
 import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { toolchainService } from './services/toolchainService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -229,6 +230,23 @@ export const App: React.FC = () => {
   useEffect(() => {
     applyGlassTheme(currentTheme)
   }, [currentTheme])
+
+  const handleEditorReady = useCallback(() => {
+    // Monaco editor canvas is fully mounted and painted
+    window.electronAPI?.notifyReady?.()
+  }, [])
+
+  // Mount initialization
+  useEffect(() => {
+    // Non-blocking background toolchain detection (idle time)
+    toolchainService.scheduleBackgroundDetection(1500)
+
+    // Safety fallback in case no editor tab is open
+    const fallbackTimer = setTimeout(() => {
+      window.electronAPI?.notifyReady?.()
+    }, 800)
+    return () => clearTimeout(fallbackTimer)
+  }, [])
 
   // Refresh Git Status for status bar and activity bar badge
   const refreshGitStatus = useCallback(async () => {
@@ -528,6 +546,7 @@ export const App: React.FC = () => {
               onChange={handleEditorChange}
               onCursorChange={(line, col) => setCursorPos({ line, col })}
               onSelectionChange={setCurrentSelection}
+              onEditorReady={handleEditorReady}
             />
           ) : (
             <div className="empty-workspace">

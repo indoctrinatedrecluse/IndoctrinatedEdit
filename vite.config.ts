@@ -4,6 +4,7 @@ import electron from 'vite-plugin-electron/simple'
 import path from 'node:path'
 
 export default defineConfig({
+  base: './',
   plugins: [
     react(),
     electron({
@@ -12,6 +13,16 @@ export default defineConfig({
       },
       preload: {
         input: path.join(__dirname, 'electron/preload.ts'),
+        vite: {
+          build: {
+            rollupOptions: {
+              output: {
+                format: 'cjs',
+                entryFileNames: '[name].cjs',
+              },
+            },
+          },
+        },
       },
       renderer: {},
     }),
