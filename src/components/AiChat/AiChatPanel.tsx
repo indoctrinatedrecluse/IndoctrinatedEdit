@@ -84,12 +84,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
 
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
-  // Auto-scroll when messages update
+  // Auto-scroll inside messages container without scrolling outer window/viewport
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
   }, [messages, isStreaming])
 
   // Discover local Ollama models on mount
@@ -508,7 +511,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       )}
 
       {/* Messages Scroll Area */}
-      <div className="ai-messages-container">
+      <div className="ai-messages-container" ref={messagesContainerRef}>
         {messages.map((msg) => {
           const isUser = msg.role === 'user'
 
@@ -675,7 +678,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
       <style>{`
         .ai-chat-panel {
-          width: 380px;
+          width: 100%;
+          min-width: 0;
           height: 100%;
           display: flex;
           flex-direction: column;
@@ -691,18 +695,22 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
         .ai-panel-header {
           height: 42px;
+          min-height: 42px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 12px;
           border-bottom: var(--specular-border-subtle);
           background: rgba(255, 255, 255, 0.02);
+          flex-shrink: 0;
         }
 
         .ai-header-left {
           display: flex;
           align-items: center;
           gap: 8px;
+          min-width: 0;
+          flex: 1;
         }
 
         .ai-brand-pill {
@@ -712,6 +720,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           font-weight: 600;
           font-size: 12px;
           color: var(--text-primary);
+          flex-shrink: 0;
         }
 
         .sparkle-icon {
@@ -720,6 +729,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
         .model-selector-container {
           position: relative;
+          min-width: 0;
+          flex-shrink: 1;
         }
 
         .model-pill {
@@ -733,10 +744,11 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid rgba(255, 255, 255, 0.08);
           cursor: pointer;
+          max-width: 160px;
         }
 
         .model-name {
-          max-width: 110px;
+          max-width: 100px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;

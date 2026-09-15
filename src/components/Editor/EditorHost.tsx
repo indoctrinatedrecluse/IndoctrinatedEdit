@@ -114,6 +114,15 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           'scrollbarSlider.background': 'rgba(255, 255, 255, 0.12)',
           'scrollbarSlider.hoverBackground': 'rgba(255, 255, 255, 0.24)',
           'scrollbarSlider.activeBackground': 'rgba(255, 255, 255, 0.35)',
+          // Minimap glass tokens
+          'minimapSlider.background': 'rgba(255, 255, 255, 0.08)',
+          'minimapSlider.hoverBackground': 'rgba(255, 255, 255, 0.16)',
+          'minimapSlider.activeBackground': 'rgba(255, 255, 255, 0.24)',
+          'minimap.errorHighlight': 'rgba(255, 69, 58, 0.35)',
+          'minimap.warningHighlight': 'rgba(255, 214, 10, 0.35)',
+          'minimap.selectionHighlight': 'rgba(10, 132, 255, 0.28)',
+          'minimap.findMatchHighlight': 'rgba(255, 159, 10, 0.35)',
+          'minimap.background': '#00000000',
         },
       })
 
@@ -234,15 +243,34 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           -webkit-backdrop-filter: blur(12px);
         }
 
+        /* Translucent liquid glass minimap slider without nested backdrop-filter bug */
         .editor-host-container .monaco-editor .minimap-slider {
-          background: rgba(255, 255, 255, 0.16) !important;
+          background: transparent !important;
           border-radius: var(--radius-xs);
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+          box-sizing: border-box;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          pointer-events: auto;
+        }
+
+        .editor-host-container .monaco-editor .minimap-slider .minimap-slider-horizontal {
+          background: rgba(255, 255, 255, 0.08) !important;
+          border-radius: var(--radius-xs);
+          transition: background-color 0.2s ease;
         }
 
         .editor-host-container .monaco-editor .minimap-slider:hover {
-          background: rgba(255, 255, 255, 0.28) !important;
+          border-color: rgba(255, 255, 255, 0.38);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        }
+
+        .editor-host-container .monaco-editor .minimap-slider:hover .minimap-slider-horizontal {
+          background: rgba(255, 255, 255, 0.16) !important;
+        }
+
+        .editor-host-container .monaco-editor .minimap-slider.active .minimap-slider-horizontal {
+          background: rgba(255, 255, 255, 0.24) !important;
         }
 
         /* Sticky scroll frosted glass if ever toggled */

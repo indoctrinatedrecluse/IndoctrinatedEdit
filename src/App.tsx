@@ -208,6 +208,60 @@ export const App: React.FC = () => {
   const [currentTheme, setCurrentTheme] = useState(registeredThemes[0])
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
   const [untitledCount, setUntitledCount] = useState<number>(1)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(260)
+  const [aiPanelWidth, setAiPanelWidth] = useState<number>(420)
+
+  // Left Sidebar Drag-to-Resize
+  const isResizingSidebar = useRef(false)
+  const handleSidebarMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizingSidebar.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingSidebar.current) return
+      const newWidth = Math.max(180, Math.min(500, moveEvent.clientX - 48))
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      isResizingSidebar.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Right AI Chat Dock Drag-to-Resize
+  const isResizingAi = useRef(false)
+  const handleAiMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizingAi.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingAi.current) return
+      const newWidth = Math.max(320, Math.min(700, window.innerWidth - moveEvent.clientX))
+      setAiPanelWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      isResizingAi.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
 
   // AI Multi-Model Chat Panel & Editor Integration State
   const editorHostRef = useRef<EditorHostHandle>(null)
@@ -503,16 +557,16 @@ export const App: React.FC = () => {
           onToggleAi={handleToggleAi}
         />
 
-        {/* Collapsible Frosted Sidebar with Spring Animation */}
+        {/* Collapsible Frosted Sidebar with Spring Animation & Resizer */}
         <AnimatePresence initial={false}>
           {activeView && (
             <motion.div
               key="sidebar-motion"
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 260, opacity: 1 }}
+              animate={{ width: sidebarWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              style={{ overflow: 'hidden', height: '100%' }}
+              style={{ overflow: 'hidden', height: '100%', flexShrink: 0 }}
             >
               <Sidebar
                 activeView={activeView}
@@ -529,6 +583,15 @@ export const App: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Left Sidebar Resizer Divider Sash */}
+        {activeView && (
+          <div
+            className="pane-resizer-sash sidebar-sash"
+            onMouseDown={handleSidebarMouseDown}
+            title="Drag to resize sidebar"
+          />
+        )}
 
         {/* Center Editor Stage */}
         <main className="editor-stage">
@@ -557,16 +620,25 @@ export const App: React.FC = () => {
           )}
         </main>
 
+        {/* Right AI Dock Resizer Divider Sash */}
+        {isAiPanelOpen && (
+          <div
+            className="pane-resizer-sash ai-sash"
+            onMouseDown={handleAiMouseDown}
+            title="Drag to resize AI assistant"
+          />
+        )}
+
         {/* Right Multi-Model AI Assistant Dock */}
         <AnimatePresence initial={false}>
           {isAiPanelOpen && (
             <motion.div
               key="ai-dock-motion"
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 380, opacity: 1 }}
+              animate={{ width: aiPanelWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-              style={{ overflow: 'hidden', height: '100%', display: 'flex' }}
+              style={{ overflow: 'hidden', height: '100%', display: 'flex', flexShrink: 0 }}
             >
               <AiChatPanel
                 isOpen={isAiPanelOpen}
@@ -597,6 +669,7 @@ export const App: React.FC = () => {
         .app-shell {
           width: 100vw;
           height: 100vh;
+          max-height: 100vh;
           display: flex;
           flex-direction: column;
           position: relative;
@@ -643,20 +716,41 @@ export const App: React.FC = () => {
 
         .workspace-body {
           flex: 1;
+          min-height: 0;
           display: flex;
           position: relative;
           overflow: hidden;
           z-index: 10;
         }
 
+        .pane-resizer-sash {
+          width: 5px;
+          height: 100%;
+          cursor: col-resize;
+          position: relative;
+          z-index: 25;
+          margin: 0 -2.5px;
+          flex-shrink: 0;
+          background: transparent;
+          transition: background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .pane-resizer-sash:hover,
+        .pane-resizer-sash:active {
+          background: rgba(10, 132, 255, 0.45);
+          box-shadow: 0 0 8px var(--accent-glow);
+        }
+
         .editor-stage {
           flex: 1;
+          min-width: 0;
           display: flex;
           flex-direction: column;
           height: 100%;
           position: relative;
           background: rgba(14, 18, 30, 0.25);
           backdrop-filter: var(--glass-blur-sm);
+          overflow: hidden;
         }
 
         .empty-workspace {

@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0] - 2026-09-15
+## [1.0.1] - 2026-09-15
+
+### 🩹 Hotfix Release — Minimap Glass, Title Bar Fix & Resizable Panes
+
+This hotfix resolves critical UI layout rendering bugs, introduces interactive draggable splitters for the sidebar and AI panel, and polishes the AI chat interface.
+
+#### ⚡ Monaco Minimap & Highlighter Glass Fix
+- **Eliminated Compounding Backgrounds & Opacity Bugs**: Fixed issue where the minimap slider became a solid opaque block by separating outer slider framing from inner horizontal slider fills.
+- **Removed Nested `backdrop-filter` in Slider**: Prevented Chromium/Electron nested blur compositing anomalies where nested backdrop-filter layers flattened into opaque artifacts over transparent backgrounds.
+- **Registered Explicit Monaco Minimap Theme Tokens**: Added `minimapSlider.background`, `minimapSlider.hoverBackground`, `minimapSlider.activeBackground`, and translucent `minimap.errorHighlight` (`rgba(255, 69, 58, 0.35)`) to preserve crisp character legibility beneath the viewport slider.
+
+#### 🪟 Window Frame & Title Bar Persistence
+- **Fixed Disappearing Title Bar / Window Controls**: Resolved bug in AI Assistant where `scrollIntoView({ behavior: 'smooth' })` scrolled the entire browser window and pushed the frameless `WindowFrame` and minimize/maximize/close buttons offscreen.
+- **Internal Container Scrolling**: Switched AI message scrolling to scoped `container.scrollTop = container.scrollHeight`.
+- **Strict Layout Locking**: Added strict `max-height: 100vh; overflow: hidden;` and `flex-shrink: 0` constraints to the app shell and window frame.
+
+#### 📐 Interactive Draggable Resizable Panes
+- **Resizable Left Sidebar**: Added interactive glass divider sash enabling smooth drag-to-resize from 180px to 500px (default 260px).
+- **Resizable Right AI Dock**: Added interactive glass divider sash enabling smooth drag-to-resize from 320px to 700px (default 420px).
+- **Visual Hover & Active Sashes**: Glowing cyan/blue drag indicators with `col-resize` cursors.
+
+#### 🤖 AI Chat Panel Polish & Responsive Fixes
+- **Expanded Default Width**: Increased initial AI chat panel width from 380px to 420px for comfortable reading without cramped line breaks.
+- **Adaptive Header & Truncation**: Pinned action buttons (`Key`, `Clear`, `Close`) with `flex-shrink: 0` and enabled clean model name truncation so header items never overflow or clip.
+- **Enhanced Quick-Action Bar**: Improved chip layout and scroll container to prevent button cutoff.
+
+---
+
+## [1.0.0] - 2026-09-15 (Archived)
 
 ### ✨ Initial Release — The Liquid Glass Era
 
