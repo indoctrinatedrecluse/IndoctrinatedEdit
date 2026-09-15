@@ -6,6 +6,8 @@ import { Sidebar, WorkspaceFileItem } from './components/Sidebar/Sidebar'
 import { TabBar, TabItem } from './components/TabBar/TabBar'
 import { EditorHost } from './components/Editor/EditorHost'
 import { StatusBar } from './components/StatusBar/StatusBar'
+import { CommandPalette } from './components/CommandPalette/CommandPalette'
+import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
@@ -366,6 +368,36 @@ export const App: React.FC = () => {
     setActiveView((prev) => (prev ? null : 'files'))
   }
 
+  const [isPaletteOpen, setIsPaletteOpen] = useState<boolean>(false)
+  const [paletteInitialQuery, setPaletteInitialQuery] = useState<string>('>')
+
+  const openPalette = useCallback((initial = '>') => {
+    setPaletteInitialQuery(initial)
+    setIsPaletteOpen(true)
+  }, [])
+
+  // Register commands into the centralized CommandRegistry
+  useEffect(() => {
+    return commandRegistry.registerMany([
+      { id: 'file.new', title: 'New Untitled File', category: 'File', shortcut: 'Ctrl+N', handler: handleNewFile },
+      { id: 'file.open', title: 'Open File...', category: 'File', shortcut: 'Ctrl+O', handler: handleOpenFileNative },
+      { id: 'file.openFolder', title: 'Open Workspace Folder...', category: 'File', shortcut: 'Ctrl+Shift+O', handler: handleOpenFolderNative },
+      { id: 'file.save', title: 'Save File', category: 'File', shortcut: 'Ctrl+S', handler: handleSaveFile },
+      { id: 'file.saveAs', title: 'Save File As...', category: 'File', shortcut: 'Ctrl+Shift+S', handler: handleSaveFileAs },
+      { id: 'file.close', title: 'Close Current Tab', category: 'File', shortcut: 'Ctrl+W', handler: () => handleCloseTab(activeTabId) },
+      { id: 'view.toggleSidebar', title: 'Toggle Primary Sidebar', category: 'View', shortcut: 'Ctrl+B', handler: handleToggleSidebar },
+      { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', handler: () => setActiveView('files') },
+      { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', handler: () => setActiveView('git') },
+      { id: 'view.themes', title: 'Open Liquid Glass Themes', category: 'View', handler: () => setActiveView('themes') },
+      { id: 'view.settings', title: 'Open Preferences', category: 'View', shortcut: 'Ctrl+,', handler: () => setActiveView('settings') },
+      { id: 'theme.cupertino', title: 'Theme: Cupertino Midnight Glass', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cupertino-midnight') },
+      { id: 'theme.obsidian', title: 'Theme: Liquid Obsidian', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.liquid-obsidian') },
+      { id: 'theme.amber', title: 'Theme: Frosted Amber Glow', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.frosted-amber') },
+      { id: 'theme.cyberpunk', title: 'Theme: Cyberpunk 2077 Neon', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cyberpunk-neon') },
+      { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', handler: refreshGitStatus },
+    ])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, refreshGitStatus])
+
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
     onOpenFile: handleOpenFileNative,
@@ -376,8 +408,8 @@ export const App: React.FC = () => {
     onCloseTab: () => handleCloseTab(activeTabId),
     onToggleSidebar: handleToggleSidebar,
     onOpenSettings: () => setActiveView('settings'),
-    onCommandPalette: () => alert('Universal Command Palette (<Ctrl+Shift+P>): Coming in the next iteration!'),
-    onQuickOpen: () => setActiveView('files'),
+    onCommandPalette: () => openPalette('>'),
+    onQuickOpen: () => openPalette(''),
     onGitGraph: () => setActiveView((prev) => (prev === 'git' ? null : 'git')),
   })
 
@@ -399,11 +431,21 @@ export const App: React.FC = () => {
       <div className="ambient-glow orb-secondary" />
       <div className="ambient-glow orb-tertiary" />
 
+      {/* Universal Command Palette */}
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        initialQuery={paletteInitialQuery}
+        onClose={() => setIsPaletteOpen(false)}
+        workspaceFiles={workspaceFiles}
+        tabs={tabs}
+        onOpenFile={(f) => handleOpenFileItem({ name: f.name, path: f.path, isDirectory: false })}
+      />
+
       {/* Top Frameless Title Bar */}
       <WindowFrame
         activeFileName={activeTab?.name}
         workspaceName={workspaceName}
-        onCommandPaletteToggle={() => alert('Universal Command Palette (<Ctrl+Shift+P>): Coming in the next iteration!')}
+        onCommandPaletteToggle={() => openPalette('')}
       />
 
       {/* Main Workspace Layout */}
