@@ -17,6 +17,7 @@ import {
   KeyRound,
   Info,
   Bell,
+  Keyboard,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -37,6 +38,7 @@ export interface MenuActionHandlers {
   onOpenSettings?: () => void
   onToggleNotifications?: () => void
   onWelcomeGuide?: () => void
+  onOpenShortcuts?: () => void
   onOpenLicense?: () => void
   onOpenAbout?: () => void
 }
@@ -205,6 +207,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           label: 'Welcome & Getting Started',
           icon: <Sparkles size={14} />,
           onClick: handlers.onWelcomeGuide,
+        },
+        {
+          id: 'help.shortcuts',
+          label: 'Keyboard Shortcuts',
+          shortcut: 'Ctrl+K Ctrl+S',
+          icon: <Keyboard size={14} />,
+          onClick: handlers.onOpenShortcuts,
         },
         { id: 'sep7', label: '', isSeparator: true },
         {

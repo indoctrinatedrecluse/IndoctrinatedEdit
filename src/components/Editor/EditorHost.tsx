@@ -16,10 +16,22 @@ export interface SelectionInfo {
   endLine: number
 }
 
+export interface DocumentSymbol {
+  name: string
+  kind: 'class' | 'function' | 'interface' | 'method' | 'variable' | 'heading' | 'type'
+  line: number
+  detail?: string
+}
+
 export interface EditorHostHandle {
   insertAtCursor: (text: string) => void
   replaceSelection: (text: string) => void
   getSelectedText: () => string
+  goToLine: (lineNumber: number, column?: number) => void
+  formatDocument: () => void
+  triggerAction: (actionId: string) => void
+  transformSelection: (type: 'uppercase' | 'lowercase' | 'titlecase' | 'trim' | 'sort') => void
+  getOutlineSymbols: () => DocumentSymbol[]
 }
 
 interface EditorHostProps {
@@ -83,6 +95,148 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         }
       }
       return ''
+    },
+    goToLine: (lineNumber: number, column = 1) => {
+      const editor = editorRef.current
+      if (editor) {
+        const model = editor.getModel()
+        const lineCount = model ? model.getLineCount() : 1
+        const targetLine = Math.max(1, Math.min(lineNumber, lineCount))
+        editor.setPosition({ lineNumber: targetLine, column })
+        editor.revealLineInCenter(targetLine)
+        editor.focus()
+      }
+    },
+    formatDocument: () => {
+      const editor = editorRef.current
+      if (editor) {
+        editor.getAction('editor.action.formatDocument')?.run()
+      }
+    },
+    triggerAction: (actionId: string) => {
+      const editor = editorRef.current
+      if (editor) {
+        editor.getAction(actionId)?.run()
+      }
+    },
+    transformSelection: (type: 'uppercase' | 'lowercase' | 'titlecase' | 'trim' | 'sort') => {
+      const editor = editorRef.current
+      if (!editor) return
+      const selection = editor.getSelection()
+      const model = editor.getModel()
+      if (!model) return
+
+      const targetRange = selection && !selection.isEmpty()
+        ? selection
+        : model.getFullModelRange()
+
+      const text = model.getValueInRange(targetRange)
+      let transformed = text
+
+      switch (type) {
+        case 'uppercase':
+          transformed = text.toUpperCase()
+          break
+        case 'lowercase':
+          transformed = text.toLowerCase()
+          break
+        case 'titlecase':
+          transformed = text.replace(/\b\w/g, (c) => c.toUpperCase())
+          break
+        case 'trim':
+          transformed = text
+            .split('\n')
+            .map((l) => l.trimEnd())
+            .join('\n')
+          break
+        case 'sort':
+          transformed = text
+            .split('\n')
+            .sort((a, b) => a.localeCompare(b))
+            .join('\n')
+          break
+      }
+
+      editor.executeEdits('edit-transform', [{
+        range: targetRange,
+        text: transformed,
+        forceMoveMarkers: true,
+      }])
+      editor.focus()
+    },
+    getOutlineSymbols: (): DocumentSymbol[] => {
+      const editor = editorRef.current
+      if (!editor) return []
+      const model = editor.getModel()
+      if (!model) return []
+
+      const symbols: DocumentSymbol[] = []
+      const lineCount = model.getLineCount()
+
+      for (let i = 1; i <= lineCount; i++) {
+        const line = model.getLineContent(i)
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) continue
+
+        // Markdown headings
+        const mdHeadingMatch = trimmed.match(/^(#{1,6})\s+(.+)/)
+        if (mdHeadingMatch) {
+          symbols.push({
+            name: mdHeadingMatch[2],
+            kind: 'heading',
+            line: i,
+            detail: `Heading (H${mdHeadingMatch[1].length})`,
+          })
+          continue
+        }
+
+        // Classes / Structs / Interfaces / Types
+        const classMatch = trimmed.match(/(?:export\s+)?(?:abstract\s+)?(?:class|struct|interface|trait|enum)\s+([A-Za-z0-9_$]+)/)
+        if (classMatch) {
+          const kind = trimmed.includes('interface')
+            ? 'interface'
+            : trimmed.includes('class')
+            ? 'class'
+            : 'type'
+          symbols.push({
+            name: classMatch[1],
+            kind,
+            line: i,
+            detail: trimmed.slice(0, 50),
+          })
+          continue
+        }
+
+        // Type aliases
+        const typeMatch = trimmed.match(/(?:export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/)
+        if (typeMatch) {
+          symbols.push({
+            name: typeMatch[1],
+            kind: 'type',
+            line: i,
+            detail: 'Type Alias',
+          })
+          continue
+        }
+
+        // Functions / Methods (JS, TS, Rust, Go, Python, PHP, Ruby, Java, C++)
+        const fnMatch =
+          trimmed.match(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/) ||
+          trimmed.match(/(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(/) ||
+          trimmed.match(/(?:def|fn|func)\s+([A-Za-z0-9_$]+)/) ||
+          trimmed.match(/(?:public|private|protected|static|override)?\s*(?:async\s*)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*[{:]/)
+
+        if (fnMatch && fnMatch[1] && !['if', 'for', 'while', 'switch', 'catch', 'constructor'].includes(fnMatch[1])) {
+          symbols.push({
+            name: fnMatch[1],
+            kind: 'function',
+            line: i,
+            detail: trimmed.slice(0, 50),
+          })
+        }
+      }
+
+      return symbols
     },
   }))
 

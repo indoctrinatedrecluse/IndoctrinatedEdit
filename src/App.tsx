@@ -10,6 +10,7 @@ import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { AiChatPanel } from './components/AiChat/AiChatPanel'
 import { AboutModal } from './components/Modals/AboutModal'
 import { LicenseModal } from './components/Modals/LicenseModal'
+import { ShortcutsModal } from './components/Modals/ShortcutsModal'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
 import { notificationService, NotificationItem } from './services/notificationService'
 import { commandRegistry } from './services/commandRegistry'
@@ -483,6 +484,7 @@ export const App: React.FC = () => {
 
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false)
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false)
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false)
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => notificationService.getNotifications())
 
@@ -529,6 +531,7 @@ export const App: React.FC = () => {
       onToggleSidebar: handleToggleSidebar,
       onOpenSettings: () => setActiveView('settings'),
       onToggleNotifications: handleToggleNotifications,
+      onOpenShortcuts: () => setIsShortcutsOpen(true),
       onWelcomeGuide: () => {
         const welcomeTab = tabs.find((t) => t.id === 'welcome.ts')
         if (welcomeTab) {
@@ -558,34 +561,75 @@ export const App: React.FC = () => {
 
   // Register commands into the centralized CommandRegistry
   useEffect(() => {
+    // Dynamic theme commands from registeredThemes
+    const themeCommands = registeredThemes.map((t) => ({
+      id: `theme.${t.id.replace(/[^a-zA-Z0-9-]/g, '-')}`,
+      title: `Theme: ${t.name}`,
+      category: 'Themes' as const,
+      description: `Switch editor theme to ${t.name}`,
+      handler: () => handleSelectTheme(t.id),
+    }))
+
     return commandRegistry.registerMany([
-      { id: 'file.new', title: 'New Untitled File', category: 'File', shortcut: 'Ctrl+N', handler: handleNewFile },
-      { id: 'file.open', title: 'Open File...', category: 'File', shortcut: 'Ctrl+O', handler: handleOpenFileNative },
-      { id: 'file.openFolder', title: 'Open Workspace Folder...', category: 'File', shortcut: 'Ctrl+K Ctrl+O', handler: handleOpenFolderNative },
-      { id: 'file.save', title: 'Save File', category: 'File', shortcut: 'Ctrl+S', handler: handleSaveFile },
-      { id: 'file.saveAs', title: 'Save File As...', category: 'File', shortcut: 'Ctrl+Shift+S', handler: handleSaveFileAs },
-      { id: 'file.close', title: 'Close Current Tab', category: 'File', shortcut: 'Ctrl+W', handler: () => handleCloseTab(activeTabId) },
-      { id: 'view.toggleSidebar', title: 'Toggle Primary Sidebar', category: 'View', shortcut: 'Ctrl+B', handler: handleToggleSidebar },
-      { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', handler: () => setActiveView('files') },
-      { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', handler: () => setActiveView('git') },
-      { id: 'view.search', title: 'Search in Workspace', category: 'View', shortcut: 'Ctrl+Shift+F', handler: () => setActiveView('search') },
-      { id: 'view.notifications', title: 'Show Notifications & System Alerts', category: 'View', shortcut: 'Ctrl+Shift+N', handler: handleToggleNotifications },
-      { id: 'view.themes', title: 'Open Liquid Glass Themes', category: 'View', handler: () => setActiveView('themes') },
-      { id: 'view.settings', title: 'Open Preferences', category: 'View', shortcut: 'Ctrl+,', handler: () => setActiveView('settings') },
-      { id: 'theme.cupertino', title: 'Theme: Cupertino Midnight Glass', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cupertino-midnight') },
-      { id: 'theme.obsidian', title: 'Theme: Liquid Obsidian', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.liquid-obsidian') },
-      { id: 'theme.amber', title: 'Theme: Frosted Amber Glow', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.frosted-amber') },
-      { id: 'theme.cyberpunk', title: 'Theme: Cyberpunk 2077 Neon', category: 'Themes', handler: () => handleSelectTheme('indoctrinated.theme.cyberpunk-neon') },
-      { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', handler: refreshGitStatus },
-      { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', handler: handleToggleAi },
-      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', handler: () => setIsAiPanelOpen(true) },
-      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', handler: () => setIsAiPanelOpen(true) },
-      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', handler: () => setIsAiPanelOpen(true) },
-      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', handler: () => setIsAiPanelOpen(true) },
-      { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', handler: () => setIsLicenseOpen(true) },
-      { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', handler: () => setIsAboutOpen(true) },
+      // File Operations
+      { id: 'file.new', title: 'New Untitled File', category: 'File', shortcut: 'Ctrl+N', description: 'Create a new buffer', handler: handleNewFile },
+      { id: 'file.open', title: 'Open File...', category: 'File', shortcut: 'Ctrl+O', description: 'Open local file from disk', handler: handleOpenFileNative },
+      { id: 'file.openFolder', title: 'Open Workspace Folder...', category: 'File', shortcut: 'Ctrl+K Ctrl+O', description: 'Open folder tree in workspace', handler: handleOpenFolderNative },
+      { id: 'file.save', title: 'Save File', category: 'File', shortcut: 'Ctrl+S', description: 'Save current active document', handler: handleSaveFile },
+      { id: 'file.saveAs', title: 'Save File As...', category: 'File', shortcut: 'Ctrl+Shift+S', description: 'Save active document under a new name', handler: handleSaveFileAs },
+      { id: 'file.close', title: 'Close Current Tab', category: 'File', shortcut: 'Ctrl+W', description: 'Close active editor buffer', handler: () => handleCloseTab(activeTabId) },
+      
+      // Navigation & Search
+      { id: 'view.commandPalette', title: 'Command Palette: Show All Commands', category: 'View', shortcut: 'Ctrl+Shift+P', description: 'Open action launcher', handler: () => openPalette('>') },
+      { id: 'view.quickOpen', title: 'Quick Open: Go to File...', category: 'View', shortcut: 'Ctrl+P', description: 'Quick open file by filename', handler: () => openPalette('') },
+      { id: 'edit.gotoLine', title: 'Go to Line / Column...', category: 'Editor', shortcut: 'Ctrl+G', description: 'Navigate directly to line number', handler: () => openPalette(':') },
+      { id: 'edit.symbols', title: 'Go to Symbol in Active Buffer...', category: 'Editor', shortcut: 'Ctrl+Shift+O', description: 'Outline symbols in file (@)', handler: () => openPalette('@') },
+      { id: 'edit.workspaceSymbols', title: 'Go to Symbol in Workspace...', category: 'Editor', shortcut: 'Ctrl+T', description: 'Search symbols and features across project (#)', handler: () => openPalette('#') },
+
+      // Editing Actions
+      { id: 'edit.format', title: 'Format Document', category: 'Editor', shortcut: 'Shift+Alt+F', description: 'Auto-format active code buffer', handler: () => editorHostRef.current?.formatDocument() },
+      { id: 'edit.find', title: 'Find in File', category: 'Editor', shortcut: 'Ctrl+F', description: 'Find text occurrences in active document', handler: () => editorHostRef.current?.triggerAction('actions.find') },
+      { id: 'edit.replace', title: 'Replace in File', category: 'Editor', shortcut: 'Ctrl+H', description: 'Find and replace text in active document', handler: () => editorHostRef.current?.triggerAction('editor.action.startFindReplaceAction') },
+      { id: 'edit.commentLine', title: 'Toggle Line Comment', category: 'Editor', shortcut: 'Ctrl+/', description: 'Add/remove line comments on active selection', handler: () => editorHostRef.current?.triggerAction('editor.action.commentLine') },
+      { id: 'edit.duplicateLine', title: 'Duplicate Line Down', category: 'Editor', shortcut: 'Shift+Alt+Down', description: 'Duplicate cursor line downwards', handler: () => editorHostRef.current?.triggerAction('editor.action.copyLinesDownAction') },
+      { id: 'edit.deleteLine', title: 'Delete Line', category: 'Editor', shortcut: 'Ctrl+Shift+K', description: 'Delete current line immediately', handler: () => editorHostRef.current?.triggerAction('editor.action.deleteLines') },
+      { id: 'edit.uppercase', title: 'Transform: Convert to UPPERCASE', category: 'Editor', description: 'Capitalize selected text or entire buffer', handler: () => editorHostRef.current?.transformSelection('uppercase') },
+      { id: 'edit.lowercase', title: 'Transform: Convert to lowercase', category: 'Editor', description: 'Lower-case selected text or entire buffer', handler: () => editorHostRef.current?.transformSelection('lowercase') },
+      { id: 'edit.titlecase', title: 'Transform: Convert to Title Case', category: 'Editor', description: 'Capitalize each word in selection', handler: () => editorHostRef.current?.transformSelection('titlecase') },
+      { id: 'edit.trim', title: 'Transform: Trim Trailing Whitespace', category: 'Editor', description: 'Clean up trailing spaces on all lines', handler: () => editorHostRef.current?.transformSelection('trim') },
+      { id: 'edit.sort', title: 'Transform: Sort Lines Alphabetically', category: 'Editor', description: 'Sort lines in alphabetical order', handler: () => editorHostRef.current?.transformSelection('sort') },
+
+      // View & Layout
+      { id: 'view.toggleSidebar', title: 'Toggle Primary Sidebar', category: 'View', shortcut: 'Ctrl+B', description: 'Show/hide primary activity sidebar', handler: handleToggleSidebar },
+      { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', description: 'Reveal workspace directory navigator', handler: () => setActiveView('files') },
+      { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', description: 'Open Git visual commit tree', handler: () => setActiveView('git') },
+      { id: 'view.search', title: 'Search in Workspace', category: 'View', shortcut: 'Ctrl+Shift+F', description: 'Global workspace pattern search', handler: () => setActiveView('search') },
+      { id: 'view.notifications', title: 'Show Notifications & System Alerts', category: 'View', shortcut: 'Ctrl+Shift+N', description: 'Open notification drawer', handler: handleToggleNotifications },
+      { id: 'view.wordWrap', title: 'Toggle Word Wrap', category: 'View', shortcut: 'Alt+Z', description: 'Wrap code lines to editor viewport', handler: () => editorHostRef.current?.triggerAction('editor.action.toggleWordWrap') },
+      { id: 'view.foldAll', title: 'Fold All Code Blocks', category: 'View', description: 'Collapse all functions and classes', handler: () => editorHostRef.current?.triggerAction('editor.foldAll') },
+      { id: 'view.unfoldAll', title: 'Unfold All Code Blocks', category: 'View', description: 'Expand all functions and classes', handler: () => editorHostRef.current?.triggerAction('editor.unfoldAll') },
+      { id: 'view.themes', title: 'Open Liquid Glass Themes Drawer', category: 'View', description: 'Browse and switch themes', handler: () => setActiveView('themes') },
+      { id: 'view.settings', title: 'Open Preferences / Settings', category: 'Preferences', shortcut: 'Ctrl+,', description: 'Configure editor options', handler: () => setActiveView('settings') },
+
+      // All 10 Dynamic Themes
+      ...themeCommands,
+
+      // Git & Toolchain
+      { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
+      
+      // AI Multi-Model Assistant
+      { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', description: 'Open AI chat and refactor dock', handler: handleToggleAi },
+      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', description: 'Scan active buffer for vulnerabilities', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: () => setIsAiPanelOpen(true) },
+
+      // Help & Shortcuts
+      { id: 'help.shortcuts', title: 'Help: Keyboard Shortcuts Reference', category: 'Help', shortcut: 'Ctrl+K Ctrl+S', description: 'Show all keyboard shortcuts', handler: () => setIsShortcutsOpen(true) },
+      { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
+      { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, refreshGitStatus, handleToggleAi])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, refreshGitStatus, handleToggleAi, handleSelectTheme, openPalette])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -604,6 +648,9 @@ export const App: React.FC = () => {
     onShowSearch: () => setActiveView((prev) => (prev === 'search' ? null : 'search')),
     onToggleAi: handleToggleAi,
     onToggleNotifications: handleToggleNotifications,
+    onOpenShortcuts: () => setIsShortcutsOpen(true),
+    onGoToLine: () => openPalette(':'),
+    onSymbols: () => openPalette('@'),
   })
 
   const handleEditorChange = (value: string | undefined) => {
@@ -632,9 +679,12 @@ export const App: React.FC = () => {
         workspaceFiles={workspaceFiles}
         tabs={tabs}
         onOpenFile={(f) => handleOpenFileItem({ name: f.name, path: f.path, isDirectory: false })}
+        symbols={editorHostRef.current?.getOutlineSymbols() || []}
+        onGoToLine={(line, col) => editorHostRef.current?.goToLine(line, col)}
+        activeTabName={activeTab?.name}
       />
 
-      {/* About & License Modals */}
+      {/* About & License & Shortcuts Modals */}
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
@@ -644,6 +694,11 @@ export const App: React.FC = () => {
         isOpen={isLicenseOpen}
         onClose={() => setIsLicenseOpen(false)}
         version="1.3.0"
+      />
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+        onExecuteCommand={(id) => commandRegistry.execute(id)}
       />
 
       {/* Notification Center Popover */}

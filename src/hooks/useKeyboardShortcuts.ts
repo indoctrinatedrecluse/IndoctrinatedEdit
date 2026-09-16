@@ -16,6 +16,9 @@ interface ShortcutHandlers {
   onShowSearch?: () => void
   onToggleAi?: () => void
   onToggleNotifications?: () => void
+  onOpenShortcuts?: () => void
+  onGoToLine?: () => void
+  onSymbols?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -28,13 +31,19 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       const key = e.key.toLowerCase()
       const now = Date.now()
 
-      // Handle chord sequences (e.g. Ctrl+K followed by Ctrl+O for Open Folder)
+      // Handle chord sequences (e.g. Ctrl+K followed by Ctrl+O or Ctrl+S)
       if (chordRef.current && now - chordRef.current.time < 2000) {
         if (chordRef.current.key === 'k') {
           if (key === 'o') {
             e.preventDefault()
             chordRef.current = null
             handlers.onOpenFolder?.()
+            return
+          }
+          if (key === 's') {
+            e.preventDefault()
+            chordRef.current = null
+            handlers.onOpenShortcuts?.()
             return
           }
         }
@@ -54,6 +63,20 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (key === 'k' && !e.shiftKey && !e.altKey) {
         e.preventDefault()
         chordRef.current = { key: 'k', time: now }
+        return
+      }
+
+      // Ctrl+G -> Go to Line (Palette with :)
+      if (key === 'g' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onGoToLine?.()
+        return
+      }
+
+      // Ctrl+Shift+O -> Go to Symbol (Palette with @)
+      if (e.shiftKey && key === 'o') {
+        e.preventDefault()
+        handlers.onSymbols?.()
         return
       }
 
