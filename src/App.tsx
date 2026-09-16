@@ -209,54 +209,14 @@ featuring an authentic iOS Liquid Glass aesthetic, Monaco core, and microservice
 `,
 }
 
-function getLanguageFromFilename(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() || ''
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-      return 'typescript'
-    case 'js':
-    case 'jsx':
-      return 'javascript'
-    case 'json':
-      return 'json'
-    case 'html':
-      return 'html'
-    case 'css':
-      return 'css'
-    case 'textile':
-      return 'textile'
-    case 'md':
-    case 'markdown':
-    case 'mdown':
-    case 'mkd':
-      return 'markdown'
-    case 'rst':
-    case 'rest':
-      return 'rst'
-    case 'adoc':
-    case 'asciidoc':
-      return 'adoc'
-    case 'log':
-      return 'log'
-    case 'py':
-      return 'python'
-    case 'rs':
-      return 'rust'
-    case 'go':
-      return 'go'
-    case 'cs':
-      return 'csharp'
-    case 'cpp':
-    case 'c':
-    case 'h':
-      return 'cpp'
-    case 'csv':
-    case 'tsv':
-    case 'txt':
-    case 'text':
-    default:
-      return 'plaintext'
+import { extensionRegistry } from './extensions/extensionRegistry'
+
+function getLanguageFromFilename(filename: string, content?: string): string {
+  try {
+    return extensionRegistry.resolveLanguageForFilename(filename, content)
+  } catch (err) {
+    console.warn('Failed to resolve language from filename:', err)
+    return 'plaintext'
   }
 }
 

@@ -24,6 +24,7 @@ import { systemsGamingExtensionManifest, registerSystemsGamingExtension } from '
 import { databaseSchemaExtensionManifest, registerDatabaseSchemaExtension } from './databaseSchemaSupport/databaseSchemaExtension'
 import { web3ExtensionManifest, registerWeb3Extension } from './web3Support/web3Extension'
 import { logicFormalExtensionManifest, registerLogicFormalExtension } from './logicFormalSupport/logicFormalExtension'
+import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
 
 class ExtensionRegistry {
@@ -127,10 +128,14 @@ class ExtensionRegistry {
       status: 'Running',
       type: 'Microservice',
     })
+
+    // Index all registered manifests into the conflict arbiter
+    this.reindexConflicts()
   }
 
   public register(manifest: ExtensionManifest) {
     this.extensions.set(manifest.id, manifest)
+    this.reindexConflicts()
   }
 
   public get(id: string): ExtensionManifest | undefined {
@@ -139,6 +144,15 @@ class ExtensionRegistry {
 
   public getAll(): ExtensionManifest[] {
     return Array.from(this.extensions.values())
+  }
+
+  public reindexConflicts(): void {
+    conflictResolutionService.indexManifests(this.getAll())
+  }
+
+  public resolveLanguageForFilename(filename: string, content?: string): string {
+    const res = conflictResolutionService.resolveLanguageForFilename(filename, content)
+    return res.languageId
   }
 
   public initializeMonacoExtensions(monacoInstance: typeof monaco) {

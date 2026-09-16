@@ -128,6 +128,42 @@ export class NotificationService {
   }
 
   /**
+   * Helper to format and display human-readable warning notifications.
+   */
+  public notifyWarning(
+    title: string,
+    message: string,
+    source: string = 'Runtime Engine',
+    actions?: NotificationAction[]
+  ): string {
+    return this.addNotification({
+      title,
+      message,
+      type: 'warning',
+      source,
+      actions,
+    })
+  }
+
+  /**
+   * Helper to format and display informational notifications.
+   */
+  public notifyInfo(
+    title: string,
+    message: string,
+    source: string = 'Runtime Engine',
+    actions?: NotificationAction[]
+  ): string {
+    return this.addNotification({
+      title,
+      message,
+      type: 'info',
+      source,
+      actions,
+    })
+  }
+
+  /**
    * Helper to format and display human-readable major errors (e.g. AI Agent crashes, network failures).
    */
   public notifyError(
