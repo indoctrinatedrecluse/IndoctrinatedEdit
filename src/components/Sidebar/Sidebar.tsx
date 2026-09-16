@@ -13,6 +13,9 @@ import {
   Sparkles,
   Zap,
   Terminal,
+  Layers,
+  Smartphone,
+  Gem,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
@@ -66,6 +69,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return <Zap size={16} />
       case 'Terminal':
         return <Terminal size={16} />
+      case 'Layers':
+        return <Layers size={16} />
+      case 'Smartphone':
+        return <Smartphone size={16} />
+      case 'Gem':
+        return <Gem size={16} />
       case 'Cpu':
       default:
         return <Cpu size={16} />

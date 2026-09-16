@@ -1,6 +1,6 @@
 import * as monaco from 'monaco-editor'
 
-export type ExtensionCategory = 'Languages' | 'Themes' | 'Snippets' | 'Linters' | 'AI' | 'Tools'
+export type ExtensionCategory = 'Languages' | 'Frameworks' | 'Themes' | 'Snippets' | 'Linters' | 'AI' | 'Tools'
 export type ExtensionStatus = 'Active' | 'Installed' | 'Disabled' | 'Running'
 
 export interface SnippetDefinition {

@@ -7,6 +7,11 @@ import { cppExtensionManifest, registerCppExtension } from './cppSupport/cppExte
 import { pythonExtensionManifest, registerPythonExtension } from './pythonSupport/pythonExtension'
 import { javaExtensionManifest, registerJavaExtension } from './javaSupport/javaExtension'
 import { dotnetExtensionManifest, registerDotnetExtension } from './dotnetSupport/dotnetExtension'
+import { phpExtensionManifest, registerPhpExtension } from './phpSupport/phpExtension'
+import { angularExtensionManifest, registerAngularExtension } from './angularSupport/angularExtension'
+import { reactExtensionManifest, registerReactExtension } from './reactSupport/reactExtension'
+import { flutterExtensionManifest, registerFlutterExtension } from './flutterSupport/flutterExtension'
+import { rubyExtensionManifest, registerRubyExtension } from './rubySupport/rubyExtension'
 
 class ExtensionRegistry {
   private extensions: Map<string, ExtensionManifest> = new Map()
@@ -33,21 +38,22 @@ class ExtensionRegistry {
     // 7. .NET & C# Enterprise Suite
     this.register(dotnetExtensionManifest)
 
-    // 8. TypeScript & React Engine
-    this.register({
-      id: 'indoctrinated.ext.typescript',
-      name: 'TypeScript & React Engine',
-      version: '1.0.1',
-      description: 'Heavyweight language services, autocompletion, type inference, and syntax support for TSX and JSX.',
-      author: 'indoctrinatedrecluse',
-      category: 'Languages',
-      iconName: 'Code2',
-      status: 'Active',
-      type: 'Built-in',
-      snippetsCount: 32,
-    })
+    // 8. PHP & Laravel Ecosystem Suite
+    this.register(phpExtensionManifest)
 
-    // 9. Liquid Glass Shader Shaper
+    // 9. Angular & TypeScript Enterprise Suite
+    this.register(angularExtensionManifest)
+
+    // 10. React 19 & Next.js Modern Ecosystem
+    this.register(reactExtensionManifest)
+
+    // 11. Flutter & Dart Mobile/Desktop Suite
+    this.register(flutterExtensionManifest)
+
+    // 12. Ruby & Ruby on Rails Suite
+    this.register(rubyExtensionManifest)
+
+    // 13. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -60,12 +66,12 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 10. Unified Diagnostics & Toolchain Bus
+    // 14. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
       version: '1.0.1',
-      description: 'Multi-compiler discovery for Python, Rust, Go, GCC, C#, and Java with real-time error markers.',
+      description: 'Multi-compiler discovery for Python, Rust, Go, GCC, C#, Java, PHP, Ruby, and Flutter with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
       iconName: 'Cpu',
@@ -94,6 +100,11 @@ class ExtensionRegistry {
     registerPythonExtension(monacoInstance)
     registerJavaExtension(monacoInstance)
     registerDotnetExtension(monacoInstance)
+    registerPhpExtension(monacoInstance)
+    registerAngularExtension(monacoInstance)
+    registerReactExtension(monacoInstance)
+    registerFlutterExtension(monacoInstance)
+    registerRubyExtension(monacoInstance)
   }
 }
 
