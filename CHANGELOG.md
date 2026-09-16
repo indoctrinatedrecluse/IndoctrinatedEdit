@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - Roadmap & Next Release TODO
+
+### 📋 Planned Capabilities for Upcoming Release
+
+- [ ] **💻 Integrated Multi-Shell Terminal Subsystem**
+  - Native terminal multiplexer supporting **PowerShell**, **Bash**, **Git Bash**, **Cygwin**, and **Command Prompt**.
+  - Customizable default shell and profile settings managed via JSON configuration file, searchable and editable directly via Command Palette (`> Open Terminal Configuration (JSON)`).
+  - Split terminals, tabs, and integrated Liquid Glass styling.
+
+- [ ] **⚠️ Unified "Problems" Panel & High-Accuracy Linter Integration**
+  - Dedicated "Problems" dockable panel listing real-time errors, warnings, and hints.
+  - Integration with established, high-accuracy linting engines and language servers (e.g., ESLint, Biome/OxC, Ruff, Rust Clippy, GHC/Clang diagnostics) for industry-standard error detection rather than basic regex parsing.
+  - Quick-fix action triggers directly from problem items.
+
+- [ ] **🗄️ Database Schema Viewer & SQL Query Runner Extension**
+  - Visual database schema explorer (tables, columns, foreign keys, indexes, views).
+  - Interactive SQL/NoSQL query runner with tabular result sets and execution statistics.
+  - Modular extension design with drag-and-dock support for the **Right Auxiliary Pane**.
+
+- [ ] **🌐 Feature-Packed In-Editor REST & API Client Extension**
+  - Full-featured HTTP/REST and GraphQL request builder with parameter tables, auth headers, and payload formatting.
+  - Multi-environment variable support and response history with status codes and timing metrics.
+  - Modular extension design with drag-and-dock support for the **Right Auxiliary Pane**.
+
+- [ ] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers**
+  - Gutter breakpoint toggling (conditional breakpoints, logpoints).
+  - Debugging orchestration with step over, step into, step out, call stack inspection, and variable watch expressions for targeted toolchains and compilers (exploring Debug Adapter Protocol / DAP integration).
+
+---
+
 ## [2.0.0] - 2026-09-16
 
 ### 🚀 Major Release — Session Persistence, Multi-Mode Command Palette, Keyboard Shortcuts Modal, Conflict Arbiter & Expanded Ecosystems
