@@ -211,6 +211,26 @@ export const DEFAULT_TOOLCHAINS: ToolchainDefinition[] = [
     downloadUrl: 'https://getfoundry.sh',
     description: 'Ethereum and EVM smart contract compilation and testing framework',
   },
+  {
+    id: 'toolchain.prolog',
+    name: 'SWI-Prolog / Logic Engine',
+    language: 'prolog',
+    binaryNames: ['swipl', 'gprolog', 'prolog'],
+    versionFlag: '--version',
+    versionPattern: 'SWI-Prolog\\s+version\\s+([0-9]+\\.[0-9]+\\.[0-9]+)',
+    downloadUrl: 'https://www.swi-prolog.org',
+    description: 'Comprehensive First-Order Predicate Logic and constraint logic programming system',
+  },
+  {
+    id: 'toolchain.lisp',
+    name: 'Common Lisp & Scheme/Racket',
+    language: 'lisp',
+    binaryNames: ['sbcl', 'clisp', 'racket', 'guile'],
+    versionFlag: '--version',
+    versionPattern: '(?:SBCL|CLISP|Racket|Guile)\\s+([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)',
+    downloadUrl: 'https://www.sbcl.org',
+    description: 'High performance Common Lisp compiler and dynamic symbolic S-expression system',
+  },
 ]
 
 /**

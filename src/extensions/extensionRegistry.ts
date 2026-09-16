@@ -23,6 +23,7 @@ import { beamFunctionalExtensionManifest, registerBeamFunctionalExtension } from
 import { systemsGamingExtensionManifest, registerSystemsGamingExtension } from './systemsGamingSupport/systemsGamingExtension'
 import { databaseSchemaExtensionManifest, registerDatabaseSchemaExtension } from './databaseSchemaSupport/databaseSchemaExtension'
 import { web3ExtensionManifest, registerWeb3Extension } from './web3Support/web3Extension'
+import { logicFormalExtensionManifest, registerLogicFormalExtension } from './logicFormalSupport/logicFormalExtension'
 import { notificationService } from '../services/notificationService'
 
 class ExtensionRegistry {
@@ -98,7 +99,10 @@ class ExtensionRegistry {
     // 23. Web3, Smart Contracts & Zero-Knowledge Suite
     this.register(web3ExtensionManifest)
 
-    // 24. Liquid Glass Shader Shaper
+    // 24. Logic Programming, Lambda Calculus & Formal Methods Suite
+    this.register(logicFormalExtensionManifest)
+
+    // 25. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -111,12 +115,12 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 25. Unified Diagnostics & Toolchain Bus
+    // 26. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
       version: '1.0.1',
-      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, SQL, and Solidity with real-time error markers.',
+      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, SQL, Solidity, and Prolog with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
       iconName: 'Cpu',
@@ -172,6 +176,7 @@ class ExtensionRegistry {
     safeInit('Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
     safeInit('Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
     safeInit('Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
+    safeInit('Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
   }
 }
 

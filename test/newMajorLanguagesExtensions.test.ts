@@ -15,6 +15,14 @@ import { databaseSchemaExtensionManifest } from '../src/extensions/databaseSchem
 import { SQL_SNIPPETS, GRAPHQL_SNIPPETS, PRISMA_SNIPPETS } from '../src/extensions/databaseSchemaSupport/databaseSchemaSnippets'
 import { web3ExtensionManifest } from '../src/extensions/web3Support/web3Extension'
 import { SOLIDITY_SNIPPETS, MOVE_SNIPPETS, CAIRO_SNIPPETS, VYPER_SNIPPETS } from '../src/extensions/web3Support/web3Snippets'
+import { logicFormalExtensionManifest } from '../src/extensions/logicFormalSupport/logicFormalExtension'
+import {
+  PROLOG_FOPL_SNIPPETS,
+  COMMON_LISP_SNIPPETS,
+  SCHEME_RACKET_SNIPPETS,
+  LAMBDA_CALCULUS_SNIPPETS,
+  FORMAL_METHODS_SNIPPETS,
+} from '../src/extensions/logicFormalSupport/logicFormalSnippets'
 import { extensionRegistry } from '../src/extensions/extensionRegistry'
 import { toolchainService } from '../src/services/toolchainService'
 import { notificationService } from '../src/services/notificationService'
@@ -219,7 +227,42 @@ describe('Web3, Smart Contracts & Zero-Knowledge Suite', () => {
   })
 })
 
-describe('Monaco Extension Initializer for all 8 new suites', () => {
+describe('Logic Programming, Lambda Calculus & Formal Methods Suite', () => {
+  it('should have valid Logic & Formal Methods manifest registered in ExtensionRegistry', () => {
+    expect(logicFormalExtensionManifest.id).toBe('indoctrinated.ext.logic-formal-methods')
+    const registered = extensionRegistry.get('indoctrinated.ext.logic-formal-methods')
+    expect(registered).toBeDefined()
+    const langIds = registered?.languages?.map((l) => l.id)
+    expect(langIds).toContain('prolog')
+    expect(langIds).toContain('lisp')
+    expect(langIds).toContain('scheme')
+    expect(langIds).toContain('lambda-calculus')
+    expect(langIds).toContain('lean')
+    expect(langIds).toContain('coq')
+    expect(langIds).toContain('tla')
+  })
+
+  it('should contain Prolog/FOPL, Common Lisp, Scheme/Racket, Pure Lambda, and Formal Proof snippets', () => {
+    expect(PROLOG_FOPL_SNIPPETS.length).toBeGreaterThan(0)
+    expect(COMMON_LISP_SNIPPETS.length).toBeGreaterThan(0)
+    expect(SCHEME_RACKET_SNIPPETS.length).toBeGreaterThan(0)
+    expect(LAMBDA_CALCULUS_SNIPPETS.length).toBeGreaterThan(0)
+    expect(FORMAL_METHODS_SNIPPETS.length).toBeGreaterThan(0)
+    expect(PROLOG_FOPL_SNIPPETS.map((s) => s.label)).toContain('prolog-kb-rules')
+    expect(LAMBDA_CALCULUS_SNIPPETS.map((s) => s.label)).toContain('lambda-church-numerals')
+    expect(LAMBDA_CALCULUS_SNIPPETS.map((s) => s.label)).toContain('lambda-y-combinator')
+    expect(LAMBDA_CALCULUS_SNIPPETS.map((s) => s.label)).toContain('lambda-ski-combinators')
+  })
+
+  it('should check toolchain.prolog and toolchain.lisp', async () => {
+    const prologInfo = await toolchainService.detectOne('toolchain.prolog')
+    expect(prologInfo).toBeDefined()
+    const lispInfo = await toolchainService.detectOne('toolchain.lisp')
+    expect(lispInfo).toBeDefined()
+  })
+})
+
+describe('Monaco Extension Initializer for all new suites', () => {
   it('should initialize without throwing errors when registered with Monaco', () => {
     const registeredLanguages: string[] = []
     const fakeMonaco = {
@@ -250,5 +293,12 @@ describe('Monaco Extension Initializer for all 8 new suites', () => {
     expect(registeredLanguages).toContain('move')
     expect(registeredLanguages).toContain('cairo')
     expect(registeredLanguages).toContain('vyper')
+    expect(registeredLanguages).toContain('prolog')
+    expect(registeredLanguages).toContain('lisp')
+    expect(registeredLanguages).toContain('scheme')
+    expect(registeredLanguages).toContain('lambda-calculus')
+    expect(registeredLanguages).toContain('lean')
+    expect(registeredLanguages).toContain('coq')
+    expect(registeredLanguages).toContain('tla')
   })
 })
