@@ -49,6 +49,44 @@ export interface ElectronToolchainAPI {
   getDefaultDefinitions: () => Promise<ToolchainDefinition[]>
 }
 
+export interface ShellProfile {
+  id: string
+  name: string
+  path: string
+  args?: string[]
+  icon: 'powershell' | 'git' | 'cygwin' | 'terminal' | 'cmd' | 'wsl'
+  isDefault?: boolean
+}
+
+export interface TerminalConfig {
+  defaultShellId?: string
+  fontSize: number
+  fontFamily: string
+  cursorStyle: 'block' | 'underline' | 'line'
+  cursorBlink: boolean
+  scrollback: number
+  profiles: ShellProfile[]
+}
+
+export interface TerminalSessionInfo {
+  id: string
+  shellId: string
+  shellName: string
+  pid?: number
+  cwd: string
+}
+
+export interface ElectronTerminalAPI {
+  detectShells: () => Promise<ShellProfile[]>
+  getConfig: () => Promise<TerminalConfig>
+  saveConfig: (config: Partial<TerminalConfig>) => Promise<boolean>
+  create: (options: { shellId?: string; cwd?: string }) => Promise<TerminalSessionInfo>
+  write: (id: string, data: string) => Promise<boolean>
+  kill: (id: string) => Promise<boolean>
+  onData: (callback: (payload: { id: string; data: string }) => void) => () => void
+  onExit: (callback: (payload: { id: string; code: number | null; signal: string | null }) => void) => () => void
+}
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<boolean>
@@ -74,6 +112,9 @@ export interface ElectronAPI {
 
   // Toolchain & SDK auto-detection operations
   toolchain: ElectronToolchainAPI
+
+  // Terminal subsystem operations
+  terminal: ElectronTerminalAPI
 
   // Lifecycle notification
   notifyReady: () => Promise<void>
@@ -128,6 +169,29 @@ const api: ElectronAPI = {
     detectOne: (definition) => ipcRenderer.invoke('toolchain:detectOne', definition),
     detectAll: (definitions) => ipcRenderer.invoke('toolchain:detectAll', definitions),
     getDefaultDefinitions: () => ipcRenderer.invoke('toolchain:getDefaultDefinitions'),
+  },
+
+  terminal: {
+    detectShells: () => ipcRenderer.invoke('terminal:detectShells'),
+    getConfig: () => ipcRenderer.invoke('terminal:getConfig'),
+    saveConfig: (config) => ipcRenderer.invoke('terminal:saveConfig', config),
+    create: (options) => ipcRenderer.invoke('terminal:create', options),
+    write: (id, data) => ipcRenderer.invoke('terminal:write', { id, data }),
+    kill: (id) => ipcRenderer.invoke('terminal:kill', id),
+    onData: (callback) => {
+      const handler = (_: unknown, payload: { id: string; data: string }) => callback(payload)
+      ipcRenderer.on('terminal:data', handler)
+      return () => {
+        ipcRenderer.removeListener('terminal:data', handler)
+      }
+    },
+    onExit: (callback) => {
+      const handler = (_: unknown, payload: { id: string; code: number | null; signal: string | null }) => callback(payload)
+      ipcRenderer.on('terminal:exit', handler)
+      return () => {
+        ipcRenderer.removeListener('terminal:exit', handler)
+      }
+    },
   },
 
   notifyReady: () => ipcRenderer.invoke('app:ready'),

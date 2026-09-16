@@ -41,6 +41,9 @@ export interface MenuActionHandlers {
   onOpenShortcuts?: () => void
   onOpenLicense?: () => void
   onOpenAbout?: () => void
+  onToggleTerminal?: () => void
+  onOpenTerminalConfig?: () => void
+  onOpenProblems?: () => void
 }
 
 interface MenuItem {
@@ -175,6 +178,20 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
         },
         { id: 'sep5', label: '', isSeparator: true },
         {
+          id: 'view.terminal',
+          label: 'Integrated Terminal',
+          shortcut: 'Ctrl+`',
+          icon: <Terminal size={14} />,
+          onClick: handlers.onToggleTerminal,
+        },
+        {
+          id: 'view.problems',
+          label: 'Problems Panel',
+          icon: <Info size={14} />,
+          onClick: handlers.onOpenProblems,
+        },
+        { id: 'sep5b', label: '', isSeparator: true },
+        {
           id: 'view.toggleSidebar',
           label: 'Toggle Primary Sidebar',
           shortcut: 'Ctrl+B',
@@ -195,6 +212,25 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+,',
           icon: <Settings size={14} />,
           onClick: handlers.onOpenSettings,
+        },
+      ],
+    },
+    {
+      id: 'terminal',
+      label: 'Terminal',
+      items: [
+        {
+          id: 'terminal.new',
+          label: 'New Terminal',
+          shortcut: 'Ctrl+`',
+          icon: <Terminal size={14} />,
+          onClick: handlers.onToggleTerminal,
+        },
+        {
+          id: 'terminal.config',
+          label: 'Configure Terminal (JSON)...',
+          icon: <Settings size={14} />,
+          onClick: handlers.onOpenTerminalConfig,
         },
       ],
     },

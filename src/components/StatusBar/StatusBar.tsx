@@ -11,6 +11,8 @@ interface StatusBarProps {
   gitBranch?: string
   onThemeClick?: () => void
   onGitClick?: () => void
+  onTerminalClick?: () => void
+  onProblemsClick?: () => void
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -23,6 +25,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   gitBranch = 'master',
   onThemeClick,
   onGitClick,
+  onTerminalClick,
+  onProblemsClick,
 }) => {
   return (
     <footer className="status-bar">
@@ -37,12 +41,25 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span>{gitBranch}</span>
         </button>
 
-        <div className="status-chip diagnostics-chip" title="No syntax errors found">
+        <button
+          className="status-chip diagnostics-chip glass-interactive"
+          onClick={onProblemsClick}
+          title="Problems Panel (0 Errors, 0 Warnings)"
+        >
           <Check size={11} className="check-icon" />
           <span className="diag-count">0</span>
           <AlertCircle size={11} className="warning-icon" />
           <span className="diag-count">0</span>
-        </div>
+        </button>
+
+        <button
+          className="status-chip terminal-toggle-chip glass-interactive"
+          onClick={onTerminalClick}
+          title="Toggle Integrated Terminal (Ctrl+`)"
+        >
+          <Terminal size={11} className="term-icon" />
+          <span>Terminal</span>
+        </button>
 
         <div className="status-chip microservice-chip" title="Extension Microservices Running">
           <span className="pulsing-orb" />

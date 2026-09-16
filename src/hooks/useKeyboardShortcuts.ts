@@ -19,6 +19,8 @@ interface ShortcutHandlers {
   onOpenShortcuts?: () => void
   onGoToLine?: () => void
   onSymbols?: () => void
+  onToggleTerminal?: () => void
+  onOpenProblems?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -168,6 +170,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (key === 'p' && !e.shiftKey && !e.altKey) {
         e.preventDefault()
         handlers.onQuickOpen?.()
+        return
+      }
+
+      // Ctrl+` or Ctrl+~ -> Toggle Integrated Terminal
+      if ((key === '`' || key === '~') && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onToggleTerminal?.()
         return
       }
 

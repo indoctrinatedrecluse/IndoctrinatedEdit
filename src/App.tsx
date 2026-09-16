@@ -11,6 +11,8 @@ import { AiChatPanel } from './components/AiChat/AiChatPanel'
 import { AboutModal } from './components/Modals/AboutModal'
 import { LicenseModal } from './components/Modals/LicenseModal'
 import { ShortcutsModal } from './components/Modals/ShortcutsModal'
+import { TerminalConfigModal } from './components/Modals/TerminalConfigModal'
+import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
 import { notificationService, NotificationItem } from './services/notificationService'
 import { commandRegistry } from './services/commandRegistry'
@@ -513,6 +515,9 @@ export const App: React.FC = () => {
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false)
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false)
+  const [isBottomPanelOpen, setIsBottomPanelOpen] = useState<boolean>(false)
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal')
+  const [isTerminalConfigOpen, setIsTerminalConfigOpen] = useState<boolean>(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => notificationService.getNotifications())
 
   useEffect(() => {
@@ -530,6 +535,29 @@ export const App: React.FC = () => {
   const handleToggleSidebar = () => {
     setActiveView((prev) => (prev ? null : 'files'))
   }
+
+  const handleToggleTerminal = useCallback(() => {
+    setIsBottomPanelOpen((prev) => {
+      if (!prev) {
+        setBottomPanelTab('terminal')
+        return true
+      }
+      if (bottomPanelTab !== 'terminal') {
+        setBottomPanelTab('terminal')
+        return true
+      }
+      return false
+    })
+  }, [bottomPanelTab])
+
+  const handleOpenProblems = useCallback(() => {
+    setIsBottomPanelOpen(true)
+    setBottomPanelTab('problems')
+  }, [])
+
+  const handleOpenTerminalConfig = useCallback(() => {
+    setIsTerminalConfigOpen(true)
+  }, [])
 
   const [isPaletteOpen, setIsPaletteOpen] = useState<boolean>(false)
   const [paletteInitialQuery, setPaletteInitialQuery] = useState<string>('>')
@@ -559,6 +587,9 @@ export const App: React.FC = () => {
       onOpenSettings: () => setActiveView('settings'),
       onToggleNotifications: handleToggleNotifications,
       onOpenShortcuts: () => setIsShortcutsOpen(true),
+      onToggleTerminal: handleToggleTerminal,
+      onOpenTerminalConfig: handleOpenTerminalConfig,
+      onOpenProblems: handleOpenProblems,
       onWelcomeGuide: () => {
         const welcomeTab = tabs.find((t) => t.id === 'welcome.ts')
         if (welcomeTab) {
@@ -582,6 +613,9 @@ export const App: React.FC = () => {
       handleToggleAi,
       handleToggleSidebar,
       handleToggleNotifications,
+      handleToggleTerminal,
+      handleOpenTerminalConfig,
+      handleOpenProblems,
       tabs,
     ]
   )
@@ -638,6 +672,11 @@ export const App: React.FC = () => {
       { id: 'view.themes', title: 'Open Liquid Glass Themes Drawer', category: 'View', description: 'Browse and switch themes', handler: () => setActiveView('themes') },
       { id: 'view.settings', title: 'Open Preferences / Settings', category: 'Preferences', shortcut: 'Ctrl+,', description: 'Configure editor options', handler: () => setActiveView('settings') },
 
+      // Terminal & Diagnostics Subsystems
+      { id: 'terminal.toggle', title: 'Terminal: Toggle Integrated Terminal', category: 'Terminal', shortcut: 'Ctrl+`', description: 'Open/close multi-shell terminal emulator', handler: handleToggleTerminal },
+      { id: 'terminal.config', title: 'Preferences: Open Terminal Configuration (JSON)', category: 'Preferences', description: 'Edit shell profiles, fonts, and defaults in terminal.json', handler: handleOpenTerminalConfig },
+      { id: 'view.problems', title: 'View: Toggle Problems Panel', category: 'View', description: 'Open diagnostic error and warning inspector', handler: handleOpenProblems },
+
       // All 10 Dynamic Themes
       ...themeCommands,
 
@@ -656,7 +695,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, refreshGitStatus, handleToggleAi, handleSelectTheme, openPalette])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleSelectTheme, openPalette])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -678,6 +717,8 @@ export const App: React.FC = () => {
     onOpenShortcuts: () => setIsShortcutsOpen(true),
     onGoToLine: () => openPalette(':'),
     onSymbols: () => openPalette('@'),
+    onToggleTerminal: handleToggleTerminal,
+    onOpenProblems: handleOpenProblems,
   })
 
   const handleEditorChange = (value: string | undefined) => {
@@ -715,17 +756,21 @@ export const App: React.FC = () => {
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
-        version="1.3.0"
+        version="2.0.0"
       />
       <LicenseModal
         isOpen={isLicenseOpen}
         onClose={() => setIsLicenseOpen(false)}
-        version="1.3.0"
+        version="2.0.0"
       />
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
         onExecuteCommand={(id) => commandRegistry.execute(id)}
+      />
+      <TerminalConfigModal
+        isOpen={isTerminalConfigOpen}
+        onClose={() => setIsTerminalConfigOpen(false)}
       />
 
       {/* Notification Center Popover */}
@@ -820,6 +865,15 @@ export const App: React.FC = () => {
               <p>No open tabs. Press <kbd>Ctrl+N</kbd> for a new file or <kbd>Ctrl+O</kbd> to open one.</p>
             </div>
           )}
+
+          {/* Bottom Integrated Panel (Terminal / Problems / Output) */}
+          <BottomPanel
+            isOpen={isBottomPanelOpen}
+            onClose={() => setIsBottomPanelOpen(false)}
+            onOpenTerminalConfig={handleOpenTerminalConfig}
+            workspacePath={workspacePath}
+            defaultTab={bottomPanelTab}
+          />
         </main>
 
         {/* Right AI Dock Resizer Divider Sash */}
@@ -865,6 +919,8 @@ export const App: React.FC = () => {
         gitBranch={gitBranch}
         onThemeClick={() => setActiveView('themes')}
         onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
+        onTerminalClick={handleToggleTerminal}
+        onProblemsClick={handleOpenProblems}
       />
 
       <style>{`
