@@ -17,6 +17,7 @@ import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { toolchainService } from './services/toolchainService'
+import { sessionService } from './services/sessionService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -318,10 +319,26 @@ export const App: React.FC = () => {
     }, 250)
   }, [])
 
-  // Mount initialization
+  // Mount initialization & Session Auto-Restore
   useEffect(() => {
     // Non-blocking background toolchain detection (idle time)
     toolchainService.scheduleBackgroundDetection(1500)
+
+    // Asynchronously restore previous workspace session (last opened project and files)
+    sessionService.restoreSession(demoFiles, initialTabs, initialFileContents, getLanguageFromFilename)
+      .then((restored) => {
+        if (restored.workspacePath) {
+          setWorkspacePath(restored.workspacePath)
+        }
+        setWorkspaceName(restored.workspaceName)
+        setWorkspaceFiles(restored.workspaceFiles)
+        setTabs(restored.tabs)
+        setActiveTabId(restored.activeTabId)
+        setFileContents(restored.fileContents)
+      })
+      .catch((err) => {
+        console.warn('[App] Session restoration failed, fallback to defaults:', err)
+      })
 
     // Safety fallback only in case no editor tab is opened within 8 seconds
     const fallbackTimer = setTimeout(() => {
@@ -329,6 +346,16 @@ export const App: React.FC = () => {
     }, 8000)
     return () => clearTimeout(fallbackTimer)
   }, [])
+
+  // Auto-persist workspace session on state change
+  useEffect(() => {
+    sessionService.saveSession({
+      workspacePath,
+      workspaceName,
+      tabs,
+      activeTabId,
+    })
+  }, [workspacePath, workspaceName, tabs, activeTabId])
 
   // Refresh Git Status for status bar and activity bar badge
   const refreshGitStatus = useCallback(async () => {

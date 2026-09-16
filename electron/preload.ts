@@ -60,6 +60,8 @@ export interface ElectronAPI {
   // Native file system operations
   openFileDialog: () => Promise<FileOpenResult | null>
   openFolderDialog: () => Promise<FolderOpenResult | null>
+  readFolder: (folderPath: string) => Promise<FolderOpenResult | null>
+  checkExists: (targetPath: string) => Promise<boolean>
   readFile: (filePath: string) => Promise<string>
   saveFile: (filePath: string, content: string) => Promise<boolean>
   saveFileAs: (defaultName: string, content: string) => Promise<{ path: string; name: string } | null>
@@ -93,6 +95,8 @@ const api: ElectronAPI = {
 
   openFileDialog: () => ipcRenderer.invoke('dialog:openFile'),
   openFolderDialog: () => ipcRenderer.invoke('dialog:openFolder'),
+  readFolder: (folderPath: string) => ipcRenderer.invoke('fs:readFolder', folderPath),
+  checkExists: (targetPath: string) => ipcRenderer.invoke('fs:checkExists', targetPath),
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
   saveFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:saveFile', filePath, content),
   saveFileAs: (defaultName: string, content: string) => ipcRenderer.invoke('dialog:saveFileAs', defaultName, content),

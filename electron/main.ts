@@ -242,6 +242,37 @@ ipcMain.handle('dialog:openFolder', async () => {
   }
 })
 
+ipcMain.handle('fs:readFolder', async (_, folderPath: string) => {
+  try {
+    const stat = await fs.stat(folderPath)
+    if (!stat.isDirectory()) return null
+
+    const folderName = path.basename(folderPath)
+    const entries = await fs.readdir(folderPath, { withFileTypes: true })
+    const files = entries
+      .filter((e) => !e.name.startsWith('.git') && e.name !== 'node_modules' && e.name !== 'dist' && e.name !== 'dist-electron')
+      .map((e) => ({
+        name: e.name,
+        path: path.join(folderPath, e.name),
+        isDirectory: e.isDirectory(),
+      }))
+
+    return { folderPath, folderName, files }
+  } catch (err) {
+    console.error(`Failed to read folder at "${folderPath}":`, err)
+    return null
+  }
+})
+
+ipcMain.handle('fs:checkExists', async (_, targetPath: string) => {
+  try {
+    await fs.access(targetPath)
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('fs:readFile', async (_, filePath: string) => {
   return await fs.readFile(filePath, 'utf-8')
 })

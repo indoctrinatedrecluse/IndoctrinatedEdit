@@ -30,6 +30,12 @@ export class NotificationService {
   }
 
   constructor() {
+    this.addNotification = this.addNotification.bind(this)
+    this.notifyWarning = this.notifyWarning.bind(this)
+    this.notifyInfo = this.notifyInfo.bind(this)
+    this.notifyError = this.notifyError.bind(this)
+    this.notifyMissingToolchain = this.notifyMissingToolchain.bind(this)
+
     // Initial welcome notification
     this.addNotification({
       title: 'IndoctrinatedEdit Initialized',

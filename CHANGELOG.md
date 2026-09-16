@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-09-16
+
+### 🚀 Major Release — Session Persistence, Multi-Mode Command Palette, Keyboard Shortcuts Modal, Conflict Arbiter & Expanded Ecosystems
+
+IndoctrinatedEdit 2.0.0 is a milestone major release transforming the editor into a resilient, high-productivity development suite with session auto-restoration, VS Code-parity Command Palette modes, an interactive Keyboard Shortcuts reference, intelligent conflict resolution, 10 Liquid Glass themes, and comprehensive multi-language ecosystem coverage.
+
+#### 💾 Workspace & File Session Persistence
+- **Auto-Restore on Launch**: Automatically restores the last opened workspace project directory, all active editor tabs, scroll context, and file contents across app launches.
+- **Fault-Tolerant File Restoration**: Missing, deleted, or corrupted files are silently dropped from open tabs without interrupting editor startup or blocking the UI.
+- **Graceful Workspace Fallback**: If a previously opened workspace folder is moved, deleted, or inaccessible, the session manager notifies the user via the Notification Center and smoothly falls back to the default workspace and demo files.
+
+#### ⚡ VS Code-Grade Multi-Mode Command Palette
+- **Prefix-Driven Search Router**:
+  - `>` (**Commands Mode**): Search and execute all application commands, editor operations, themes, git actions, and AI tools.
+  - `@` (**Document Outline & Symbol Jump**): Scans the active document in real time to extract classes, interfaces, types, functions, methods, and markdown headings, enabling direct one-click navigation.
+  - `#` (**Workspace Symbols & Features**): Search across project symbols and global capabilities.
+  - `:` (**Go to Line / Column**): Jump directly to a target line (e.g. `:42` or `:128:10`).
+  - `?` (**Help & Mode Picker**): Explains all prefix modes with click-to-switch and `Tab` completion.
+- **Unified Search & Category Filter Chips**: In default search mode, filter instantly across `All`, `Files`, `Commands`, `Symbols`, `Themes`, and `Edit` categories.
+
+#### ⌨️ Interactive Keyboard Shortcuts Reference Modal
+- **Help Menu Integration**: Added `Help > Keyboard Shortcuts` (`Ctrl+K Ctrl+S` or `F1`).
+- **Liquid Glass Modal**: Styled with frosted glassmorphism, ambient glow orbs, and specular accents.
+- **Interactive Filtering & Execution**: Live search by action title, key combination (`ctrl+p`, `save`, `format`), or category (`General`, `File`, `Edit`, `Navigation`, `View`, `AI`, `Git`), complete with styled `<kbd>` keycaps and direct **Run** buttons.
+
+#### 🛡️ Inter-Extension Conflict Resolution & Cyclic Rule Arbiter
+- **4-Tier Language Resolution Algorithm**: Tier 1 (Content Heuristics) $\to$ Tier 2 (Exact Single Claimant) $\to$ Tier 3 (Deterministic Priority Disambiguation) $\to$ Tier 4 (Monaco Default Fallback).
+- **Weighted Content Heuristics**: Automatic content inspection regex rules for colliding file extensions (`.m` Objective-C vs MATLAB, `.pl` Prolog vs Perl, `.v` Coq vs SystemVerilog, `.h` C vs C++ vs Obj-C, `.ts`/`.tsx` React vs Angular).
+- **Directed Graph Cycle Detection**: DFS graph cycle detection with depth bounding that detects and prunes circular language alias dependencies (e.g. $A \to B \to C \to A$) and alerts the Notification Center.
+- **Fault-Tolerant Provider Sandbox**: Sandboxes tokenizers, completion providers, and hover providers to ensure unhandled exceptions never crash the Monaco editor runtime.
+
+#### 🎨 10 Retro, Futuristic & Neon Liquid Glass Themes
+- **Synthwave '84 Sunset Neon**: 1980s outrun arcade neon violet glass with magenta borders and sunset gold accents.
+- **Matrix Cyberdeck Phosphor**: Cybernetic terminal with digital rain carbon glass and pure phosphor green accents.
+- **Retro CRT Amber 1982**: Monochrome cathode-ray tube mainframe terminal with 589nm amber phosphor glow.
+- **Tokyo Night Neo-Akiba**: Midnight Shinjuku streetscape with electric neon purple and sakura pink accents.
+- **Deep Space Nebula Quantum**: Interstellar ultraviolet dark matter with starlight cyan and pulsar magenta radiance.
+- **TRON Laser Grid Hologram**: Photonic vector aesthetic with intense laser cyan and holographic cobalt highlights.
+- **Classic Themes**: Cupertino Midnight Glass, Liquid Obsidian, Frosted Amber Glow, and Cyberpunk 2077 Neon.
+
+#### 📦 Universal Language Ecosystems & Mega-Packs
+- **Systems & Gaming**: Zig, Odin, Nim, D, V, Jai, Crystal, Janet.
+- **BEAM & Functional**: Erlang, Elixir, Gleam, OCaml, ReasonML, F#.
+- **Logic & Formal Verification**: LISP, Scheme, Racket, Clojure, Prolog, Mercury, Coq, Lean 4, Agda, Isabelle.
+- **Web & Mobile Frameworks**: PHP/Laravel, Angular, React 19/Next.js 15, Flutter/Dart, Ruby on Rails, Node.js 22+.
+- **Frontend & Backend Mega-Packs**: Vue 3, Svelte 5, SolidJS, Streamlit, Dash, Reflex, Flet, Livewire, Blazor, Alpine.js, FastAPI, NestJS, Spring Boot, Ktor, Actix-Web, Axum, Gin.
+
+#### 🪪 License & About Dialog Updates
+- Updated Help -> License and Help -> About modal dialogs to display active `v2.0.0 PRO` release version.
+
+---
+
 ## [1.3.0] - 2026-09-16
 
 ### 🚀 Minor Feature Release — Full-Stack Web & Mobile Ecosystems, Mega-Packs, and Error Resilience
