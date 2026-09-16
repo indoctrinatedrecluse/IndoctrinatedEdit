@@ -1,9 +1,10 @@
-import { useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react'
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef, useCallback } from 'react'
 import Editor, { OnMount, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { debugService } from '../../services/debugService'
+import { FindReplaceWidget, FindOptions } from './FindReplaceWidget'
 
 // Force @monaco-editor/react to use local monaco bundle, bypassing cdn.jsdelivr.net completely
 loader.config({ monaco })
@@ -33,6 +34,17 @@ export interface EditorHostHandle {
   triggerAction: (actionId: string) => void
   transformSelection: (type: 'uppercase' | 'lowercase' | 'titlecase' | 'trim' | 'sort') => void
   getOutlineSymbols: () => DocumentSymbol[]
+  openFind: (initialText?: string) => void
+  openReplace: () => void
+  closeFind: () => void
+  findNext: () => void
+  findPrevious: () => void
+  replaceCurrent: (replaceText: string) => void
+  replaceAll: (replaceText: string) => void
+  selectAllOccurrences: () => void
+  addSelectionToNextFindMatch: () => void
+  insertCursorAbove: () => void
+  insertCursorBelow: () => void
 }
 
 interface EditorHostProps {
@@ -59,6 +71,179 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
   const decorationsRef = useRef<string[]>([])
+  const searchDecorationsRef = useRef<string[]>([])
+
+  // Find & Replace Suite State
+  const [isFindOpen, setIsFindOpen] = useState(false)
+  const [findMode, setFindMode] = useState<'find' | 'replace'>('find')
+  const [findSearchText, setFindSearchText] = useState('')
+  const [totalMatches, setTotalMatches] = useState(0)
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+  const findMatchesRef = useRef<monaco.editor.FindMatch[]>([])
+  const findOptionsRef = useRef<FindOptions>({
+    matchCase: false,
+    matchWholeWord: false,
+    isRegex: false,
+    inSelection: false,
+  })
+
+  const clearSearchDecorations = useCallback(() => {
+    const editor = editorRef.current
+    if (editor) {
+      searchDecorationsRef.current = editor.deltaDecorations(searchDecorationsRef.current, [])
+    }
+    findMatchesRef.current = []
+    setTotalMatches(0)
+    setCurrentMatchIndex(0)
+  }, [])
+
+  const updateSearchDecorations = useCallback((matches: monaco.editor.FindMatch[], activeIndex: number) => {
+    const editor = editorRef.current
+    const monacoInstance = monacoRef.current
+    if (!editor || !monacoInstance) return
+
+    const newDecorations: monaco.editor.IModelDeltaDecoration[] = matches.map((m, idx) => ({
+      range: m.range,
+      options: {
+        className: idx === activeIndex ? 'find-match-highlight-active' : 'find-match-highlight',
+        overviewRuler: {
+          color: idx === activeIndex ? '#FF9F0A' : '#FFD60A',
+          position: monacoInstance.editor.OverviewRulerLane.Right,
+        },
+      },
+    }))
+
+    searchDecorationsRef.current = editor.deltaDecorations(searchDecorationsRef.current, newDecorations)
+  }, [])
+
+  const handleSearchChange = useCallback((query: string, opts: FindOptions) => {
+    setFindSearchText(query)
+    findOptionsRef.current = opts
+    const editor = editorRef.current
+    if (!editor) return
+
+    const model = editor.getModel()
+    if (!model || !query) {
+      clearSearchDecorations()
+      return
+    }
+
+    try {
+      let searchRange: monaco.Range | undefined = undefined
+      if (opts.inSelection) {
+        const sel = editor.getSelection()
+        if (sel && !sel.isEmpty()) {
+          searchRange = sel
+        }
+      }
+
+      const matches = model.findMatches(
+        query,
+        searchRange || model.getFullModelRange(),
+        opts.isRegex,
+        opts.matchCase,
+        opts.matchWholeWord ? '`~!@#$%^&*()-=+[{]}\\|;:\'",.<>/? \t\n\r' : null,
+        true
+      )
+
+      findMatchesRef.current = matches
+      setTotalMatches(matches.length)
+
+      if (matches.length > 0) {
+        // Find match closest to or at current cursor position
+        const pos = editor.getPosition()
+        let matchIdx = 0
+        if (pos) {
+          const found = matches.findIndex(
+            (m) => m.range.startLineNumber >= pos.lineNumber && m.range.startColumn >= pos.column
+          )
+          if (found >= 0) matchIdx = found
+        }
+        setCurrentMatchIndex(matchIdx)
+        updateSearchDecorations(matches, matchIdx)
+        editor.revealRangeInCenter(matches[matchIdx].range)
+        editor.setSelection(matches[matchIdx].range)
+      } else {
+        setCurrentMatchIndex(0)
+        clearSearchDecorations()
+      }
+    } catch (err) {
+      console.warn('Find regex / search syntax error:', err)
+      clearSearchDecorations()
+    }
+  }, [clearSearchDecorations, updateSearchDecorations])
+
+  const handleFindNext = useCallback(() => {
+    const editor = editorRef.current
+    const matches = findMatchesRef.current
+    if (!editor || matches.length === 0) return
+
+    const nextIdx = (currentMatchIndex + 1) % matches.length
+    setCurrentMatchIndex(nextIdx)
+    updateSearchDecorations(matches, nextIdx)
+    editor.revealRangeInCenter(matches[nextIdx].range)
+    editor.setSelection(matches[nextIdx].range)
+  }, [currentMatchIndex, updateSearchDecorations])
+
+  const handleFindPrevious = useCallback(() => {
+    const editor = editorRef.current
+    const matches = findMatchesRef.current
+    if (!editor || matches.length === 0) return
+
+    const prevIdx = (currentMatchIndex - 1 + matches.length) % matches.length
+    setCurrentMatchIndex(prevIdx)
+    updateSearchDecorations(matches, prevIdx)
+    editor.revealRangeInCenter(matches[prevIdx].range)
+    editor.setSelection(matches[prevIdx].range)
+  }, [currentMatchIndex, updateSearchDecorations])
+
+  const handleReplaceCurrent = useCallback((replaceText: string) => {
+    const editor = editorRef.current
+    const matches = findMatchesRef.current
+    if (!editor || matches.length === 0) return
+
+    const currentMatch = matches[currentMatchIndex]
+    if (!currentMatch) return
+
+    editor.executeEdits('find-replace', [{
+      range: currentMatch.range,
+      text: replaceText,
+      forceMoveMarkers: true,
+    }])
+
+    handleSearchChange(findSearchText, findOptionsRef.current)
+  }, [currentMatchIndex, findSearchText, handleSearchChange])
+
+  const handleReplaceAll = useCallback((replaceText: string) => {
+    const editor = editorRef.current
+    const matches = findMatchesRef.current
+    if (!editor || matches.length === 0) return
+
+    const edits = matches.map((m) => ({
+      range: m.range,
+      text: replaceText,
+      forceMoveMarkers: true,
+    }))
+
+    editor.executeEdits('find-replace-all', edits)
+    handleSearchChange(findSearchText, findOptionsRef.current)
+  }, [findSearchText, handleSearchChange])
+
+  const handleSelectAllMatches = useCallback(() => {
+    const editor = editorRef.current
+    const matches = findMatchesRef.current
+    if (!editor || matches.length === 0) return
+
+    const selections = matches.map((m) => new monaco.Selection(
+      m.range.startLineNumber,
+      m.range.startColumn,
+      m.range.endLineNumber,
+      m.range.endColumn
+    ))
+
+    editor.setSelections(selections)
+    editor.focus()
+  }, [])
 
   useImperativeHandle(ref, () => ({
     insertAtCursor: (text: string) => {
@@ -222,21 +407,80 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           })
           continue
         }
-
-        // Functions / Methods
-        const fnMatch = trimmed.match(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)|(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(/)
-        if (fnMatch) {
-          symbols.push({
-            name: fnMatch[1] || fnMatch[2],
-            kind: 'function',
-            line: i,
-            detail: 'Function',
-          })
-          continue
-        }
       }
 
       return symbols
+    },
+    openFind: (initialText?: string) => {
+      const editor = editorRef.current
+      let seed = initialText
+      if (!seed && editor) {
+        const selection = editor.getSelection()
+        const model = editor.getModel()
+        if (model && selection && !selection.isEmpty()) {
+          seed = model.getValueInRange(selection)
+        }
+      }
+      setIsFindOpen(true)
+      setFindMode('find')
+      if (seed) {
+        setFindSearchText(seed)
+        handleSearchChange(seed, findOptionsRef.current)
+      }
+    },
+    openReplace: () => {
+      const editor = editorRef.current
+      let seed = ''
+      if (editor) {
+        const selection = editor.getSelection()
+        const model = editor.getModel()
+        if (model && selection && !selection.isEmpty()) {
+          seed = model.getValueInRange(selection)
+        }
+      }
+      setIsFindOpen(true)
+      setFindMode('replace')
+      if (seed) {
+        setFindSearchText(seed)
+        handleSearchChange(seed, findOptionsRef.current)
+      }
+    },
+    closeFind: () => {
+      setIsFindOpen(false)
+      clearSearchDecorations()
+    },
+    findNext: () => {
+      handleFindNext()
+    },
+    findPrevious: () => {
+      handleFindPrevious()
+    },
+    replaceCurrent: (replaceText: string) => {
+      handleReplaceCurrent(replaceText)
+    },
+    replaceAll: (replaceText: string) => {
+      handleReplaceAll(replaceText)
+    },
+    selectAllOccurrences: () => {
+      handleSelectAllMatches()
+    },
+    addSelectionToNextFindMatch: () => {
+      const editor = editorRef.current
+      if (editor) {
+        editor.getAction('editor.action.addSelectionToNextFindMatch')?.run()
+      }
+    },
+    insertCursorAbove: () => {
+      const editor = editorRef.current
+      if (editor) {
+        editor.getAction('editor.action.insertCursorAbove')?.run()
+      }
+    },
+    insertCursorBelow: () => {
+      const editor = editorRef.current
+      if (editor) {
+        editor.getAction('editor.action.insertCursorBelow')?.run()
+      }
     },
   }))
 
@@ -410,6 +654,25 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
   return (
     <div className="editor-host-container">
+      {/* Floating Liquid Glass Find & Replace Suite Overlay */}
+      <FindReplaceWidget
+        isOpen={isFindOpen}
+        initialMode={findMode}
+        initialSearchText={findSearchText}
+        totalMatches={totalMatches}
+        currentMatchIndex={currentMatchIndex}
+        onClose={() => {
+          setIsFindOpen(false)
+          clearSearchDecorations()
+        }}
+        onSearchChange={handleSearchChange}
+        onFindNext={handleFindNext}
+        onFindPrevious={handleFindPrevious}
+        onReplaceCurrent={handleReplaceCurrent}
+        onReplaceAll={handleReplaceAll}
+        onSelectAllMatches={handleSelectAllMatches}
+      />
+
       <Editor
         height="100%"
         language={language}
@@ -425,6 +688,9 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           cursorSmoothCaretAnimation: 'on',
           smoothScrolling: true,
           glyphMargin: true, // Enable Gutter Glyph Margin for Breakpoints & Execution Arrow
+          multiCursorModifier: 'alt', // Alt+Click inserts multiple cursors
+          multiCursorPaste: 'spread',
+          multiCursorLimit: 10000,
           // FIX: Disable sticky scroll so symbols are not persistently pinned on scroll
           stickyScroll: {
             enabled: false,
@@ -459,6 +725,20 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           position: relative;
           background: transparent;
           overflow: hidden;
+        }
+
+        /* In-Editor Find & Replace Search Highlight Decorations */
+        .find-match-highlight {
+          background: rgba(255, 214, 10, 0.22) !important;
+          border-bottom: 2px solid rgba(255, 214, 10, 0.6);
+          border-radius: 2px;
+        }
+
+        .find-match-highlight-active {
+          background: rgba(255, 159, 10, 0.45) !important;
+          border-bottom: 2px solid #FF9F0A;
+          box-shadow: 0 0 8px rgba(255, 159, 10, 0.5);
+          border-radius: 2px;
         }
 
         /* Ensure Monaco DOM nodes allow glass transparency */

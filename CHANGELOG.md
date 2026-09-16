@@ -42,10 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Floating Liquid Glass execution control toolbar (`DebugToolbar`) with Continue (`F5`), Pause (`F6`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Restart (`Ctrl+Shift+F5`), and Stop (`Shift+F5`).
   - Run & Debug Activity Sidebar (`Ctrl+Shift+D`) with target selection, interactive Variables tree (Local, Global, Closure, Registers), Watch expressions evaluator, Call Stack frames, Breakpoint manager, and interactive REPL Debug Console.
 
-- [ ] **🔍 Multi-Cursor / Multi-Line Editing & Advanced Find/Replace Suite (Phase 6)**
-  - Full multi-cursor and column/box selection support (`Alt+Click`, `Ctrl+Alt+Up/Down`, `Ctrl+D` add next occurrence, `Ctrl+Shift+L` select all occurrences).
-  - Native in-editor Find, Find All, Replace, and Replace All suite with regex matching, case sensitivity, whole word toggles, and occurrence badges.
-  - Comprehensive keyboard shortcuts documented in the Help -> Keyboard Shortcuts modal.
+- [x] **🔍 Multi-Cursor / Multi-Line Editing & Advanced Find/Replace Suite (Completed in v2.0.0-dev / Phase 6)**
+  - Floating Liquid Glass Find & Replace suite (`FindReplaceWidget.tsx`) with real-time match count badges, Match Case (`Alt+C`), Whole Word (`Alt+W`), Regular Expressions (`Alt+R`), and Find in Selection (`Alt+L`).
+  - Next/Previous navigation (`Enter`/`F3`, `Shift+Enter`/`Shift+F3`), single match replacement (`Enter`), and atomic batch Replace All (`Ctrl+Alt+Enter`).
+  - Full multi-cursor spawning: `Alt+Click` for arbitrary multi-cursor placement, `Ctrl+Alt+Up` / `Ctrl+Alt+Down` for vertical column cursors, `Ctrl+D` for adding next matching word to selection, `Alt+Enter` / `Ctrl+Shift+L` for selecting all occurrences across the document.
+  - Complete integration with Command Palette, Menu Bar, `useKeyboardShortcuts`, and documentation in the Help -> Keyboard Shortcuts modal (`Ctrl+K Ctrl+S`).
 
 ---
 

@@ -742,10 +742,16 @@ export const App: React.FC = () => {
       { id: 'edit.symbols', title: 'Go to Symbol in Active Buffer...', category: 'Editor', shortcut: 'Ctrl+Shift+O', description: 'Outline symbols in file (@)', handler: () => openPalette('@') },
       { id: 'edit.workspaceSymbols', title: 'Go to Symbol in Workspace...', category: 'Editor', shortcut: 'Ctrl+T', description: 'Search symbols and features across project (#)', handler: () => openPalette('#') },
 
-      // Editing Actions
+      // Editing & Multi-Cursor Actions
       { id: 'edit.format', title: 'Format Document', category: 'Editor', shortcut: 'Shift+Alt+F', description: 'Auto-format active code buffer', handler: () => editorHostRef.current?.formatDocument() },
-      { id: 'edit.find', title: 'Find in File', category: 'Editor', shortcut: 'Ctrl+F', description: 'Find text occurrences in active document', handler: () => editorHostRef.current?.triggerAction('actions.find') },
-      { id: 'edit.replace', title: 'Replace in File', category: 'Editor', shortcut: 'Ctrl+H', description: 'Find and replace text in active document', handler: () => editorHostRef.current?.triggerAction('editor.action.startFindReplaceAction') },
+      { id: 'edit.find', title: 'Find in Active Buffer', category: 'Editor', shortcut: 'Ctrl+F', description: 'Open in-editor Find overlay', handler: () => editorHostRef.current?.openFind() },
+      { id: 'edit.replace', title: 'Replace in Active Buffer', category: 'Editor', shortcut: 'Ctrl+H', description: 'Open in-editor Find & Replace overlay', handler: () => editorHostRef.current?.openReplace() },
+      { id: 'edit.findAll', title: 'Find All (Select All Occurrences)', category: 'Editor', shortcut: 'Alt+Enter', description: 'Spawn multi-cursors on all search matches', handler: () => editorHostRef.current?.selectAllOccurrences() },
+      { id: 'edit.replaceAll', title: 'Replace All Matches in Buffer', category: 'Editor', shortcut: 'Ctrl+Alt+Enter', description: 'Batch replace all search occurrences', handler: () => editorHostRef.current?.openReplace() },
+      { id: 'edit.nextMatch', title: 'Add Next Occurrence to Multi-Cursor', category: 'Editor', shortcut: 'Ctrl+D', description: 'Select next matching word occurrence', handler: () => editorHostRef.current?.addSelectionToNextFindMatch() },
+      { id: 'edit.selectAllMatches', title: 'Select All Occurrences (Multi-Cursor)', category: 'Editor', shortcut: 'Ctrl+Shift+L', description: 'Multi-cursor selection across all matches', handler: () => editorHostRef.current?.selectAllOccurrences() },
+      { id: 'edit.cursorAbove', title: 'Insert Cursor Above', category: 'Editor', shortcut: 'Ctrl+Alt+Up', description: 'Add editing cursor on previous line', handler: () => editorHostRef.current?.insertCursorAbove() },
+      { id: 'edit.cursorBelow', title: 'Insert Cursor Below', category: 'Editor', shortcut: 'Ctrl+Alt+Down', description: 'Add editing cursor on next line', handler: () => editorHostRef.current?.insertCursorBelow() },
       { id: 'edit.commentLine', title: 'Toggle Line Comment', category: 'Editor', shortcut: 'Ctrl+/', description: 'Add/remove line comments on active selection', handler: () => editorHostRef.current?.triggerAction('editor.action.commentLine') },
       { id: 'edit.duplicateLine', title: 'Duplicate Line Down', category: 'Editor', shortcut: 'Shift+Alt+Down', description: 'Duplicate cursor line downwards', handler: () => editorHostRef.current?.triggerAction('editor.action.copyLinesDownAction') },
       { id: 'edit.deleteLine', title: 'Delete Line', category: 'Editor', shortcut: 'Ctrl+Shift+K', description: 'Delete current line immediately', handler: () => editorHostRef.current?.triggerAction('editor.action.deleteLines') },
@@ -853,6 +859,14 @@ export const App: React.FC = () => {
         debugService.toggleBreakpoint(active.id, cursorPos.line)
       }
     },
+    onFind: () => editorHostRef.current?.openFind(),
+    onReplace: () => editorHostRef.current?.openReplace(),
+    onFindAll: () => editorHostRef.current?.selectAllOccurrences(),
+    onReplaceAll: () => editorHostRef.current?.openReplace(),
+    onAddSelectionToNextMatch: () => editorHostRef.current?.addSelectionToNextFindMatch(),
+    onSelectAllOccurrences: () => editorHostRef.current?.selectAllOccurrences(),
+    onCursorAbove: () => editorHostRef.current?.insertCursorAbove(),
+    onCursorBelow: () => editorHostRef.current?.insertCursorBelow(),
   })
 
   const handleEditorChange = (value: string | undefined) => {

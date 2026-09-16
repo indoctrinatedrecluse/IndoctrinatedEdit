@@ -32,6 +32,14 @@ interface ShortcutHandlers {
   onStepInto?: () => void
   onStepOut?: () => void
   onToggleBreakpoint?: () => void
+  onFind?: () => void
+  onReplace?: () => void
+  onFindAll?: () => void
+  onReplaceAll?: () => void
+  onAddSelectionToNextMatch?: () => void
+  onSelectAllOccurrences?: () => void
+  onCursorAbove?: () => void
+  onCursorBelow?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -126,7 +134,63 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
+      // Alt+Enter -> Select All Occurrences / Find All
+      if (e.key === 'Enter' && e.altKey && !ctrlOrCmd && !e.shiftKey) {
+        e.preventDefault()
+        handlers.onFindAll?.()
+        return
+      }
+
       if (!ctrlOrCmd) return
+
+      // Ctrl+Alt+Enter -> Replace All
+      if (e.key === 'Enter' && e.altKey) {
+        e.preventDefault()
+        handlers.onReplaceAll?.()
+        return
+      }
+
+      // Ctrl+Alt+Up / ArrowUp -> Insert Cursor Above
+      if ((e.key === 'ArrowUp' || e.key === 'Up') && e.altKey) {
+        e.preventDefault()
+        handlers.onCursorAbove?.()
+        return
+      }
+
+      // Ctrl+Alt+Down / ArrowDown -> Insert Cursor Below
+      if ((e.key === 'ArrowDown' || e.key === 'Down') && e.altKey) {
+        e.preventDefault()
+        handlers.onCursorBelow?.()
+        return
+      }
+
+      // Ctrl+F -> Find in Document
+      if (key === 'f' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onFind?.()
+        return
+      }
+
+      // Ctrl+H -> Replace in Document
+      if (key === 'h' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onReplace?.()
+        return
+      }
+
+      // Ctrl+D -> Add Next Find Match to Selection (Multi-Cursor)
+      if (key === 'd' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onAddSelectionToNextMatch?.()
+        return
+      }
+
+      // Ctrl+Shift+L -> Select All Occurrences (Multi-Cursor)
+      if (key === 'l' && e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onSelectAllOccurrences?.()
+        return
+      }
 
       // Chord Initiator: Ctrl+K
       if (key === 'k' && !e.shiftKey && !e.altKey) {
