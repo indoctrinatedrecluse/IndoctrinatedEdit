@@ -11,30 +11,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 📋 Planned Capabilities for Upcoming Release
 
-- [ ] **💻 Integrated Multi-Shell Terminal Subsystem**
+- [x] **💻 Integrated Multi-Shell Terminal Subsystem (Completed in v2.0.0-dev / Phase 1)**
   - Native terminal multiplexer supporting **PowerShell**, **Bash**, **Git Bash**, **Cygwin**, and **Command Prompt**.
-  - **Automatic PATH Auto-Discovery**: Shells and terminal emulators will be auto-detected dynamically if available on the system `PATH` or standard install directories (Git Bash, Cygwin, WSL, MSYS2).
-  - Customizable default shell and profile settings managed via JSON configuration file, searchable and editable directly via Command Palette (`> Open Terminal Configuration (JSON)`).
-  - Split terminals, tabs, and integrated Liquid Glass styling.
+  - **Automatic PATH Auto-Discovery**: Shells and terminal emulators auto-detected dynamically from system `PATH` and standard directories.
+  - Customizable default shell and profile settings managed via JSON configuration file (`~/.indoctrinated/terminal.json`), searchable and editable directly via Command Palette (`> Preferences: Open Terminal Configuration (JSON)`).
+  - Split terminals, tabs, ANSI color rendering, and integrated Liquid Glass styling.
 
-- [ ] **⚠️ Unified "Problems" Panel & High-Accuracy Linter Integration**
+- [x] **⚠️ Unified "Problems" Panel & High-Accuracy Linter Integration (Completed in v2.0.0-dev / Phase 2)**
   - Dedicated "Problems" dockable panel listing real-time errors, warnings, and hints.
-  - Integration with established, high-accuracy linting engines and language servers (e.g., ESLint, Biome/OxC, Ruff, Rust Clippy, GHC/Clang diagnostics) for industry-standard error detection rather than basic regex parsing.
-  - Quick-fix action triggers directly from problem items.
+  - Multi-language static analysis and linting engine (TypeScript, JavaScript, Python PEP 8, CSS, JSON syntax validation) integrated with Monaco model markers for industry-standard error detection.
+  - Interactive file grouping, severity filtering (All, Errors, Warnings, Info), real-time search query filter, line/column jumping, and error detail clipboard export.
+  - Live Status Bar diagnostics counter with one-click direct jump into the Problems panel.
 
-- [ ] **🗄️ Database Schema Viewer & SQL Query Runner Extension**
+- [ ] **🗄️ Database Schema Viewer & SQL Query Runner Extension (Phase 3)**
   - Visual database schema explorer (tables, columns, foreign keys, indexes, views).
   - Interactive SQL/NoSQL query runner with tabular result sets and execution statistics.
   - Modular extension design with drag-and-dock support for the **Right Auxiliary Pane**.
 
-- [ ] **🌐 Feature-Packed In-Editor REST & API Client Extension**
+- [ ] **🌐 Feature-Packed In-Editor REST & API Client Extension (Phase 4)**
   - Full-featured HTTP/REST and GraphQL request builder with parameter tables, auth headers, and payload formatting.
   - Multi-environment variable support and response history with status codes and timing metrics.
   - Modular extension design with drag-and-dock support for the **Right Auxiliary Pane**.
 
-- [ ] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers**
+- [ ] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers (Phase 5)**
   - Gutter breakpoint toggling (conditional breakpoints, logpoints).
   - Debugging orchestration with step over, step into, step out, call stack inspection, and variable watch expressions for targeted toolchains and compilers (exploring Debug Adapter Protocol / DAP integration).
+
+- [ ] **🔍 Multi-Cursor / Multi-Line Editing & Advanced Find/Replace Suite (Phase 6)**
+  - Full multi-cursor and column/box selection support (`Alt+Click`, `Ctrl+Alt+Up/Down`, `Ctrl+D` add next occurrence, `Ctrl+Shift+L` select all occurrences).
+  - Native in-editor Find, Find All, Replace, and Replace All suite with regex matching, case sensitivity, whole word toggles, and occurrence badges.
+  - Comprehensive keyboard shortcuts documented in the Help -> Keyboard Shortcuts modal.
 
 ---
 

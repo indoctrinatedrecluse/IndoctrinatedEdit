@@ -20,6 +20,7 @@ import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeR
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { toolchainService } from './services/toolchainService'
 import { sessionService } from './services/sessionService'
+import { diagnosticsService } from './services/diagnosticsService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -358,6 +359,34 @@ export const App: React.FC = () => {
       activeTabId,
     })
   }, [workspacePath, workspaceName, tabs, activeTabId])
+
+  // Diagnostic & Linter Problem Tracking
+  const [diagnosticCounts, setDiagnosticCounts] = useState<{ errors: number; warnings: number }>({ errors: 0, warnings: 0 })
+
+  useEffect(() => {
+    return diagnosticsService.subscribe(() => {
+      const counts = diagnosticsService.getCounts()
+      setDiagnosticCounts({ errors: counts.errors, warnings: counts.warnings })
+    })
+  }, [])
+
+  // Analyze active buffer for errors & diagnostics
+  useEffect(() => {
+    const active = tabs.find((t) => t.id === activeTabId)
+    if (active) {
+      const content = fileContents[active.id] ?? ''
+      diagnosticsService.analyzeCode(active.id, active.name, content, active.language)
+    }
+  }, [activeTabId, fileContents, tabs])
+
+  const handleGoToProblemLocation = useCallback((filePath: string, line: number, col: number) => {
+    if (tabs.some((t) => t.id === filePath)) {
+      setActiveTabId(filePath)
+    }
+    setTimeout(() => {
+      editorHostRef.current?.goToLine(line, col)
+    }, 50)
+  }, [tabs])
 
   // Refresh Git Status for status bar and activity bar badge
   const refreshGitStatus = useCallback(async () => {
@@ -873,6 +902,14 @@ export const App: React.FC = () => {
             onOpenTerminalConfig={handleOpenTerminalConfig}
             workspacePath={workspacePath}
             defaultTab={bottomPanelTab}
+            onGoToLocation={handleGoToProblemLocation}
+            onRefreshDiagnostics={() => {
+              const active = tabs.find((t) => t.id === activeTabId)
+              if (active) {
+                const content = fileContents[active.id] ?? ''
+                diagnosticsService.analyzeCode(active.id, active.name, content, active.language)
+              }
+            }}
           />
         </main>
 
@@ -917,6 +954,8 @@ export const App: React.FC = () => {
         language={currentLanguage.toUpperCase()}
         themeName={currentTheme.name}
         gitBranch={gitBranch}
+        errorCount={diagnosticCounts.errors}
+        warningCount={diagnosticCounts.warnings}
         onThemeClick={() => setActiveView('themes')}
         onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
         onTerminalClick={handleToggleTerminal}

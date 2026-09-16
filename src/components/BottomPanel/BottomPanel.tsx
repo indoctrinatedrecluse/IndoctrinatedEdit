@@ -8,6 +8,8 @@ import {
   Minimize2,
 } from 'lucide-react'
 import { TerminalView } from '../Terminal/TerminalView'
+import { ProblemsView } from '../Problems/ProblemsView'
+import { diagnosticsService } from '../../services/diagnosticsService'
 
 export type BottomPanelTab = 'terminal' | 'problems' | 'output'
 
@@ -17,6 +19,8 @@ interface BottomPanelProps {
   onOpenTerminalConfig?: () => void
   workspacePath?: string
   defaultTab?: BottomPanelTab
+  onGoToLocation?: (filePath: string, line: number, col: number) => void
+  onRefreshDiagnostics?: () => void
 }
 
 export const BottomPanel: React.FC<BottomPanelProps> = ({
@@ -25,13 +29,22 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({
   onOpenTerminalConfig,
   workspacePath,
   defaultTab = 'terminal',
+  onGoToLocation,
+  onRefreshDiagnostics,
 }) => {
   const [activeTab, setActiveTab] = useState<BottomPanelTab>(defaultTab)
   const [panelHeight, setPanelHeight] = useState<number>(260)
   const [isMaximized, setIsMaximized] = useState<boolean>(false)
+  const [problemCount, setProblemCount] = useState<number>(() => diagnosticsService.getCounts().total)
   const isDraggingRef = useRef<boolean>(false)
   const startYRef = useRef<number>(0)
   const startHeightRef = useRef<number>(260)
+
+  useEffect(() => {
+    return diagnosticsService.subscribe(() => {
+      setProblemCount(diagnosticsService.getCounts().total)
+    })
+  }, [])
 
   useEffect(() => {
     setActiveTab(defaultTab)
@@ -94,7 +107,7 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({
           >
             <AlertCircle size={13} className="tab-icon" />
             <span>PROBLEMS</span>
-            <span className="badge-count">0</span>
+            {problemCount > 0 && <span className="badge-count error">{problemCount}</span>}
           </button>
 
           <button
@@ -135,13 +148,10 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({
         )}
 
         {activeTab === 'problems' && (
-          <div className="problems-empty-view">
-            <AlertCircle size={32} className="clean-icon" />
-            <span className="clean-title">No problems detected</span>
-            <p className="clean-desc">
-              All files in the active workspace passed static analysis.
-            </p>
-          </div>
+          <ProblemsView
+            onGoToLocation={onGoToLocation}
+            onRefresh={onRefreshDiagnostics}
+          />
         )}
 
         {activeTab === 'output' && (

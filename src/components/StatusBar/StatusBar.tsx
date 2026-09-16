@@ -9,6 +9,8 @@ interface StatusBarProps {
   encoding?: string
   indentation?: string
   gitBranch?: string
+  errorCount?: number
+  warningCount?: number
   onThemeClick?: () => void
   onGitClick?: () => void
   onTerminalClick?: () => void
@@ -23,6 +25,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   encoding = 'UTF-8',
   indentation = 'Spaces: 2',
   gitBranch = 'master',
+  errorCount = 0,
+  warningCount = 0,
   onThemeClick,
   onGitClick,
   onTerminalClick,
@@ -44,12 +48,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <button
           className="status-chip diagnostics-chip glass-interactive"
           onClick={onProblemsClick}
-          title="Problems Panel (0 Errors, 0 Warnings)"
+          title={`Problems Panel: ${errorCount} Errors, ${warningCount} Warnings`}
         >
-          <Check size={11} className="check-icon" />
-          <span className="diag-count">0</span>
-          <AlertCircle size={11} className="warning-icon" />
-          <span className="diag-count">0</span>
+          {errorCount === 0 && warningCount === 0 ? (
+            <Check size={11} className="check-icon" />
+          ) : (
+            <AlertCircle size={11} className={`warning-icon ${errorCount > 0 ? 'has-errors' : ''}`} />
+          )}
+          <span className="diag-count">{errorCount}</span>
+          <span className="diag-count warning">{warningCount}</span>
         </button>
 
         <button
