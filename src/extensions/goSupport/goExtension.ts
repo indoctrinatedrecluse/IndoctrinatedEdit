@@ -62,7 +62,8 @@ export function registerGoExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerGoToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const goToolchain = results.find((tc) => tc.language === 'go')
     if (goToolchain) {
       if (!goToolchain.found) {
@@ -72,7 +73,7 @@ export function triggerGoToolchainCheck() {
           'https://go.dev/dl/'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

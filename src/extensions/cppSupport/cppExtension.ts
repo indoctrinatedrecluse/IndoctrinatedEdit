@@ -75,7 +75,8 @@ export function registerCppExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerCppToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const cppToolchain = results.find((tc) => tc.language === 'cpp')
     if (cppToolchain) {
       if (!cppToolchain.found) {
@@ -85,7 +86,7 @@ export function triggerCppToolchainCheck() {
           'https://visualstudio.microsoft.com/visual-cpp-build-tools/'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

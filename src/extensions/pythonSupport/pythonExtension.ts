@@ -62,7 +62,8 @@ export function registerPythonExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerPythonToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const pythonToolchain = results.find((tc) => tc.language === 'python')
     if (pythonToolchain) {
       if (!pythonToolchain.found) {
@@ -72,7 +73,7 @@ export function triggerPythonToolchainCheck() {
           'https://www.python.org/downloads/'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

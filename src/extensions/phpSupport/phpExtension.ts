@@ -60,7 +60,8 @@ export function registerPhpExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerPhpToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const phpToolchain = results.find((tc) => tc.language === 'php')
     if (phpToolchain) {
       if (!phpToolchain.found) {
@@ -70,7 +71,7 @@ export function triggerPhpToolchainCheck() {
           'https://www.php.net/downloads'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

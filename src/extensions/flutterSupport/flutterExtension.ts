@@ -60,7 +60,8 @@ export function registerFlutterExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerFlutterToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const flutterToolchain = results.find((tc) => tc.language === 'dart')
     if (flutterToolchain) {
       if (!flutterToolchain.found) {
@@ -70,7 +71,7 @@ export function triggerFlutterToolchainCheck() {
           'https://flutter.dev/docs/get-started/install'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

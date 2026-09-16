@@ -62,7 +62,8 @@ export function registerJavaExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerJavaToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const javaToolchain = results.find((tc) => tc.language === 'java')
     if (javaToolchain) {
       if (!javaToolchain.found) {
@@ -72,7 +73,7 @@ export function triggerJavaToolchainCheck() {
           'https://www.oracle.com/java/technologies/downloads/'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

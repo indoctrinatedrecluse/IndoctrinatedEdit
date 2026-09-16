@@ -60,7 +60,8 @@ export function registerRubyExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerRubyToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const rubyToolchain = results.find((tc) => tc.language === 'ruby')
     if (rubyToolchain) {
       if (!rubyToolchain.found) {
@@ -70,7 +71,7 @@ export function triggerRubyToolchainCheck() {
           'https://www.ruby-lang.org/en/documentation/installation/'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

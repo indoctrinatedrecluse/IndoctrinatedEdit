@@ -62,7 +62,8 @@ export function registerRustExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerRustToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const rustToolchain = results.find((tc) => tc.language === 'rust')
     if (rustToolchain) {
       if (!rustToolchain.found) {
@@ -72,7 +73,7 @@ export function triggerRustToolchainCheck() {
           'https://rustup.rs'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

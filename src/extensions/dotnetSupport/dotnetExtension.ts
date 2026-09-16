@@ -62,7 +62,8 @@ export function registerDotnetExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerDotnetToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const dotnetToolchain = results.find((tc) => tc.language === 'csharp')
     if (dotnetToolchain) {
       if (!dotnetToolchain.found) {
@@ -72,7 +73,7 @@ export function triggerDotnetToolchainCheck() {
           'https://dotnet.microsoft.com/download'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 

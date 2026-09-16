@@ -209,7 +209,27 @@ export class ToolchainService implements IToolchainRegistry {
    */
   public onDidDetect(listener: (results: DetectedToolchain[]) => void): () => void {
     this.listeners.add(listener)
-    listener(this.getDetectedToolchains())
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(() => {
+        if (this.listeners.has(listener)) {
+          try {
+            listener(this.getDetectedToolchains())
+          } catch (err) {
+            console.error('Toolchain listener error:', err)
+          }
+        }
+      })
+    } else {
+      setTimeout(() => {
+        if (this.listeners.has(listener)) {
+          try {
+            listener(this.getDetectedToolchains())
+          } catch (err) {
+            console.error('Toolchain listener error:', err)
+          }
+        }
+      }, 0)
+    }
     return () => {
       this.listeners.delete(listener)
     }

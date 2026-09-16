@@ -71,7 +71,8 @@ export function registerReactExtension(monacoInstance: typeof monaco) {
 }
 
 export function triggerReactToolchainCheck() {
-  const unsubscribe = toolchainService.onDidDetect((results) => {
+  let unsubscribe: (() => void) | undefined
+  unsubscribe = toolchainService.onDidDetect((results) => {
     const nodeToolchain = results.find((tc) => tc.language === 'javascript')
     if (nodeToolchain) {
       if (!nodeToolchain.found) {
@@ -81,7 +82,7 @@ export function triggerReactToolchainCheck() {
           'https://nodejs.org'
         )
       }
-      unsubscribe()
+      unsubscribe?.()
     }
   })
 
