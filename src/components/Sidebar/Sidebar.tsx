@@ -84,6 +84,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return <Globe size={16} />
       case 'Box':
         return <Box size={16} />
+      case 'ShieldCheck':
+        return <ShieldCheck size={16} />
+      case 'Apple':
+        return <Smartphone size={16} />
       case 'Cpu':
       default:
         return <Cpu size={16} />

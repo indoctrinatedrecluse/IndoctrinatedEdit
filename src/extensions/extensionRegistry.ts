@@ -15,6 +15,14 @@ import { rubyExtensionManifest, registerRubyExtension } from './rubySupport/ruby
 import { nodeExtensionManifest, registerNodeExtension } from './nodeSupport/nodeExtension'
 import { frontendExtensionManifest, registerFrontendMegaPackExtension } from './frontendMegaPack/frontendExtension'
 import { backendExtensionManifest, registerBackendMegaPackExtension } from './backendMegaPack/backendExtension'
+import { swiftExtensionManifest, registerSwiftExtension } from './swiftSupport/swiftExtension'
+import { kotlinExtensionManifest, registerKotlinExtension } from './kotlinSupport/kotlinExtension'
+import { devopsExtensionManifest, registerDevopsExtension } from './devopsSupport/devopsExtension'
+import { dataScienceExtensionManifest, registerDataScienceExtension } from './dataScienceSupport/dataScienceExtension'
+import { beamFunctionalExtensionManifest, registerBeamFunctionalExtension } from './beamFunctionalSupport/beamFunctionalExtension'
+import { systemsGamingExtensionManifest, registerSystemsGamingExtension } from './systemsGamingSupport/systemsGamingExtension'
+import { databaseSchemaExtensionManifest, registerDatabaseSchemaExtension } from './databaseSchemaSupport/databaseSchemaExtension'
+import { web3ExtensionManifest, registerWeb3Extension } from './web3Support/web3Extension'
 import { notificationService } from '../services/notificationService'
 
 class ExtensionRegistry {
@@ -66,7 +74,31 @@ class ExtensionRegistry {
     // 15. Universal Backend Mega-Pack
     this.register(backendExtensionManifest)
 
-    // 16. Liquid Glass Shader Shaper
+    // 16. Native Apple & Swift Suite
+    this.register(swiftExtensionManifest)
+
+    // 17. Kotlin & Android Multiplatform Suite
+    this.register(kotlinExtensionManifest)
+
+    // 18. DevOps, Cloud IaC & Shell Automation Suite
+    this.register(devopsExtensionManifest)
+
+    // 19. Data Science, AI & Scientific Computing Suite
+    this.register(dataScienceExtensionManifest)
+
+    // 20. BEAM & Functional Programming Suite
+    this.register(beamFunctionalExtensionManifest)
+
+    // 21. Systems, Native Performance & Game Scripting Suite
+    this.register(systemsGamingExtensionManifest)
+
+    // 22. Database, SQL Dialects & API Schema Pack
+    this.register(databaseSchemaExtensionManifest)
+
+    // 23. Web3, Smart Contracts & Zero-Knowledge Suite
+    this.register(web3ExtensionManifest)
+
+    // 24. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -79,12 +111,12 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 17. Unified Diagnostics & Toolchain Bus
+    // 25. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
       version: '1.0.1',
-      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, and Flutter with real-time error markers.',
+      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, SQL, and Solidity with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
       iconName: 'Cpu',
@@ -132,8 +164,17 @@ class ExtensionRegistry {
     safeInit('Node.js Core', () => registerNodeExtension(monacoInstance))
     safeInit('Frontend Mega-Pack', () => registerFrontendMegaPackExtension(monacoInstance))
     safeInit('Backend Mega-Pack', () => registerBackendMegaPackExtension(monacoInstance))
+    safeInit('Native Apple & Swift', () => registerSwiftExtension(monacoInstance))
+    safeInit('Kotlin & Android Multiplatform', () => registerKotlinExtension(monacoInstance))
+    safeInit('DevOps & Cloud IaC', () => registerDevopsExtension(monacoInstance))
+    safeInit('Data Science & AI', () => registerDataScienceExtension(monacoInstance))
+    safeInit('BEAM & Functional Programming', () => registerBeamFunctionalExtension(monacoInstance))
+    safeInit('Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
+    safeInit('Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
+    safeInit('Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
   }
 }
 
 export const extensionRegistry = new ExtensionRegistry()
+
 
