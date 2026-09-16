@@ -18,6 +18,7 @@ import {
   Info,
   Bell,
   Keyboard,
+  Database,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -44,6 +45,7 @@ export interface MenuActionHandlers {
   onToggleTerminal?: () => void
   onOpenTerminalConfig?: () => void
   onOpenProblems?: () => void
+  onToggleDatabase?: () => void
 }
 
 interface MenuItem {
@@ -175,6 +177,12 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+Alt+A',
           icon: <Bot size={14} />,
           onClick: handlers.onToggleAi,
+        },
+        {
+          id: 'view.database',
+          label: 'Database Studio (SQL Runner)',
+          icon: <Database size={14} />,
+          onClick: handlers.onToggleDatabase,
         },
         { id: 'sep5', label: '', isSeparator: true },
         {

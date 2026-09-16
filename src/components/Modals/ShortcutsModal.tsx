@@ -298,6 +298,14 @@ const SHORTCUT_DATABASE: Omit<ShortcutEntry, 'onExecute'>[] = [
     actionId: 'view.problems',
   },
   {
+    id: 'view.database',
+    title: 'Toggle Database Studio (SQL Runner)',
+    category: 'View',
+    keys: ['Ctrl', 'Shift', 'D'],
+    description: 'Open right-docked database schema explorer and SQL runner',
+    actionId: 'db.toggle',
+  },
+  {
     id: 'view.sidebar',
     title: 'Toggle Primary Sidebar',
     category: 'View',

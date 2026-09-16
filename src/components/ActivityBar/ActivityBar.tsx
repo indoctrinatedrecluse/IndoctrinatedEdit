@@ -1,5 +1,5 @@
 import React from 'react'
-import { Files, GitBranch, Search, Blocks, Palette, Settings, Bot } from 'lucide-react'
+import { Files, GitBranch, Search, Blocks, Palette, Settings, Bot, Database } from 'lucide-react'
 
 export type ActivityView = 'files' | 'git' | 'search' | 'extensions' | 'themes' | 'settings'
 
@@ -9,6 +9,8 @@ interface ActivityBarProps {
   gitChangesCount?: number
   isAiOpen?: boolean
   onToggleAi?: () => void
+  isDatabaseOpen?: boolean
+  onToggleDatabase?: () => void
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
@@ -17,6 +19,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   gitChangesCount = 0,
   isAiOpen = false,
   onToggleAi,
+  isDatabaseOpen = false,
+  onToggleDatabase,
 }) => {
   const topItems: { id: ActivityView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
@@ -46,6 +50,17 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
             </button>
           )
         })}
+
+        {onToggleDatabase && (
+          <button
+            className={`activity-btn glass-interactive db-bar-btn ${isDatabaseOpen ? 'active' : ''}`}
+            onClick={onToggleDatabase}
+            title="Database Studio & SQL Query Runner"
+          >
+            <Database size={18} />
+            {isDatabaseOpen && <div className="active-indicator" />}
+          </button>
+        )}
 
         {onToggleAi && (
           <button

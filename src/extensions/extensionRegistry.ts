@@ -24,6 +24,7 @@ import { systemsGamingExtensionManifest, registerSystemsGamingExtension } from '
 import { databaseSchemaExtensionManifest, registerDatabaseSchemaExtension } from './databaseSchemaSupport/databaseSchemaExtension'
 import { web3ExtensionManifest, registerWeb3Extension } from './web3Support/web3Extension'
 import { logicFormalExtensionManifest, registerLogicFormalExtension } from './logicFormalSupport/logicFormalExtension'
+import { databaseExtensionManifest, registerDatabaseExtension } from './databaseStudio/databaseExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
 
@@ -103,7 +104,10 @@ class ExtensionRegistry {
     // 24. Logic Programming, Lambda Calculus & Formal Methods Suite
     this.register(logicFormalExtensionManifest)
 
-    // 25. Liquid Glass Shader Shaper
+    // 25. Database Studio & SQL Query Runner
+    this.register(databaseExtensionManifest)
+
+    // 26. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -116,7 +120,7 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 26. Unified Diagnostics & Toolchain Bus
+    // 27. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
@@ -189,6 +193,7 @@ class ExtensionRegistry {
     safeInit('BEAM & Functional Programming', () => registerBeamFunctionalExtension(monacoInstance))
     safeInit('Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
     safeInit('Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
+    safeInit('Database Studio', () => registerDatabaseExtension(monacoInstance))
     safeInit('Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
     safeInit('Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
   }

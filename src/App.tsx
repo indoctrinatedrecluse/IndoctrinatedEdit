@@ -7,7 +7,7 @@ import { TabBar, TabItem } from './components/TabBar/TabBar'
 import { EditorHost, EditorHostHandle, SelectionInfo } from './components/Editor/EditorHost'
 import { StatusBar } from './components/StatusBar/StatusBar'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
-import { AiChatPanel } from './components/AiChat/AiChatPanel'
+import { RightAuxiliaryPane, RightDockTab } from './components/RightDock/RightAuxiliaryPane'
 import { AboutModal } from './components/Modals/AboutModal'
 import { LicenseModal } from './components/Modals/LicenseModal'
 import { ShortcutsModal } from './components/Modals/ShortcutsModal'
@@ -21,6 +21,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { toolchainService } from './services/toolchainService'
 import { sessionService } from './services/sessionService'
 import { diagnosticsService } from './services/diagnosticsService'
+import { databaseService } from './services/databaseService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -239,7 +240,6 @@ export const App: React.FC = () => {
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
   const [untitledCount, setUntitledCount] = useState<number>(1)
   const [sidebarWidth, setSidebarWidth] = useState<number>(260)
-  const [aiPanelWidth, setAiPanelWidth] = useState<number>(420)
 
   // Left Sidebar Drag-to-Resize
   const isResizingSidebar = useRef(false)
@@ -267,22 +267,26 @@ export const App: React.FC = () => {
     window.addEventListener('mouseup', handleMouseUp)
   }
 
-  // Right AI Chat Dock Drag-to-Resize
-  const isResizingAi = useRef(false)
-  const handleAiMouseDown = (e: React.MouseEvent) => {
+  // Right Auxiliary Dock (AI Chat, Database Studio) Drag-to-Resize
+  const [rightPaneWidth, setRightPaneWidth] = useState<number>(450)
+  const [isRightPaneOpen, setIsRightPaneOpen] = useState<boolean>(false)
+  const [rightPaneTab, setRightPaneTab] = useState<RightDockTab>('ai')
+  const isResizingRightPane = useRef(false)
+
+  const handleRightPaneMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
-    isResizingAi.current = true
+    isResizingRightPane.current = true
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingAi.current) return
-      const newWidth = Math.max(320, Math.min(700, window.innerWidth - moveEvent.clientX))
-      setAiPanelWidth(newWidth)
+      if (!isResizingRightPane.current) return
+      const newWidth = Math.max(340, Math.min(800, window.innerWidth - moveEvent.clientX))
+      setRightPaneWidth(newWidth)
     }
 
     const handleMouseUp = () => {
-      isResizingAi.current = false
+      isResizingRightPane.current = false
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       window.removeEventListener('mousemove', handleMouseMove)
@@ -295,12 +299,35 @@ export const App: React.FC = () => {
 
   // AI Multi-Model Chat Panel & Editor Integration State
   const editorHostRef = useRef<EditorHostHandle>(null)
-  const [isAiPanelOpen, setIsAiPanelOpen] = useState<boolean>(false)
   const [currentSelection, setCurrentSelection] = useState<SelectionInfo | null>(null)
 
   const handleToggleAi = useCallback(() => {
-    setIsAiPanelOpen((prev) => !prev)
-  }, [])
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('ai')
+        return true
+      }
+      if (rightPaneTab !== 'ai') {
+        setRightPaneTab('ai')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleDatabase = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('database')
+        return true
+      }
+      if (rightPaneTab !== 'database') {
+        setRightPaneTab('database')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
 
   const handleInsertAtCursor = useCallback((code: string) => {
     editorHostRef.current?.insertAtCursor(code)
@@ -612,6 +639,7 @@ export const App: React.FC = () => {
       onShowGitGraph: () => setActiveView('git'),
       onShowSearch: () => setActiveView('search'),
       onToggleAi: handleToggleAi,
+      onToggleDatabase: handleToggleDatabase,
       onToggleSidebar: handleToggleSidebar,
       onOpenSettings: () => setActiveView('settings'),
       onToggleNotifications: handleToggleNotifications,
@@ -640,6 +668,7 @@ export const App: React.FC = () => {
       activeTabId,
       openPalette,
       handleToggleAi,
+      handleToggleDatabase,
       handleToggleSidebar,
       handleToggleNotifications,
       handleToggleTerminal,
@@ -712,19 +741,24 @@ export const App: React.FC = () => {
       // Git & Toolchain
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
       
+      // Database Studio & SQL Runner
+      { id: 'db.toggle', title: 'Database: Toggle Database Studio & SQL Runner', category: 'Tools', shortcut: 'Ctrl+Shift+D', description: 'Open database schema explorer and query runner', handler: handleToggleDatabase },
+      { id: 'db.sampleEcommerce', title: 'Database: Switch to E-Commerce SQLite DB', category: 'Tools', description: 'Explore orders, customers, and product inventory schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('ecommerce_db') } },
+      { id: 'db.sampleTelemetry', title: 'Database: Switch to Cloud Telemetry Postgres DB', category: 'Tools', description: 'Explore clusters, nodes, and microservices schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('telemetry_db') } },
+
       // AI Multi-Model Assistant
       { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', description: 'Open AI chat and refactor dock', handler: handleToggleAi },
-      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: () => setIsAiPanelOpen(true) },
-      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', description: 'Scan active buffer for vulnerabilities', handler: () => setIsAiPanelOpen(true) },
-      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: () => setIsAiPanelOpen(true) },
-      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: () => setIsAiPanelOpen(true) },
+      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: handleToggleAi },
+      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', description: 'Scan active buffer for vulnerabilities', handler: handleToggleAi },
+      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: handleToggleAi },
+      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: handleToggleAi },
 
       // Help & Shortcuts
       { id: 'help.shortcuts', title: 'Help: Keyboard Shortcuts Reference', category: 'Help', shortcut: 'Ctrl+K Ctrl+S', description: 'Show all keyboard shortcuts', handler: () => setIsShortcutsOpen(true) },
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleSelectTheme, openPalette])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleSelectTheme, openPalette])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -829,8 +863,10 @@ export const App: React.FC = () => {
           activeView={activeView}
           onSelectView={handleSelectView}
           gitChangesCount={gitChangesCount}
-          isAiOpen={isAiPanelOpen}
+          isAiOpen={isRightPaneOpen && rightPaneTab === 'ai'}
           onToggleAi={handleToggleAi}
+          isDatabaseOpen={isRightPaneOpen && rightPaneTab === 'database'}
+          onToggleDatabase={handleToggleDatabase}
         />
 
         {/* Collapsible Frosted Sidebar with Spring Animation & Resizer */}
@@ -913,29 +949,31 @@ export const App: React.FC = () => {
           />
         </main>
 
-        {/* Right AI Dock Resizer Divider Sash */}
-        {isAiPanelOpen && (
+        {/* Right Auxiliary Dock Resizer Divider Sash */}
+        {isRightPaneOpen && (
           <div
             className="pane-resizer-sash ai-sash"
-            onMouseDown={handleAiMouseDown}
-            title="Drag to resize AI assistant"
+            onMouseDown={handleRightPaneMouseDown}
+            title="Drag to resize auxiliary dock"
           />
         )}
 
-        {/* Right Multi-Model AI Assistant Dock */}
+        {/* Right Multi-Extension Auxiliary Dock (AI Assistant, Database Studio) */}
         <AnimatePresence initial={false}>
-          {isAiPanelOpen && (
+          {isRightPaneOpen && (
             <motion.div
-              key="ai-dock-motion"
+              key="right-dock-motion"
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: aiPanelWidth, opacity: 1 }}
+              animate={{ width: rightPaneWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 350, damping: 30 }}
               style={{ overflow: 'hidden', height: '100%', display: 'flex', flexShrink: 0 }}
             >
-              <AiChatPanel
-                isOpen={isAiPanelOpen}
-                onClose={() => setIsAiPanelOpen(false)}
+              <RightAuxiliaryPane
+                isOpen={isRightPaneOpen}
+                activeTab={rightPaneTab}
+                onSelectTab={(tab) => setRightPaneTab(tab)}
+                onClose={() => setIsRightPaneOpen(false)}
                 activeFileName={activeTab?.name || 'untitled.ts'}
                 activeFileContent={currentContent}
                 currentSelection={currentSelection}

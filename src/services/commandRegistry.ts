@@ -1,7 +1,7 @@
 export interface CommandItem {
   id: string
   title: string
-  category: 'File' | 'View' | 'Preferences' | 'Git' | 'Themes' | 'Editor' | 'Help' | 'AI' | 'Toolchain' | 'Terminal'
+  category: 'File' | 'View' | 'Preferences' | 'Git' | 'Themes' | 'Editor' | 'Help' | 'AI' | 'Toolchain' | 'Terminal' | 'Tools'
   shortcut?: string
   description?: string
   handler: () => void | Promise<void>

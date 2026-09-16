@@ -23,10 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive file grouping, severity filtering (All, Errors, Warnings, Info), real-time search query filter, line/column jumping, and error detail clipboard export.
   - Live Status Bar diagnostics counter with one-click direct jump into the Problems panel.
 
-- [ ] **🗄️ Database Schema Viewer & SQL Query Runner Extension (Phase 3)**
-  - Visual database schema explorer (tables, columns, foreign keys, indexes, views).
-  - Interactive SQL/NoSQL query runner with tabular result sets and execution statistics.
-  - Modular extension design with drag-and-dock support for the **Right Auxiliary Pane**.
+- [x] **🗄️ Database Schema Viewer & SQL Query Runner Extension (Completed in v2.0.0-dev / Phase 3)**
+  - Visual database schema explorer with table and column search, primary key and foreign key badges, and data types.
+  - Interactive SQL query runner supporting `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `JOIN`, `WHERE`, `ORDER BY`, `GROUP BY`, and aggregate calculations (`COUNT`, `SUM`, `AVG`, `MAX`, `MIN`).
+  - High-performance Tabular Results Grid with sorting, row filtering, nested JSON object modal inspection, query history log, and CSV/JSON export.
+  - Modular extension design integrated with the **Right Auxiliary Pane** and switchable between AI Assistant and Database Studio.
 
 - [ ] **🌐 Feature-Packed In-Editor REST & API Client Extension (Phase 4)**
   - Full-featured HTTP/REST and GraphQL request builder with parameter tables, auth headers, and payload formatting.
