@@ -12,6 +12,10 @@ import { angularExtensionManifest, registerAngularExtension } from './angularSup
 import { reactExtensionManifest, registerReactExtension } from './reactSupport/reactExtension'
 import { flutterExtensionManifest, registerFlutterExtension } from './flutterSupport/flutterExtension'
 import { rubyExtensionManifest, registerRubyExtension } from './rubySupport/rubyExtension'
+import { nodeExtensionManifest, registerNodeExtension } from './nodeSupport/nodeExtension'
+import { frontendExtensionManifest, registerFrontendMegaPackExtension } from './frontendMegaPack/frontendExtension'
+import { backendExtensionManifest, registerBackendMegaPackExtension } from './backendMegaPack/backendExtension'
+import { notificationService } from '../services/notificationService'
 
 class ExtensionRegistry {
   private extensions: Map<string, ExtensionManifest> = new Map()
@@ -53,7 +57,16 @@ class ExtensionRegistry {
     // 12. Ruby & Ruby on Rails Suite
     this.register(rubyExtensionManifest)
 
-    // 13. Liquid Glass Shader Shaper
+    // 13. Node.js Core Runtime Suite
+    this.register(nodeExtensionManifest)
+
+    // 14. Universal Frontend Mega-Pack
+    this.register(frontendExtensionManifest)
+
+    // 15. Universal Backend Mega-Pack
+    this.register(backendExtensionManifest)
+
+    // 16. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -66,12 +79,12 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 14. Unified Diagnostics & Toolchain Bus
+    // 17. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
       version: '1.0.1',
-      description: 'Multi-compiler discovery for Python, Rust, Go, GCC, C#, Java, PHP, Ruby, and Flutter with real-time error markers.',
+      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, and Flutter with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
       iconName: 'Cpu',
@@ -93,19 +106,34 @@ class ExtensionRegistry {
   }
 
   public initializeMonacoExtensions(monacoInstance: typeof monaco) {
-    registerTextSupportExtension(monacoInstance)
-    registerGoExtension(monacoInstance)
-    registerRustExtension(monacoInstance)
-    registerCppExtension(monacoInstance)
-    registerPythonExtension(monacoInstance)
-    registerJavaExtension(monacoInstance)
-    registerDotnetExtension(monacoInstance)
-    registerPhpExtension(monacoInstance)
-    registerAngularExtension(monacoInstance)
-    registerReactExtension(monacoInstance)
-    registerFlutterExtension(monacoInstance)
-    registerRubyExtension(monacoInstance)
+    const safeInit = (name: string, fn: () => void) => {
+      try {
+        fn()
+      } catch (err) {
+        notificationService.notifyError(
+          'Extension System',
+          `Failed to initialize extension ${name}: ${err instanceof Error ? err.message : String(err)}. Monaco will fall back to default syntax highlighting.`
+        )
+      }
+    }
+
+    safeInit('Text Support', () => registerTextSupportExtension(monacoInstance))
+    safeInit('Go Universal', () => registerGoExtension(monacoInstance))
+    safeInit('Rust Ecosystem', () => registerRustExtension(monacoInstance))
+    safeInit('C/C++ Universal', () => registerCppExtension(monacoInstance))
+    safeInit('Python AI', () => registerPythonExtension(monacoInstance))
+    safeInit('Java Universal', () => registerJavaExtension(monacoInstance))
+    safeInit('Dotnet Suite', () => registerDotnetExtension(monacoInstance))
+    safeInit('PHP & Laravel', () => registerPhpExtension(monacoInstance))
+    safeInit('Angular Enterprise', () => registerAngularExtension(monacoInstance))
+    safeInit('React Ecosystem', () => registerReactExtension(monacoInstance))
+    safeInit('Flutter & Dart', () => registerFlutterExtension(monacoInstance))
+    safeInit('Ruby & Rails', () => registerRubyExtension(monacoInstance))
+    safeInit('Node.js Core', () => registerNodeExtension(monacoInstance))
+    safeInit('Frontend Mega-Pack', () => registerFrontendMegaPackExtension(monacoInstance))
+    safeInit('Backend Mega-Pack', () => registerBackendMegaPackExtension(monacoInstance))
   }
 }
 
 export const extensionRegistry = new ExtensionRegistry()
+

@@ -16,6 +16,9 @@ import {
   Layers,
   Smartphone,
   Gem,
+  Server,
+  Globe,
+  Box,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
@@ -75,6 +78,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return <Smartphone size={16} />
       case 'Gem':
         return <Gem size={16} />
+      case 'Server':
+        return <Server size={16} />
+      case 'Globe':
+        return <Globe size={16} />
+      case 'Box':
+        return <Box size={16} />
       case 'Cpu':
       default:
         return <Cpu size={16} />

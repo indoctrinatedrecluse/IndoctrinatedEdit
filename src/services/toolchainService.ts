@@ -239,7 +239,7 @@ export class ToolchainService implements IToolchainRegistry {
         return
       }
 
-      if ('requestIdleCallback' in window) {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
         window.requestIdleCallback(() => {
           this.detectAll().catch((err) => console.warn('Background toolchain detection error:', err))
         }, { timeout: 3000 })
@@ -260,7 +260,7 @@ export class ToolchainService implements IToolchainRegistry {
     const def = this.definitions.get(id)
     if (!def) return null
 
-    if (window.electronAPI?.toolchain) {
+    if (typeof window !== 'undefined' && window.electronAPI?.toolchain) {
       try {
         const result = await window.electronAPI.toolchain.detectOne(def)
         this.detectedResults.set(result.id, result)
@@ -301,7 +301,7 @@ export class ToolchainService implements IToolchainRegistry {
 
     try {
       const defs = this.getDefinitions()
-      if (window.electronAPI?.toolchain) {
+      if (typeof window !== 'undefined' && window.electronAPI?.toolchain) {
         const results = await window.electronAPI.toolchain.detectAll(defs)
         for (const res of results) {
           this.detectedResults.set(res.id, res)
@@ -340,6 +340,7 @@ export class ToolchainService implements IToolchainRegistry {
 
   private loadCache(): void {
     try {
+      if (typeof localStorage === 'undefined') return
       const data = localStorage.getItem(CACHE_KEY)
       if (data) {
         const parsed: CachedToolchainData = JSON.parse(data)
@@ -356,6 +357,7 @@ export class ToolchainService implements IToolchainRegistry {
 
   private saveCache(): void {
     try {
+      if (typeof localStorage === 'undefined') return
       const data: CachedToolchainData = {
         timestamp: Date.now(),
         results: Array.from(this.detectedResults.values()),
