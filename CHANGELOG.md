@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ ] **💻 Integrated Multi-Shell Terminal Subsystem**
   - Native terminal multiplexer supporting **PowerShell**, **Bash**, **Git Bash**, **Cygwin**, and **Command Prompt**.
+  - **Automatic PATH Auto-Discovery**: Shells and terminal emulators will be auto-detected dynamically if available on the system `PATH` or standard install directories (Git Bash, Cygwin, WSL, MSYS2).
   - Customizable default shell and profile settings managed via JSON configuration file, searchable and editable directly via Command Palette (`> Open Terminal Configuration (JSON)`).
   - Split terminals, tabs, and integrated Liquid Glass styling.
 
