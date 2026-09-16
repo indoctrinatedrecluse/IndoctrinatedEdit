@@ -329,6 +329,20 @@ export const App: React.FC = () => {
     })
   }, [rightPaneTab])
 
+  const handleToggleRestClient = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('rest')
+        return true
+      }
+      if (rightPaneTab !== 'rest') {
+        setRightPaneTab('rest')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
   const handleInsertAtCursor = useCallback((code: string) => {
     editorHostRef.current?.insertAtCursor(code)
   }, [])
@@ -640,6 +654,7 @@ export const App: React.FC = () => {
       onShowSearch: () => setActiveView('search'),
       onToggleAi: handleToggleAi,
       onToggleDatabase: handleToggleDatabase,
+      onToggleRestClient: handleToggleRestClient,
       onToggleSidebar: handleToggleSidebar,
       onOpenSettings: () => setActiveView('settings'),
       onToggleNotifications: handleToggleNotifications,
@@ -669,6 +684,7 @@ export const App: React.FC = () => {
       openPalette,
       handleToggleAi,
       handleToggleDatabase,
+      handleToggleRestClient,
       handleToggleSidebar,
       handleToggleNotifications,
       handleToggleTerminal,
@@ -746,6 +762,9 @@ export const App: React.FC = () => {
       { id: 'db.sampleEcommerce', title: 'Database: Switch to E-Commerce SQLite DB', category: 'Tools', description: 'Explore orders, customers, and product inventory schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('ecommerce_db') } },
       { id: 'db.sampleTelemetry', title: 'Database: Switch to Cloud Telemetry Postgres DB', category: 'Tools', description: 'Explore clusters, nodes, and microservices schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('telemetry_db') } },
 
+      // REST & GraphQL API Client
+      { id: 'rest.toggle', title: 'REST Client: Toggle REST & GraphQL Client', category: 'Tools', shortcut: 'Ctrl+Alt+R', description: 'Open REST and GraphQL API runner dock', handler: handleToggleRestClient },
+
       // AI Multi-Model Assistant
       { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', description: 'Open AI chat and refactor dock', handler: handleToggleAi },
       { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: handleToggleAi },
@@ -758,7 +777,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleSelectTheme, openPalette])
+  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleSelectTheme, openPalette])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -776,6 +795,8 @@ export const App: React.FC = () => {
     onShowExplorer: () => setActiveView((prev) => (prev === 'files' ? null : 'files')),
     onShowSearch: () => setActiveView((prev) => (prev === 'search' ? null : 'search')),
     onToggleAi: handleToggleAi,
+    onToggleDatabase: handleToggleDatabase,
+    onToggleRestClient: handleToggleRestClient,
     onToggleNotifications: handleToggleNotifications,
     onOpenShortcuts: () => setIsShortcutsOpen(true),
     onGoToLine: () => openPalette(':'),
@@ -867,6 +888,8 @@ export const App: React.FC = () => {
           onToggleAi={handleToggleAi}
           isDatabaseOpen={isRightPaneOpen && rightPaneTab === 'database'}
           onToggleDatabase={handleToggleDatabase}
+          isRestClientOpen={isRightPaneOpen && rightPaneTab === 'rest'}
+          onToggleRestClient={handleToggleRestClient}
         />
 
         {/* Collapsible Frosted Sidebar with Spring Animation & Resizer */}

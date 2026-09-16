@@ -25,6 +25,7 @@ import { databaseSchemaExtensionManifest, registerDatabaseSchemaExtension } from
 import { web3ExtensionManifest, registerWeb3Extension } from './web3Support/web3Extension'
 import { logicFormalExtensionManifest, registerLogicFormalExtension } from './logicFormalSupport/logicFormalExtension'
 import { databaseExtensionManifest, registerDatabaseExtension } from './databaseStudio/databaseExtension'
+import { restClientExtensionManifest, registerRestClientExtension } from './restClient/restClientExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
 
@@ -107,7 +108,10 @@ class ExtensionRegistry {
     // 25. Database Studio & SQL Query Runner
     this.register(databaseExtensionManifest)
 
-    // 26. Liquid Glass Shader Shaper
+    // 26. REST & GraphQL API Client
+    this.register(restClientExtensionManifest)
+
+    // 27. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -120,7 +124,7 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 27. Unified Diagnostics & Toolchain Bus
+    // 28. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
@@ -194,6 +198,7 @@ class ExtensionRegistry {
     safeInit('Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
     safeInit('Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
     safeInit('Database Studio', () => registerDatabaseExtension(monacoInstance))
+    safeInit('REST & GraphQL Client', () => registerRestClientExtension(monacoInstance))
     safeInit('Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
     safeInit('Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
   }

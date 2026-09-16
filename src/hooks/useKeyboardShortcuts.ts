@@ -15,6 +15,8 @@ interface ShortcutHandlers {
   onShowExplorer?: () => void
   onShowSearch?: () => void
   onToggleAi?: () => void
+  onToggleDatabase?: () => void
+  onToggleRestClient?: () => void
   onToggleNotifications?: () => void
   onOpenShortcuts?: () => void
   onGoToLine?: () => void
@@ -121,6 +123,20 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.altKey && key === 'a') || (e.shiftKey && key === 'a')) {
         e.preventDefault()
         handlers.onToggleAi?.()
+        return
+      }
+
+      // Ctrl+Shift+D -> Toggle Database Studio
+      if (e.shiftKey && key === 'd') {
+        e.preventDefault()
+        handlers.onToggleDatabase?.()
+        return
+      }
+
+      // Ctrl+Alt+R -> Toggle REST & GraphQL API Client
+      if (e.altKey && key === 'r') {
+        e.preventDefault()
+        handlers.onToggleRestClient?.()
         return
       }
 

@@ -306,6 +306,14 @@ const SHORTCUT_DATABASE: Omit<ShortcutEntry, 'onExecute'>[] = [
     actionId: 'db.toggle',
   },
   {
+    id: 'view.restClient',
+    title: 'Toggle REST & GraphQL API Client',
+    category: 'View',
+    keys: ['Ctrl', 'Alt', 'R'],
+    description: 'Open right-docked REST & GraphQL API client and request runner',
+    actionId: 'rest.toggle',
+  },
+  {
     id: 'view.sidebar',
     title: 'Toggle Primary Sidebar',
     category: 'View',

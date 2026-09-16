@@ -1,5 +1,5 @@
 import React from 'react'
-import { Files, GitBranch, Search, Blocks, Palette, Settings, Bot, Database } from 'lucide-react'
+import { Files, GitBranch, Search, Blocks, Palette, Settings, Bot, Database, Globe } from 'lucide-react'
 
 export type ActivityView = 'files' | 'git' | 'search' | 'extensions' | 'themes' | 'settings'
 
@@ -11,6 +11,8 @@ interface ActivityBarProps {
   onToggleAi?: () => void
   isDatabaseOpen?: boolean
   onToggleDatabase?: () => void
+  isRestClientOpen?: boolean
+  onToggleRestClient?: () => void
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
@@ -21,6 +23,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   onToggleAi,
   isDatabaseOpen = false,
   onToggleDatabase,
+  isRestClientOpen = false,
+  onToggleRestClient,
 }) => {
   const topItems: { id: ActivityView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
@@ -55,10 +59,21 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive db-bar-btn ${isDatabaseOpen ? 'active' : ''}`}
             onClick={onToggleDatabase}
-            title="Database Studio & SQL Query Runner"
+            title="Database Studio & SQL Query Runner (Ctrl+Shift+D)"
           >
             <Database size={18} />
             {isDatabaseOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleRestClient && (
+          <button
+            className={`activity-btn glass-interactive rest-bar-btn ${isRestClientOpen ? 'active' : ''}`}
+            onClick={onToggleRestClient}
+            title="REST & GraphQL API Client (Ctrl+Alt+R)"
+          >
+            <Globe size={18} />
+            {isRestClientOpen && <div className="active-indicator" />}
           </button>
         )}
 

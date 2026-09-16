@@ -1,7 +1,8 @@
 import React from 'react'
-import { Bot, Database, X } from 'lucide-react'
+import { Bot, Database, Globe, X } from 'lucide-react'
 import { AiChatPanel } from '../AiChat/AiChatPanel'
 import { DatabaseStudio } from '../Database/DatabaseStudio'
+import { RestClientView } from '../RestClient/RestClientView'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab = 'ai' | 'database' | 'rest'
@@ -54,6 +55,15 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
             <Database size={13} className="tab-icon db" />
             <span>Database Studio</span>
           </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'rest' ? 'active' : ''}`}
+            onClick={() => onSelectTab('rest')}
+            title="REST & GraphQL API Client"
+          >
+            <Globe size={13} className="tab-icon rest" />
+            <span>REST Client</span>
+          </button>
         </div>
 
         <div className="dock-tabs-right">
@@ -79,6 +89,14 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         {activeTab === 'database' && (
           <DatabaseStudio
+            onClose={onClose}
+            isDocked={true}
+            dockPosition="right"
+          />
+        )}
+
+        {activeTab === 'rest' && (
+          <RestClientView
             onClose={onClose}
             isDocked={true}
             dockPosition="right"
@@ -149,6 +167,10 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         .dock-tab-item .tab-icon.db {
           color: #30D158;
+        }
+
+        .dock-tab-item .tab-icon.rest {
+          color: #0A84FF;
         }
 
         .dock-close-trigger {

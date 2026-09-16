@@ -29,10 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - High-performance Tabular Results Grid with sorting, row filtering, nested JSON object modal inspection, query history log, and CSV/JSON export.
   - Modular extension design integrated with the **Right Auxiliary Pane** and switchable between AI Assistant and Database Studio.
 
-- [ ] **🌐 Feature-Packed In-Editor REST & API Client Extension (Phase 4)**
-  - Full-featured HTTP/REST and GraphQL request builder with parameter tables, auth headers, and payload formatting.
-  - Multi-environment variable support and response history with status codes and timing metrics.
-  - Modular extension design with drag-and-dock support for the **Right Auxiliary Pane**.
+- [x] **🌐 Feature-Packed In-Editor REST & API Client Extension (Completed in v2.0.0-dev / Phase 4)**
+  - Full-featured HTTP/REST and GraphQL request builder with parameter tables, auth headers (Bearer, Basic, API Key), and payload formatting.
+  - Multi-environment variable interpolation (`{{baseUrl}}`, `{{token}}`, `{{userId}}`, `{{apiKey}}`) across URLs, headers, and request bodies.
+  - Dynamic response inspector with status code pills, real-time round-trip latency, payload size metrics, JSON formatting, and copy triggers.
+  - cURL command exporter and persistent execution history with request replay.
+  - Right Auxiliary Pane integration with tab switching between AI Assistant, Database Studio, and REST Client, plus Activity Bar, Menu Bar, and `Ctrl+Alt+R` shortcut accelerator.
 
 - [ ] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers (Phase 5)**
   - Gutter breakpoint toggling (conditional breakpoints, logpoints).

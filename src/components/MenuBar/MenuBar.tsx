@@ -19,6 +19,7 @@ import {
   Bell,
   Keyboard,
   Database,
+  Globe,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -46,6 +47,7 @@ export interface MenuActionHandlers {
   onOpenTerminalConfig?: () => void
   onOpenProblems?: () => void
   onToggleDatabase?: () => void
+  onToggleRestClient?: () => void
 }
 
 interface MenuItem {
@@ -181,8 +183,16 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
         {
           id: 'view.database',
           label: 'Database Studio (SQL Runner)',
+          shortcut: 'Ctrl+Shift+D',
           icon: <Database size={14} />,
           onClick: handlers.onToggleDatabase,
+        },
+        {
+          id: 'view.restClient',
+          label: 'REST & GraphQL API Client',
+          shortcut: 'Ctrl+Alt+R',
+          icon: <Globe size={14} />,
+          onClick: handlers.onToggleRestClient,
         },
         { id: 'sep5', label: '', isSeparator: true },
         {
