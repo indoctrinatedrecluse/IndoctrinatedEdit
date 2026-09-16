@@ -1,14 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import { registeredThemes, getThemeById } from '../src/themes/themeRegistry'
+import { registeredThemes, getThemeById, applyGlassTheme } from '../src/themes/themeRegistry'
 
 describe('Theme Registry & Monaco Compatibility', () => {
-  it('should include all 4 official themes', () => {
-    expect(registeredThemes.length).toBeGreaterThanOrEqual(4)
+  it('should include all 10 liquid glass, retro, futuristic, and neon themes', () => {
+    expect(registeredThemes.length).toBe(10)
     const ids = registeredThemes.map((t) => t.id)
     expect(ids).toContain('indoctrinated.theme.cupertino-midnight')
     expect(ids).toContain('indoctrinated.theme.liquid-obsidian')
     expect(ids).toContain('indoctrinated.theme.frosted-amber')
     expect(ids).toContain('indoctrinated.theme.cyberpunk-neon')
+    expect(ids).toContain('indoctrinated.theme.synthwave-84')
+    expect(ids).toContain('indoctrinated.theme.matrix-cyberdeck')
+    expect(ids).toContain('indoctrinated.theme.retro-crt-amber')
+    expect(ids).toContain('indoctrinated.theme.tokyo-night-neon')
+    expect(ids).toContain('indoctrinated.theme.deep-space-nebula')
+    expect(ids).toContain('indoctrinated.theme.laser-grid-tron')
   })
 
   it('CRITICAL REGRESSION: Sanitized Monaco theme names MUST strictly match /^[a-zA-Z0-9-]+$/', () => {
@@ -64,8 +70,17 @@ describe('Theme Registry & Monaco Compatibility', () => {
     const cupertino = getThemeById('indoctrinated.theme.cupertino-midnight')
     expect(cupertino.id).toBe('indoctrinated.theme.cupertino-midnight')
 
+    const synthwave = getThemeById('indoctrinated.theme.synthwave-84')
+    expect(synthwave.id).toBe('indoctrinated.theme.synthwave-84')
+
     const fallback = getThemeById('non.existent.theme.id')
     expect(fallback).toBeDefined()
     expect(fallback.id).toBe('indoctrinated.theme.cupertino-midnight')
+  })
+
+  it('should apply CSS variables when switching themes in DOM environment', () => {
+    for (const theme of registeredThemes) {
+      expect(() => applyGlassTheme(theme)).not.toThrow()
+    }
   })
 })
