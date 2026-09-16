@@ -173,7 +173,7 @@ export class TerminalService {
       icon: profile.icon,
       cwd: targetCwd,
       buffer: [
-        `\x1b[36m╭── IndoctrinatedEdit Terminal Subsystem [v2.0.0]\x1b[0m`,
+        `\x1b[36m╭── IndoctrinatedEdit Terminal Subsystem [v3.0.0]\x1b[0m`,
         `\x1b[90m│ Shell: ${profile.name} (${profile.path})\x1b[0m`,
         `\x1b[90m│ Working Directory: ${targetCwd}\x1b[0m`,
         `\x1b[36m╰────────────────────────────────────────────────\x1b[0m\r\n`,
@@ -294,7 +294,7 @@ export class TerminalService {
     }
 
     if (cmd === 'version') {
-      this.appendOutput(tabId, `IndoctrinatedEdit v2.0.0 PRO (Liquid Glass Engine)\r\n`)
+      this.appendOutput(tabId, `IndoctrinatedEdit v3.0.0 PRO (Liquid Glass Engine)\r\n`)
       return
     }
 

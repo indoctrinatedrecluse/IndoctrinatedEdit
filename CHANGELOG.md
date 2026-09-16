@@ -7,46 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - Roadmap & Next Release TODO
+## [3.0.0] - 2026-09-16
 
-### 📋 Planned Capabilities for Upcoming Release
+### 🚀 Major Release — Terminal Multiplexer, Problems & Linter Engine, Database Studio, REST API Client, Multi-Compiler Debugger & Multi-Cursor Find/Replace
 
-- [x] **💻 Integrated Multi-Shell Terminal Subsystem (Completed in v2.0.0-dev / Phase 1)**
-  - Native terminal multiplexer supporting **PowerShell**, **Bash**, **Git Bash**, **Cygwin**, and **Command Prompt**.
-  - **Automatic PATH Auto-Discovery**: Shells and terminal emulators auto-detected dynamically from system `PATH` and standard directories.
-  - Customizable default shell and profile settings managed via JSON configuration file (`~/.indoctrinated/terminal.json`), searchable and editable directly via Command Palette (`> Preferences: Open Terminal Configuration (JSON)`).
-  - Split terminals, tabs, ANSI color rendering, and integrated Liquid Glass styling.
+IndoctrinatedEdit 3.0.0 is a milestone major release expanding the editor into a comprehensive, extensible IDE with native multi-shell terminals, real-time code diagnostics, integrated database querying, an in-editor REST/GraphQL client, multi-compiler breakpoint debugging, and full multi-cursor / regex find and replace capabilities.
 
-- [x] **⚠️ Unified "Problems" Panel & High-Accuracy Linter Integration (Completed in v2.0.0-dev / Phase 2)**
-  - Dedicated "Problems" dockable panel listing real-time errors, warnings, and hints.
-  - Multi-language static analysis and linting engine (TypeScript, JavaScript, Python PEP 8, CSS, JSON syntax validation) integrated with Monaco model markers for industry-standard error detection.
-  - Interactive file grouping, severity filtering (All, Errors, Warnings, Info), real-time search query filter, line/column jumping, and error detail clipboard export.
-  - Live Status Bar diagnostics counter with one-click direct jump into the Problems panel.
+#### 💻 Integrated Multi-Shell Terminal Subsystem
+- **Native Multi-Shell Support**: Run and switch between **PowerShell**, **Bash**, **Git Bash**, **Cygwin**, and **Command Prompt** directly in the bottom dockable panel.
+- **Dynamic PATH Auto-Discovery**: Automatically discovers installed shells across standard Windows/Unix locations and active environment paths.
+- **Configurable Terminal Profiles**: Custom shells and startup arguments configurable via `~/.indoctrinated/terminal.json`, accessible via Command Palette (`> Preferences: Open Terminal Configuration (JSON)`).
+- **Modern Terminal Experience**: ANSI 256-color parsing, multi-tab terminal management, split views, and Liquid Glass aesthetics.
 
-- [x] **🗄️ Database Schema Viewer & SQL Query Runner Extension (Completed in v2.0.0-dev / Phase 3)**
-  - Visual database schema explorer with table and column search, primary key and foreign key badges, and data types.
-  - Interactive SQL query runner supporting `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `JOIN`, `WHERE`, `ORDER BY`, `GROUP BY`, and aggregate calculations (`COUNT`, `SUM`, `AVG`, `MAX`, `MIN`).
-  - High-performance Tabular Results Grid with sorting, row filtering, nested JSON object modal inspection, query history log, and CSV/JSON export.
-  - Modular extension design integrated with the **Right Auxiliary Pane** and switchable between AI Assistant and Database Studio.
+#### ⚠️ Unified "Problems" Panel & High-Accuracy Linter Integration
+- **Dedicated Diagnostics Panel**: Real-time listing of workspace syntax errors, warnings, and code hints in a collapsible bottom panel.
+- **Multi-Language Static Analysis**: Accurate linters and syntax validators for TypeScript, JavaScript, Python (PEP 8), CSS, and JSON integrated with Monaco model markers.
+- **Interactive Triage**: Filter by severity (Errors, Warnings, Info), live search query filtering, file grouping, double-click line navigation, and clipboard export.
+- **Live Status Bar Counter**: Real-time error and warning badges with one-click direct jump into the Problems panel.
 
-- [x] **🌐 Feature-Packed In-Editor REST & API Client Extension (Completed in v2.0.0-dev / Phase 4)**
-  - Full-featured HTTP/REST and GraphQL request builder with parameter tables, auth headers (Bearer, Basic, API Key), and payload formatting.
-  - Multi-environment variable interpolation (`{{baseUrl}}`, `{{token}}`, `{{userId}}`, `{{apiKey}}`) across URLs, headers, and request bodies.
-  - Dynamic response inspector with status code pills, real-time round-trip latency, payload size metrics, JSON formatting, and copy triggers.
-  - cURL command exporter and persistent execution history with request replay.
-  - Right Auxiliary Pane integration with tab switching between AI Assistant, Database Studio, and REST Client, plus Activity Bar, Menu Bar, and `Ctrl+Alt+R` shortcut accelerator.
+#### 🗄️ Database Schema Viewer & SQL Query Runner Extension
+- **Visual Schema Explorer**: Interactive sidebar explorer displaying connected database tables, column definitions, data types, and PK/FK indicators.
+- **Interactive SQL Runner**: In-editor SQL query execution supporting complex queries (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `JOIN`, `WHERE`, `GROUP BY`, aggregate functions).
+- **Tabular Results Grid**: Sortable, searchable data grid with pagination, deep JSON inspector modal, query execution history, and CSV/JSON export.
+- **Right Auxiliary Pane Integration**: Seamlessly switch between AI Assistant, Database Studio, and REST Client in the right auxiliary panel.
 
-- [x] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers (Completed in v2.0.0-dev / Phase 5)**
-  - Gutter breakpoint toggling with glyph margin support for standard breakpoints, conditional expressions, hit count thresholds, and inline logpoints (`F9`).
-  - Multi-compiler runtime adapters and simulated DAP integrations supporting **Node.js / TypeScript (V8)**, **Python (debugpy)**, **Rust / C++ (LLDB)**, and **Go (Delve)**.
-  - Floating Liquid Glass execution control toolbar (`DebugToolbar`) with Continue (`F5`), Pause (`F6`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Restart (`Ctrl+Shift+F5`), and Stop (`Shift+F5`).
-  - Run & Debug Activity Sidebar (`Ctrl+Shift+D`) with target selection, interactive Variables tree (Local, Global, Closure, Registers), Watch expressions evaluator, Call Stack frames, Breakpoint manager, and interactive REPL Debug Console.
+#### 🌐 Feature-Packed In-Editor REST & GraphQL API Client Extension
+- **Comprehensive API Client**: Construct and execute HTTP/REST and GraphQL requests with full support for query parameters, headers, authentication (Bearer token, Basic auth, API Key), and formatted payloads.
+- **Environment Variables**: Dynamic variable interpolation (`{{baseUrl}}`, `{{token}}`, `{{apiKey}}`) across request URLs, headers, and request bodies.
+- **Rich Response Inspector**: Formatted JSON response viewer with syntax highlighting, HTTP status badges, round-trip latency, payload size counters, and copy triggers.
+- **cURL Exporter & History**: One-click cURL export and persistent request execution history with replay functionality.
 
-- [x] **🔍 Multi-Cursor / Multi-Line Editing & Advanced Find/Replace Suite (Completed in v2.0.0-dev / Phase 6)**
-  - Floating Liquid Glass Find & Replace suite (`FindReplaceWidget.tsx`) with real-time match count badges, Match Case (`Alt+C`), Whole Word (`Alt+W`), Regular Expressions (`Alt+R`), and Find in Selection (`Alt+L`).
-  - Next/Previous navigation (`Enter`/`F3`, `Shift+Enter`/`Shift+F3`), single match replacement (`Enter`), and atomic batch Replace All (`Ctrl+Alt+Enter`).
-  - Full multi-cursor spawning: `Alt+Click` for arbitrary multi-cursor placement, `Ctrl+Alt+Up` / `Ctrl+Alt+Down` for vertical column cursors, `Ctrl+D` for adding next matching word to selection, `Alt+Enter` / `Ctrl+Shift+L` for selecting all occurrences across the document.
-  - Complete integration with Command Palette, Menu Bar, `useKeyboardShortcuts`, and documentation in the Help -> Keyboard Shortcuts modal (`Ctrl+K Ctrl+S`).
+#### 🐞 Breakpoint Setting & Multi-Compiler Debug Analysis Protocol
+- **Gutter Breakpoints & Glyph Margin**: Click gutter to toggle line breakpoints, conditional breakpoints, hit counts, and inline logpoints (`F9`).
+- **Multi-Compiler Runtime Adapters**: Debugging protocols for **Node.js / TypeScript (V8)**, **Python (debugpy)**, **Rust / C++ (LLDB)**, and **Go (Delve)**.
+- **Floating Execution Control Toolbar**: Floating Liquid Glass toolbar with Continue (`F5`), Pause (`F6`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Restart (`Ctrl+Shift+F5`), and Stop (`Shift+F5`).
+- **Run & Debug Panel**: Call stack inspection, scoped variable viewer (Local, Global, Closure, Registers), Watch expressions evaluator, breakpoint manager, and interactive REPL debug console.
+
+#### 🔍 Multi-Cursor / Multi-Line Editing & Advanced Find/Replace Suite
+- **Advanced Find & Replace Suite**: Floating widget with real-time match counters, Match Case (`Alt+C`), Whole Word (`Alt+W`), Regular Expression (`Alt+R`), and Find in Selection (`Alt+L`).
+- **Batch & Interactive Replacement**: Step-by-step match navigation (`Enter`/`F3`, `Shift+Enter`/`Shift+F3`), single replacement, and atomic batch Replace All (`Ctrl+Alt+Enter`).
+- **Multi-Cursor & Multi-Line Editing**: Spawning cursors via `Alt+Click`, vertical column cursors (`Ctrl+Alt+Up` / `Ctrl+Alt+Down`), select next match (`Ctrl+D`), and select all occurrences (`Alt+Enter` / `Ctrl+Shift+L`).
+- **Updated Shortcuts Reference**: All new shortcuts documented in Help -> Keyboard Shortcuts modal (`Ctrl+K Ctrl+S`).
 
 ---
 

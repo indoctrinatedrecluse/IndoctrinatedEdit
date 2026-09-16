@@ -593,6 +593,16 @@ export const App: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => notificationService.getNotifications())
 
   useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0)
+      }
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
     return notificationService.subscribe((list) => {
       setNotifications(list)
     })
@@ -904,12 +914,12 @@ export const App: React.FC = () => {
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
-        version="2.0.0"
+        version="3.0.0"
       />
       <LicenseModal
         isOpen={isLicenseOpen}
         onClose={() => setIsLicenseOpen(false)}
-        version="2.0.0"
+        version="3.0.0"
       />
       <ShortcutsModal
         isOpen={isShortcutsOpen}

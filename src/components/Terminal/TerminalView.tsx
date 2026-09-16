@@ -27,8 +27,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   const [historyIndex, setHistoryIndex] = useState<number>(-1)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
 
-  const outputEndRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const viewportRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  const scrollToBottom = (tabId: string) => {
+    const viewport = viewportRefs.current[tabId]
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight
+    }
+  }
 
   // Initialize terminal subsystem on mount
   useEffect(() => {
@@ -65,10 +72,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
 
     const unsubscribe = terminalService.onData(activeTab.id, () => {
       setTabs([...terminalService.getTabs()])
-      // Auto-scroll
-      setTimeout(() => {
-        outputEndRefs.current[activeTab.id]?.scrollIntoView({ behavior: 'smooth' })
-      }, 50)
+      // Auto-scroll directly within viewport without touching window scroll
+      requestAnimationFrame(() => {
+        scrollToBottom(activeTab.id)
+      })
     })
 
     return () => {
@@ -82,8 +89,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     setTabs(terminalService.getTabs())
     setActiveTabId(newTab.id)
     setTimeout(() => {
-      inputRefs.current[newTab.id]?.focus()
-    }, 100)
+      inputRefs.current[newTab.id]?.focus({ preventScroll: true })
+      scrollToBottom(newTab.id)
+    }, 50)
   }
 
   const handleCloseTab = async (tabId: string, e?: React.MouseEvent) => {
@@ -133,10 +141,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     await terminalService.write(tabId, `${raw}\r\n`)
     setTabs([...terminalService.getTabs()])
 
-    // Auto-scroll
-    setTimeout(() => {
-      outputEndRefs.current[tabId]?.scrollIntoView({ behavior: 'smooth' })
-    }, 50)
+    // Auto-scroll inside container
+    requestAnimationFrame(() => {
+      scrollToBottom(tabId)
+    })
   }
 
   const handleKeyDown = (tabId: string, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -192,7 +200,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     return (
       <div key={tab.id} className="terminal-pane">
         {/* Terminal Output Area */}
-        <div className="terminal-output-viewport" onClick={() => inputRefs.current[tab.id]?.focus()}>
+        <div
+          ref={(el) => {
+            viewportRefs.current[tab.id] = el
+          }}
+          className="terminal-output-viewport"
+          onClick={() => inputRefs.current[tab.id]?.focus({ preventScroll: true })}
+        >
           {tab.buffer.map((line, idx) => {
             const tokens: AnsiToken[] = terminalService.parseAnsi(line)
             return (
@@ -214,21 +228,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
               </div>
             )
           })}
-          <div ref={(el) => { outputEndRefs.current[tab.id] = el }} />
         </div>
 
         {/* Input Prompt Row */}
         <div className="terminal-prompt-bar">
           <span className="prompt-arrow">❯</span>
           <input
-            ref={(el) => { inputRefs.current[tab.id] = el }}
+            ref={(el) => {
+              inputRefs.current[tab.id] = el
+            }}
             type="text"
             className="terminal-input"
             value={inputValues[tab.id] || ''}
             onChange={(e) => setInputValues({ ...inputValues, [tab.id]: e.target.value })}
             onKeyDown={(e) => handleKeyDown(tab.id, e)}
             placeholder={`Execute command in ${tab.title}...`}
-            autoFocus
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
