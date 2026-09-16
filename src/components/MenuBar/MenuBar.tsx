@@ -17,9 +17,18 @@ import {
   KeyRound,
   Info,
   Bell,
-  Keyboard,
+  Play,
+  Square,
+  RotateCcw,
+  ArrowRight,
+  ArrowDown,
+  ArrowUp,
+  Circle,
+  Trash2,
+  Bug,
   Database,
   Globe,
+  Keyboard,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -35,6 +44,7 @@ export interface MenuActionHandlers {
   onShowExplorer?: () => void
   onShowGitGraph?: () => void
   onShowSearch?: () => void
+  onShowDebug?: () => void
   onToggleAi?: () => void
   onToggleSidebar?: () => void
   onOpenSettings?: () => void
@@ -48,6 +58,15 @@ export interface MenuActionHandlers {
   onOpenProblems?: () => void
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
+  // Debug Handlers
+  onStartDebugging?: () => void
+  onStopDebugging?: () => void
+  onRestartDebugging?: () => void
+  onStepOver?: () => void
+  onStepInto?: () => void
+  onStepOut?: () => void
+  onToggleBreakpoint?: () => void
+  onClearAllBreakpoints?: () => void
 }
 
 interface MenuItem {
@@ -174,6 +193,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           onClick: handlers.onShowSearch,
         },
         {
+          id: 'view.debug',
+          label: 'Run & Debug Panel',
+          shortcut: 'Ctrl+Shift+D',
+          icon: <Bug size={14} />,
+          onClick: handlers.onShowDebug,
+        },
+        {
           id: 'view.ai',
           label: 'AI Multi-Model Assistant',
           shortcut: 'Ctrl+Alt+A',
@@ -183,7 +209,6 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
         {
           id: 'view.database',
           label: 'Database Studio (SQL Runner)',
-          shortcut: 'Ctrl+Shift+D',
           icon: <Database size={14} />,
           onClick: handlers.onToggleDatabase,
         },
@@ -230,6 +255,76 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+,',
           icon: <Settings size={14} />,
           onClick: handlers.onOpenSettings,
+        },
+      ],
+    },
+    {
+      id: 'run',
+      label: 'Run',
+      items: [
+        {
+          id: 'run.start',
+          label: 'Start Debugging',
+          shortcut: 'F5',
+          icon: <Play size={14} />,
+          onClick: handlers.onStartDebugging,
+        },
+        {
+          id: 'run.withoutDebugging',
+          label: 'Run Without Debugging',
+          shortcut: 'Ctrl+F5',
+          icon: <Play size={14} />,
+          onClick: handlers.onStartDebugging,
+        },
+        {
+          id: 'run.stop',
+          label: 'Stop Debugging',
+          shortcut: 'Shift+F5',
+          icon: <Square size={14} />,
+          onClick: handlers.onStopDebugging,
+        },
+        {
+          id: 'run.restart',
+          label: 'Restart Debugging',
+          shortcut: 'Ctrl+Shift+F5',
+          icon: <RotateCcw size={14} />,
+          onClick: handlers.onRestartDebugging,
+        },
+        { id: 'run_sep1', label: '', isSeparator: true },
+        {
+          id: 'run.stepOver',
+          label: 'Step Over',
+          shortcut: 'F10',
+          icon: <ArrowRight size={14} />,
+          onClick: handlers.onStepOver,
+        },
+        {
+          id: 'run.stepInto',
+          label: 'Step Into',
+          shortcut: 'F11',
+          icon: <ArrowDown size={14} />,
+          onClick: handlers.onStepInto,
+        },
+        {
+          id: 'run.stepOut',
+          label: 'Step Out',
+          shortcut: 'Shift+F11',
+          icon: <ArrowUp size={14} />,
+          onClick: handlers.onStepOut,
+        },
+        { id: 'run_sep2', label: '', isSeparator: true },
+        {
+          id: 'run.toggleBreakpoint',
+          label: 'Toggle Breakpoint',
+          shortcut: 'F9',
+          icon: <Circle size={14} />,
+          onClick: handlers.onToggleBreakpoint,
+        },
+        {
+          id: 'run.clearBreakpoints',
+          label: 'Delete All Breakpoints',
+          icon: <Trash2 size={14} />,
+          onClick: handlers.onClearAllBreakpoints,
         },
       ],
     },

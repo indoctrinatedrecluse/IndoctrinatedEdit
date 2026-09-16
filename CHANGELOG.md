@@ -36,9 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - cURL command exporter and persistent execution history with request replay.
   - Right Auxiliary Pane integration with tab switching between AI Assistant, Database Studio, and REST Client, plus Activity Bar, Menu Bar, and `Ctrl+Alt+R` shortcut accelerator.
 
-- [ ] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers (Phase 5)**
-  - Gutter breakpoint toggling (conditional breakpoints, logpoints).
-  - Debugging orchestration with step over, step into, step out, call stack inspection, and variable watch expressions for targeted toolchains and compilers (exploring Debug Adapter Protocol / DAP integration).
+- [x] **🐞 Breakpoint Setting & Debug Analysis Protocol for Select Compilers (Completed in v2.0.0-dev / Phase 5)**
+  - Gutter breakpoint toggling with glyph margin support for standard breakpoints, conditional expressions, hit count thresholds, and inline logpoints (`F9`).
+  - Multi-compiler runtime adapters and simulated DAP integrations supporting **Node.js / TypeScript (V8)**, **Python (debugpy)**, **Rust / C++ (LLDB)**, and **Go (Delve)**.
+  - Floating Liquid Glass execution control toolbar (`DebugToolbar`) with Continue (`F5`), Pause (`F6`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Restart (`Ctrl+Shift+F5`), and Stop (`Shift+F5`).
+  - Run & Debug Activity Sidebar (`Ctrl+Shift+D`) with target selection, interactive Variables tree (Local, Global, Closure, Registers), Watch expressions evaluator, Call Stack frames, Breakpoint manager, and interactive REPL Debug Console.
 
 - [ ] **🔍 Multi-Cursor / Multi-Line Editing & Advanced Find/Replace Suite (Phase 6)**
   - Full multi-cursor and column/box selection support (`Alt+Click`, `Ctrl+Alt+Up/Down`, `Ctrl+D` add next occurrence, `Ctrl+Shift+L` select all occurrences).

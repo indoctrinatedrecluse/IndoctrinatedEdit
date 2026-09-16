@@ -1,8 +1,9 @@
-import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
+import { useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react'
 import Editor, { OnMount, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
+import { debugService } from '../../services/debugService'
 
 // Force @monaco-editor/react to use local monaco bundle, bypassing cdn.jsdelivr.net completely
 loader.config({ monaco })
@@ -38,6 +39,7 @@ interface EditorHostProps {
   content: string
   language: string
   theme: ThemeDefinition
+  activeFilePath?: string
   onChange?: (value: string | undefined) => void
   onCursorChange?: (line: number, column: number) => void
   onSelectionChange?: (selection: SelectionInfo | null) => void
@@ -48,6 +50,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   content,
   language,
   theme,
+  activeFilePath = 'welcome.ts',
   onChange,
   onCursorChange,
   onSelectionChange,
@@ -55,6 +58,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 }, ref) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
+  const decorationsRef = useRef<string[]>([])
 
   useImperativeHandle(ref, () => ({
     insertAtCursor: (text: string) => {
@@ -219,20 +223,16 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           continue
         }
 
-        // Functions / Methods (JS, TS, Rust, Go, Python, PHP, Ruby, Java, C++)
-        const fnMatch =
-          trimmed.match(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/) ||
-          trimmed.match(/(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(/) ||
-          trimmed.match(/(?:def|fn|func)\s+([A-Za-z0-9_$]+)/) ||
-          trimmed.match(/(?:public|private|protected|static|override)?\s*(?:async\s*)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*[{:]/)
-
-        if (fnMatch && fnMatch[1] && !['if', 'for', 'while', 'switch', 'catch', 'constructor'].includes(fnMatch[1])) {
+        // Functions / Methods
+        const fnMatch = trimmed.match(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)|(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(/)
+        if (fnMatch) {
           symbols.push({
-            name: fnMatch[1],
+            name: fnMatch[1] || fnMatch[2],
             kind: 'function',
             line: i,
-            detail: trimmed.slice(0, 50),
+            detail: 'Function',
           })
+          continue
         }
       }
 
@@ -242,11 +242,10 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
   const registerAndApplyTheme = (monacoInstance: typeof monaco, targetTheme: ThemeDefinition) => {
     try {
-      const sanitizedId = targetTheme.id.replace(/[^a-zA-Z0-9-]/g, '-')
-      const themeName = `indoctrinated-${sanitizedId}`
+      const themeName = targetTheme.id
 
       monacoInstance.editor.defineTheme(themeName, {
-        base: targetTheme.type === 'light' ? 'vs' : 'vs-dark',
+        base: 'vs-dark',
         inherit: true,
         rules: targetTheme.colors.tokenRules.map((rule) => ({
           token: rule.token,
@@ -291,6 +290,59 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     }
   }
 
+  // Update Breakpoint & Execution Line Decorations
+  const updateDebugDecorations = useCallback(() => {
+    const editor = editorRef.current
+    const monacoInstance = monacoRef.current
+    if (!editor || !monacoInstance) return
+
+    const bps = debugService.getBreakpoints(activeFilePath)
+    const activeLoc = debugService.getActiveLocation()
+
+    const newDecorations: monaco.editor.IModelDeltaDecoration[] = []
+
+    // 1. Breakpoint Glyphs
+    bps.forEach((bp) => {
+      let glyphClass = 'debug-breakpoint-glyph'
+      if (!bp.enabled) {
+        glyphClass = 'debug-breakpoint-glyph-disabled'
+      } else if (bp.condition) {
+        glyphClass = 'debug-breakpoint-glyph-conditional'
+      } else if (bp.logMessage) {
+        glyphClass = 'debug-breakpoint-glyph-logpoint'
+      }
+
+      newDecorations.push({
+        range: new monacoInstance.Range(bp.line, 1, bp.line, 1),
+        options: {
+          isWholeLine: false,
+          glyphMarginClassName: glyphClass,
+          glyphMarginHoverMessage: {
+            value: `Breakpoint (Line ${bp.line})${bp.condition ? ` [Cond: ${bp.condition}]` : ''}${bp.logMessage ? ` [Log: ${bp.logMessage}]` : ''}`,
+          },
+        },
+      })
+    })
+
+    // 2. Active Execution Paused Line
+    if (activeLoc && (activeLoc.filePath === activeFilePath || activeLoc.filePath.endsWith(activeFilePath))) {
+      newDecorations.push({
+        range: new monacoInstance.Range(activeLoc.line, 1, activeLoc.line, 1),
+        options: {
+          isWholeLine: true,
+          className: 'debug-active-execution-line',
+          glyphMarginClassName: 'debug-active-line-glyph',
+          overviewRuler: {
+            color: '#FFD60A',
+            position: monacoInstance.editor.OverviewRulerLane.Full,
+          },
+        },
+      })
+    }
+
+    decorationsRef.current = editor.deltaDecorations(decorationsRef.current, newDecorations)
+  }, [activeFilePath])
+
   const handleEditorDidMount: OnMount = (editor, monacoInstance) => {
     editorRef.current = editor
     monacoRef.current = monacoInstance
@@ -318,6 +370,19 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       }
     })
 
+    // Listen for Gutter Glyph Margin Clicks to Toggle Breakpoints
+    editor.onMouseDown((e) => {
+      if (e.target.type === monacoInstance.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+        const line = e.target.position?.lineNumber
+        if (line && activeFilePath) {
+          debugService.toggleBreakpoint(activeFilePath, line)
+        }
+      }
+    })
+
+    // Initial decorations update
+    updateDebugDecorations()
+
     // Signal that Monaco editor has mounted and applied initial theme
     // Double RAF ensures Monaco canvas and syntax highlighting are composited to the screen
     requestAnimationFrame(() => {
@@ -326,6 +391,15 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       })
     })
   }
+
+  // Synchronize decorations whenever breakpoints or active file changes
+  useEffect(() => {
+    const unsub = debugService.subscribe(() => {
+      updateDebugDecorations()
+    })
+    updateDebugDecorations()
+    return () => unsub()
+  }, [updateDebugDecorations, activeFilePath])
 
   // Update theme dynamically whenever theme changes
   useEffect(() => {
@@ -350,6 +424,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           cursorBlinking: 'smooth',
           cursorSmoothCaretAnimation: 'on',
           smoothScrolling: true,
+          glyphMargin: true, // Enable Gutter Glyph Margin for Breakpoints & Execution Arrow
           // FIX: Disable sticky scroll so symbols are not persistently pinned on scroll
           stickyScroll: {
             enabled: false,
@@ -435,6 +510,68 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         .editor-host-container .monaco-editor .sticky-widget {
           backdrop-filter: var(--glass-blur);
           -webkit-backdrop-filter: var(--glass-blur);
+        }
+
+        /* Debugger Gutter Glyphs */
+        .debug-breakpoint-glyph {
+          background: #FF453A;
+          width: 10px !important;
+          height: 10px !important;
+          border-radius: 50%;
+          margin-left: 5px;
+          margin-top: 6px;
+          box-shadow: 0 0 8px rgba(255, 69, 58, 0.7);
+          cursor: pointer;
+        }
+
+        .debug-breakpoint-glyph-disabled {
+          background: rgba(235, 235, 245, 0.4);
+          width: 8px !important;
+          height: 8px !important;
+          border-radius: 50%;
+          margin-left: 6px;
+          margin-top: 7px;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+          cursor: pointer;
+        }
+
+        .debug-breakpoint-glyph-conditional {
+          background: #FFD60A;
+          width: 10px !important;
+          height: 10px !important;
+          transform: rotate(45deg);
+          margin-left: 5px;
+          margin-top: 6px;
+          box-shadow: 0 0 8px rgba(255, 214, 10, 0.7);
+          cursor: pointer;
+        }
+
+        .debug-breakpoint-glyph-logpoint {
+          background: #0A84FF;
+          width: 10px !important;
+          height: 10px !important;
+          transform: rotate(45deg);
+          margin-left: 5px;
+          margin-top: 6px;
+          box-shadow: 0 0 8px rgba(10, 132, 255, 0.7);
+          cursor: pointer;
+        }
+
+        .debug-active-line-glyph {
+          width: 0;
+          height: 0;
+          border-top: 5px solid transparent;
+          border-bottom: 5px solid transparent;
+          border-left: 8px solid #FFD60A;
+          margin-left: 6px;
+          margin-top: 6px;
+          filter: drop-shadow(0 0 4px #FFD60A);
+        }
+
+        .debug-active-execution-line {
+          background: rgba(255, 214, 10, 0.15) !important;
+          border-top: 1px solid rgba(255, 214, 10, 0.3);
+          border-bottom: 1px solid rgba(255, 214, 10, 0.3);
         }
       `}</style>
     </div>

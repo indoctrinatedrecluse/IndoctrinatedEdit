@@ -13,12 +13,13 @@ import {
   GitBranch,
   Play,
   Check,
+  Bug,
 } from 'lucide-react'
 
 export interface ShortcutEntry {
   id: string
   title: string
-  category: 'General' | 'File' | 'Edit' | 'Navigation' | 'View' | 'AI' | 'Git'
+  category: 'General' | 'File' | 'Edit' | 'Navigation' | 'View' | 'AI' | 'Git' | 'Debug'
   keys: string[]
   description: string
   actionId?: string
@@ -397,9 +398,83 @@ const SHORTCUT_DATABASE: Omit<ShortcutEntry, 'onExecute'>[] = [
     description: 'Query status of tracked and untracked files',
     actionId: 'git.refresh',
   },
+
+  // Debug & Execution
+  {
+    id: 'debug.start',
+    title: 'Start / Continue Debugging',
+    category: 'Debug',
+    keys: ['F5'],
+    description: 'Launch active compiler debugger or resume paused execution',
+    actionId: 'debug.start',
+  },
+  {
+    id: 'debug.pause',
+    title: 'Pause Execution',
+    category: 'Debug',
+    keys: ['F6'],
+    description: 'Pause runtime execution at current instruction or thread',
+    actionId: 'debug.pause',
+  },
+  {
+    id: 'debug.stop',
+    title: 'Stop Debugging',
+    category: 'Debug',
+    keys: ['Shift', 'F5'],
+    description: 'Terminate active debug session and detach adapters',
+    actionId: 'debug.stop',
+  },
+  {
+    id: 'debug.restart',
+    title: 'Restart Debugging',
+    category: 'Debug',
+    keys: ['Ctrl', 'Shift', 'F5'],
+    description: 'Recompile and re-launch active target debug session',
+    actionId: 'debug.restart',
+  },
+  {
+    id: 'debug.toggleBreakpoint',
+    title: 'Toggle Breakpoint',
+    category: 'Debug',
+    keys: ['F9'],
+    description: 'Toggle breakpoint on current cursor line in active buffer',
+    actionId: 'debug.toggleBreakpoint',
+  },
+  {
+    id: 'debug.stepOver',
+    title: 'Step Over',
+    category: 'Debug',
+    keys: ['F10'],
+    description: 'Execute next statement without stepping into nested routines',
+    actionId: 'debug.stepOver',
+  },
+  {
+    id: 'debug.stepInto',
+    title: 'Step Into',
+    category: 'Debug',
+    keys: ['F11'],
+    description: 'Step into function or method call on current execution line',
+    actionId: 'debug.stepInto',
+  },
+  {
+    id: 'debug.stepOut',
+    title: 'Step Out',
+    category: 'Debug',
+    keys: ['Shift', 'F11'],
+    description: 'Step out of current function to parent calling stack frame',
+    actionId: 'debug.stepOut',
+  },
+  {
+    id: 'view.debug',
+    title: 'Show Run & Debug Sidebar',
+    category: 'Debug',
+    keys: ['Ctrl', 'Shift', 'D'],
+    description: 'Open debug controls, variables inspector, watch list, and console',
+    actionId: 'view.debug',
+  },
 ]
 
-type CategoryTab = 'All' | 'General' | 'File' | 'Edit' | 'Navigation' | 'View' | 'AI' | 'Git'
+type CategoryTab = 'All' | 'General' | 'File' | 'Edit' | 'Navigation' | 'View' | 'AI' | 'Git' | 'Debug'
 
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
   isOpen,
@@ -469,6 +544,8 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
         return <Bot size={13} />
       case 'Git':
         return <GitBranch size={13} />
+      case 'Debug':
+        return <Bug size={13} />
       default:
         return <Sparkles size={13} />
     }
@@ -534,7 +611,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
 
             {/* Category Tabs */}
             <div className="shortcuts-category-tabs">
-              {(['All', 'General', 'File', 'Edit', 'Navigation', 'View', 'AI', 'Git'] as CategoryTab[]).map(
+              {(['All', 'General', 'File', 'Edit', 'Navigation', 'View', 'AI', 'Git', 'Debug'] as CategoryTab[]).map(
                 (cat) => (
                   <button
                     key={cat}

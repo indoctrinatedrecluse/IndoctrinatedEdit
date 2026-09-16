@@ -23,6 +23,7 @@ import {
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { GitGraphView } from '../GitGraph/GitGraphView'
+import { DebugView } from '../Debug/DebugView'
 
 export interface WorkspaceFileItem {
   name: string
@@ -96,6 +97,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="sidebar glass-panel">
+      {activeView === 'debug' && (
+        <DebugView
+          onOpenFileLocation={(filePath) =>
+            onOpenFile({ name: filePath.split(/[/\\]/).pop() || filePath, path: filePath, isDirectory: false })
+          }
+        />
+      )}
+
       {activeView === 'git' && (
         <GitGraphView
           workspacePath={workspacePath}

@@ -14,6 +14,7 @@ interface ShortcutHandlers {
   onGitGraph?: () => void
   onShowExplorer?: () => void
   onShowSearch?: () => void
+  onShowDebug?: () => void
   onToggleAi?: () => void
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
@@ -23,6 +24,14 @@ interface ShortcutHandlers {
   onSymbols?: () => void
   onToggleTerminal?: () => void
   onOpenProblems?: () => void
+  onStartDebugging?: () => void
+  onPauseDebugging?: () => void
+  onStopDebugging?: () => void
+  onRestartDebugging?: () => void
+  onStepOver?: () => void
+  onStepInto?: () => void
+  onStepOut?: () => void
+  onToggleBreakpoint?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -61,6 +70,62 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
+      // F5 -> Start / Continue Debugging
+      if (e.key === 'F5' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onStartDebugging?.()
+        return
+      }
+
+      // Shift+F5 -> Stop Debugging
+      if (e.key === 'F5' && e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onStopDebugging?.()
+        return
+      }
+
+      // Ctrl+Shift+F5 -> Restart Debugging
+      if (e.key === 'F5' && e.shiftKey && ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onRestartDebugging?.()
+        return
+      }
+
+      // F6 -> Pause Debugging
+      if (e.key === 'F6' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onPauseDebugging?.()
+        return
+      }
+
+      // F9 -> Toggle Breakpoint
+      if (e.key === 'F9' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onToggleBreakpoint?.()
+        return
+      }
+
+      // F10 -> Step Over
+      if (e.key === 'F10' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onStepOver?.()
+        return
+      }
+
+      // F11 -> Step Into
+      if (e.key === 'F11' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onStepInto?.()
+        return
+      }
+
+      // Shift+F11 -> Step Out
+      if (e.key === 'F11' && e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onStepOut?.()
+        return
+      }
+
       if (!ctrlOrCmd) return
 
       // Chord Initiator: Ctrl+K
@@ -88,6 +153,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.shiftKey && key === 'p') {
         e.preventDefault()
         handlers.onCommandPalette?.()
+        return
+      }
+
+      // Ctrl+Shift+M -> Problems Panel
+      if (e.shiftKey && key === 'm') {
+        e.preventDefault()
+        handlers.onOpenProblems?.()
         return
       }
 
@@ -119,6 +191,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
+      // Ctrl+Shift+D -> Run & Debug
+      if (e.shiftKey && key === 'd') {
+        e.preventDefault()
+        handlers.onShowDebug?.()
+        return
+      }
+
       // Ctrl+Alt+A or Ctrl+Shift+A -> Toggle AI Assistant Panel
       if ((e.altKey && key === 'a') || (e.shiftKey && key === 'a')) {
         e.preventDefault()
@@ -126,8 +205,8 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
-      // Ctrl+Shift+D -> Toggle Database Studio
-      if (e.shiftKey && key === 'd') {
+      // Ctrl+Alt+D -> Toggle Database Studio
+      if (e.altKey && key === 'd') {
         e.preventDefault()
         handlers.onToggleDatabase?.()
         return

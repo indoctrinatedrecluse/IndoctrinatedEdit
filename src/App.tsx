@@ -13,6 +13,7 @@ import { LicenseModal } from './components/Modals/LicenseModal'
 import { ShortcutsModal } from './components/Modals/ShortcutsModal'
 import { TerminalConfigModal } from './components/Modals/TerminalConfigModal'
 import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
+import { DebugToolbar } from './components/Debug/DebugToolbar'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
 import { notificationService, NotificationItem } from './services/notificationService'
 import { commandRegistry } from './services/commandRegistry'
@@ -22,6 +23,7 @@ import { toolchainService } from './services/toolchainService'
 import { sessionService } from './services/sessionService'
 import { diagnosticsService } from './services/diagnosticsService'
 import { databaseService } from './services/databaseService'
+import { debugService } from './services/debugService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -662,6 +664,24 @@ export const App: React.FC = () => {
       onToggleTerminal: handleToggleTerminal,
       onOpenTerminalConfig: handleOpenTerminalConfig,
       onOpenProblems: handleOpenProblems,
+      // Run & Debug Handlers
+      onShowDebug: () => setActiveView('debug'),
+      onStartDebugging: () => {
+        const active = tabs.find((t) => t.id === activeTabId)
+        debugService.startDebugging(active?.id || 'main.ts')
+      },
+      onStopDebugging: () => debugService.stopDebugging(),
+      onRestartDebugging: () => debugService.restart(),
+      onStepOver: () => debugService.stepOver(),
+      onStepInto: () => debugService.stepInto(),
+      onStepOut: () => debugService.stepOut(),
+      onToggleBreakpoint: () => {
+        const active = tabs.find((t) => t.id === activeTabId)
+        if (active) {
+          debugService.toggleBreakpoint(active.id, cursorPos.line)
+        }
+      },
+      onClearAllBreakpoints: () => debugService.clearAllBreakpoints(),
       onWelcomeGuide: () => {
         const welcomeTab = tabs.find((t) => t.id === 'welcome.ts')
         if (welcomeTab) {
@@ -681,6 +701,7 @@ export const App: React.FC = () => {
       handleSaveFileAs,
       handleCloseTab,
       activeTabId,
+      cursorPos.line,
       openPalette,
       handleToggleAi,
       handleToggleDatabase,
@@ -739,6 +760,7 @@ export const App: React.FC = () => {
       { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', description: 'Reveal workspace directory navigator', handler: () => setActiveView('files') },
       { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', description: 'Open Git visual commit tree', handler: () => setActiveView('git') },
       { id: 'view.search', title: 'Search in Workspace', category: 'View', shortcut: 'Ctrl+Shift+F', description: 'Global workspace pattern search', handler: () => setActiveView('search') },
+      { id: 'view.debug', title: 'Show Run & Debug Panel', category: 'View', shortcut: 'Ctrl+Shift+D', description: 'Open debug inspection dock', handler: () => setActiveView('debug') },
       { id: 'view.notifications', title: 'Show Notifications & System Alerts', category: 'View', shortcut: 'Ctrl+Shift+N', description: 'Open notification drawer', handler: handleToggleNotifications },
       { id: 'view.wordWrap', title: 'Toggle Word Wrap', category: 'View', shortcut: 'Alt+Z', description: 'Wrap code lines to editor viewport', handler: () => editorHostRef.current?.triggerAction('editor.action.toggleWordWrap') },
       { id: 'view.foldAll', title: 'Fold All Code Blocks', category: 'View', description: 'Collapse all functions and classes', handler: () => editorHostRef.current?.triggerAction('editor.foldAll') },
@@ -749,7 +771,18 @@ export const App: React.FC = () => {
       // Terminal & Diagnostics Subsystems
       { id: 'terminal.toggle', title: 'Terminal: Toggle Integrated Terminal', category: 'Terminal', shortcut: 'Ctrl+`', description: 'Open/close multi-shell terminal emulator', handler: handleToggleTerminal },
       { id: 'terminal.config', title: 'Preferences: Open Terminal Configuration (JSON)', category: 'Preferences', description: 'Edit shell profiles, fonts, and defaults in terminal.json', handler: handleOpenTerminalConfig },
-      { id: 'view.problems', title: 'View: Toggle Problems Panel', category: 'View', description: 'Open diagnostic error and warning inspector', handler: handleOpenProblems },
+      { id: 'view.problems', title: 'View: Toggle Problems Panel', category: 'View', shortcut: 'Ctrl+Shift+M', description: 'Open diagnostic error and warning inspector', handler: handleOpenProblems },
+
+      // Run & Debug Subsystem
+      { id: 'debug.start', title: 'Debug: Start / Continue Debugging', category: 'Run', shortcut: 'F5', description: 'Launch compiler debugger or continue execution', handler: () => { const active = tabs.find((t) => t.id === activeTabId); debugService.startDebugging(active?.id || 'main.ts') } },
+      { id: 'debug.pause', title: 'Debug: Pause Execution', category: 'Run', shortcut: 'F6', description: 'Pause running target process', handler: () => debugService.pause() },
+      { id: 'debug.stop', title: 'Debug: Stop Debugging', category: 'Run', shortcut: 'Shift+F5', description: 'Terminate active debug session', handler: () => debugService.stopDebugging() },
+      { id: 'debug.restart', title: 'Debug: Restart Debugging', category: 'Run', shortcut: 'Ctrl+Shift+F5', description: 'Restart target debug session', handler: () => debugService.restart() },
+      { id: 'debug.stepOver', title: 'Debug: Step Over', category: 'Run', shortcut: 'F10', description: 'Step over next instruction', handler: () => debugService.stepOver() },
+      { id: 'debug.stepInto', title: 'Debug: Step Into', category: 'Run', shortcut: 'F11', description: 'Step into function call', handler: () => debugService.stepInto() },
+      { id: 'debug.stepOut', title: 'Debug: Step Out', category: 'Run', shortcut: 'Shift+F11', description: 'Step out to calling frame', handler: () => debugService.stepOut() },
+      { id: 'debug.toggleBreakpoint', title: 'Debug: Toggle Breakpoint', category: 'Run', shortcut: 'F9', description: 'Toggle breakpoint on active line', handler: () => { const active = tabs.find((t) => t.id === activeTabId); if (active) debugService.toggleBreakpoint(active.id, cursorPos.line) } },
+      { id: 'debug.deleteAllBreakpoints', title: 'Debug: Delete All Breakpoints', category: 'Run', description: 'Clear all active breakpoints in workspace', handler: () => debugService.clearAllBreakpoints() },
 
       // All 10 Dynamic Themes
       ...themeCommands,
@@ -777,7 +810,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleSelectTheme, openPalette])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleSelectTheme, openPalette, tabs])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -794,6 +827,7 @@ export const App: React.FC = () => {
     onGitGraph: () => setActiveView((prev) => (prev === 'git' ? null : 'git')),
     onShowExplorer: () => setActiveView((prev) => (prev === 'files' ? null : 'files')),
     onShowSearch: () => setActiveView((prev) => (prev === 'search' ? null : 'search')),
+    onShowDebug: () => setActiveView((prev) => (prev === 'debug' ? null : 'debug')),
     onToggleAi: handleToggleAi,
     onToggleDatabase: handleToggleDatabase,
     onToggleRestClient: handleToggleRestClient,
@@ -803,6 +837,22 @@ export const App: React.FC = () => {
     onSymbols: () => openPalette('@'),
     onToggleTerminal: handleToggleTerminal,
     onOpenProblems: handleOpenProblems,
+    onStartDebugging: () => {
+      const active = tabs.find((t) => t.id === activeTabId)
+      debugService.startDebugging(active?.id || 'main.ts')
+    },
+    onPauseDebugging: () => debugService.pause(),
+    onStopDebugging: () => debugService.stopDebugging(),
+    onRestartDebugging: () => debugService.restart(),
+    onStepOver: () => debugService.stepOver(),
+    onStepInto: () => debugService.stepInto(),
+    onStepOut: () => debugService.stepOut(),
+    onToggleBreakpoint: () => {
+      const active = tabs.find((t) => t.id === activeTabId)
+      if (active) {
+        debugService.toggleBreakpoint(active.id, cursorPos.line)
+      }
+    },
   })
 
   const handleEditorChange = (value: string | undefined) => {
@@ -937,9 +987,22 @@ export const App: React.FC = () => {
             onCloseTab={handleCloseTab}
             onNewTab={handleNewFile}
           />
+          {/* Floating Liquid Glass Execution Control Toolbar */}
+          <DebugToolbar
+            onGoToActiveLocation={(filePath, line) => {
+              if (tabs.some((t) => t.id === filePath)) {
+                setActiveTabId(filePath)
+              }
+              setTimeout(() => {
+                editorHostRef.current?.goToLine(line)
+              }, 50)
+            }}
+          />
+
           {activeTab ? (
             <EditorHost
               ref={editorHostRef}
+              activeFilePath={activeTabId}
               content={currentContent}
               language={currentLanguage}
               theme={currentTheme}
