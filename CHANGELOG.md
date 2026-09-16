@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-09-16
+
+### 🚀 Minor Feature Release — Full-Stack Web & Mobile Ecosystems, Mega-Packs, and Error Resilience
+
+This major minor release equips IndoctrinatedEdit with end-to-end framework and runtime support spanning the modern web, cross-platform mobile, enterprise microservices, and reactive full-stack monoliths. In addition, it introduces system-wide fault-tolerant completion boundaries that gracefully log issues to the Notification Center and fall back to default syntax highlighting.
+
+#### 🌐 Dedicated Web & Mobile Framework Extensions
+- **PHP & Laravel Ecosystem Suite (`indoctrinated.ext.php-laravel`)**:
+  - Full support for PHP 8.3/8.4 and Laravel 11 (`.php`, `.blade.php`).
+  - Snippets: Eloquent ORM relationships (`belongsTo`, `hasMany`), Laravel routing (`Route::get/post`), Form Request validation (`rules()`), Blade directives (`@if`, `@foreach`, `@extends`), and PHP 8 match expressions / typed readonly properties.
+  - Non-blocking toolchain detection for `php` and `composer`.
+- **Angular & TypeScript Enterprise Suite (`indoctrinated.ext.angular-pack`)**:
+  - Full support for Angular 18+ standalone components (`.component.ts`, `.component.html`, `.service.ts`, `.guard.ts`).
+  - Snippets: Standalone Components with modern `@Component` imports, Signal-based reactivity (`signal()`, `computed()`, `effect()`), Angular Signals Inputs & Outputs, Signal Store state management, and Functional Route Guards (`CanActivateFn`).
+- **React 19 & Next.js Modern Ecosystem (`indoctrinated.ext.react-pack`)**:
+  - Full support for React 19, Server Components, and Next.js 15 App Router (`.tsx`, `.jsx`, `.ts`, `.js`).
+  - Snippets: React 19 `useActionState` and Server Actions, Next.js Server & Client Components (`'use client'`, `'use server'`), Custom typed React Hooks, and Context Providers.
+- **Flutter & Dart Mobile/Desktop Suite (`indoctrinated.ext.flutter-pack`)**:
+  - Full support for Flutter 3+ and Dart 3.5+ (`.dart`).
+  - Snippets: `StatelessWidget` and `StatefulWidget`, `ConsumerWidget` / Riverpod StateNotifier providers, Bloc / Cubit state management, Custom `CustomPainter` canvas rendering, and Liquid Glass UI containers.
+  - Non-blocking toolchain detection for `flutter` and `dart`.
+- **Ruby & Ruby on Rails Suite (`indoctrinated.ext.ruby-rails`)**:
+  - Full support for Ruby 3.3+ and Ruby on Rails 7.2/8 (`.rb`, `.erb`, `.rake`).
+  - Snippets: Rails REST Controllers, ActiveRecord Models with validations and scopes, ActiveSupport Concerns, and Service Objects.
+  - Non-blocking toolchain detection for `ruby`, `gem`, and `bundle`.
+- **Node.js Core Runtime Extension (`indoctrinated.ext.node-pack`)**:
+  - Full support for Modern Node.js 20/22+ ESM runtimes (`.js`, `.mjs`, `.cjs`, `.ts`).
+  - Snippets: Native ESM HTTP server (`node:http`), asynchronous filesystem (`node:fs/promises`), worker threads multi-processing (`node:worker_threads`), high-throughput stream pipelines (`node:stream/promises`), zero-dependency native test suite (`node:test`, `node:assert/strict`), strongly typed `node:events`, and `node:crypto`.
+  - Non-blocking toolchain detection for `node` and `npm`.
+
+#### 📦 Universal Mega-Pack Suites
+- **Universal Frontend Mega-Pack (`indoctrinated.ext.frontend-mega-pack`)**:
+  - **Node-based**: Vue 3 (`<script setup>`), Svelte 5 (Runes `$state`, `$derived`, `$props`), SolidJS (`createSignal`), Preact (`@preact/signals`).
+  - **Python-based UI**: Streamlit (AI & interactive data dashboards), Dash / Plotly (Reactive analytics), Reflex (Pure Python stateful web apps), Flet (Flutter-powered Python apps), Anvil (Full-stack Python forms).
+  - **PHP-based UI**: Livewire 3 (Reactive components & `#[Validate]`), Inertia.js (Vue SPA Monolith adapter), Blade UI components (`@props`, slots), Symfony UX (Stimulus controllers).
+  - **Ruby-based UI**: Hotwire / Turbo Frames & Streams, GitHub ViewComponent classes & templates.
+  - **.NET-based UI**: Blazor Interactive Server/WASM Razor components (`@rendermode`, `@code`).
+  - **HTML-First**: Alpine.js declarative reactive widgets (`x-data`, `x-bind`, `x-transition`).
+- **Universal Backend Mega-Pack (`indoctrinated.ext.backend-mega-pack`)**:
+  - **Node-based**: Express 5, NestJS, Fastify, Koa, Hono.
+  - **Python-based**: FastAPI (WebSockets & Lifespan), Django Ninja (Type-safe async APIs), Sanic, Flask.
+  - **PHP-based**: Symfony 7 (`#[Route]`, `#[MapRequestPayload]`), CodeIgniter 4 (`ResourceController`), Slim 4 (PSR-7 microservice).
+  - **Ruby-based**: Sinatra, Hanami 2 (Action classes with schema validation).
+  - **Java / Kotlin-based**: Ktor 3 (Kotlin coroutines & Netty), Spring Boot 3 WebFlux (Reactive `Mono`/`Flux`), Micronaut (AOT compile-time DI), Quarkus (Mutiny reactive REST).
+  - **Go-based**: Gin, Fiber, Echo.
+  - **.NET-based**: ASP.NET Core SignalR typed Hubs & Minimal APIs.
+  - **Rust-based**: Actix-Web, Axum (Tokio-backed async router with Tower layers).
+
+#### 🛡️ Fault-Tolerant Monaco Resilience & Fallbacks
+- **Defensive Error Envelopes**: All Monaco extension providers and completions run inside protective try/catch wrappers.
+- **Notification Center Integration**: Any runtime fault or rule-matching crash automatically triggers user-visible diagnostic alerts via the Notification Center without interrupting editor operations.
+- **Graceful Syntax Highlighting Fallback**: In the event of provider errors, Monaco automatically falls back to default syntax highlighting.
+
+#### ⚡ Non-Blocking Idle Toolchain Auto-Detection
+- Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, and Flutter runs asynchronously during browser idle frames (`requestIdleCallback`) with a 15-minute TTL cache, keeping IDE startup instantaneous.
+
+#### 🪪 License & About Dialog Updates
+- Updated Help -> License and Help -> About modal dialogs to display active `v1.3.0 PRO` release version.
+
+---
+
 ## [1.2.1] - 2026-09-15
 
 ### 🩹 Hotfix Release — Chromium Windows Cache Locking & Cleanup Automation

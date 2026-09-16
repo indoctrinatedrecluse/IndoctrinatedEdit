@@ -1,6 +1,6 @@
 {
   "name": "indoctrinated-edit",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Next-generation general-purpose desktop code editor with iOS Liquid Glass aesthetic",
   "main": "dist-electron/main.js",
   "author": "indoctrinatedrecluse",
