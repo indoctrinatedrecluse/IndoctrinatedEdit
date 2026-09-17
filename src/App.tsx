@@ -345,6 +345,104 @@ export const App: React.FC = () => {
     })
   }, [rightPaneTab])
 
+  const handleToggleCrypto = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('crypto')
+        return true
+      }
+      if (rightPaneTab !== 'crypto') {
+        setRightPaneTab('crypto')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleTogglePreview = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('preview')
+        return true
+      }
+      if (rightPaneTab !== 'preview') {
+        setRightPaneTab('preview')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleDocker = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('docker')
+        return true
+      }
+      if (rightPaneTab !== 'docker') {
+        setRightPaneTab('docker')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleSocket = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('socket')
+        return true
+      }
+      if (rightPaneTab !== 'socket') {
+        setRightPaneTab('socket')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleRegex = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('regex')
+        return true
+      }
+      if (rightPaneTab !== 'regex') {
+        setRightPaneTab('regex')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleTogglePackages = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('packages')
+        return true
+      }
+      if (rightPaneTab !== 'packages') {
+        setRightPaneTab('packages')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleTasks = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('tasks')
+        return true
+      }
+      if (rightPaneTab !== 'tasks') {
+        setRightPaneTab('tasks')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
   const handleInsertAtCursor = useCallback((code: string) => {
     editorHostRef.current?.insertAtCursor(code)
   }, [])
@@ -806,6 +904,27 @@ export const App: React.FC = () => {
       // Git & Toolchain
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
       
+      // Cryptography & DevTools Lab
+      { id: 'crypto.toggle', title: 'Crypto Lab: Toggle Cryptography & DevTools Lab', category: 'Tools', shortcut: 'Ctrl+Alt+C', description: 'JWT Inspector, Hashes, HMAC, Encoders, UUID/ULID, and Epoch converter', handler: handleToggleCrypto },
+
+      // Live Markdown & HTML Preview
+      { id: 'preview.toggle', title: 'Live Preview: Toggle Markdown, HTML & Mermaid Studio', category: 'View', shortcut: 'Ctrl+Alt+V', description: 'Split-canvas live preview with interactive Mermaid.js diagrams', handler: handleTogglePreview },
+
+      // Docker & Container Studio
+      { id: 'docker.toggle', title: 'Docker: Toggle Docker & Container Studio', category: 'Tools', shortcut: 'Ctrl+Alt+K', description: 'Container dashboard, ANSI log streaming, images, and compose topology', handler: handleToggleDocker },
+
+      // WebSocket & Streams Workbench
+      { id: 'socket.toggle', title: 'WebSocket: Toggle WebSocket & Event Streams Workbench', category: 'Tools', shortcut: 'Ctrl+Alt+W', description: 'Bidirectional socket message feed, packet composer, and telemetry', handler: handleToggleSocket },
+
+      // Visual Regex & Pattern Lab
+      { id: 'regex.toggle', title: 'Regex Lab: Toggle Visual Regex & Pattern Lab', category: 'Tools', shortcut: 'Ctrl+Alt+X', description: 'Real-time multi-line match arena, capture groups, and code generator', handler: handleToggleRegex },
+
+      // Package & Dependency Manager
+      { id: 'packages.toggle', title: 'Packages: Toggle Package & Dependency Manager', category: 'Tools', shortcut: 'Ctrl+Alt+P', description: 'Scan dependencies, detect outdated versions, and audit CVE security advisories', handler: handleTogglePackages },
+
+      // Task Runner & Cron Studio
+      { id: 'tasks.toggle', title: 'Tasks: Toggle Task Runner & Cron Expression Studio', category: 'Tools', shortcut: 'Ctrl+Alt+T', description: 'Discover scripts, execute project tasks, and calculate Cron schedules', handler: handleToggleTasks },
+
       // Database Studio & SQL Runner
       { id: 'db.toggle', title: 'Database: Toggle Database Studio & SQL Runner', category: 'Tools', shortcut: 'Ctrl+Shift+D', description: 'Open database schema explorer and query runner', handler: handleToggleDatabase },
       { id: 'db.sampleEcommerce', title: 'Database: Switch to E-Commerce SQLite DB', category: 'Tools', description: 'Explore orders, customers, and product inventory schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('ecommerce_db') } },
@@ -826,7 +945,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleSelectTheme, openPalette, tabs])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleSelectTheme, openPalette, tabs])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -847,6 +966,13 @@ export const App: React.FC = () => {
     onToggleAi: handleToggleAi,
     onToggleDatabase: handleToggleDatabase,
     onToggleRestClient: handleToggleRestClient,
+    onToggleCrypto: handleToggleCrypto,
+    onTogglePreview: handleTogglePreview,
+    onToggleDocker: handleToggleDocker,
+    onToggleSocket: handleToggleSocket,
+    onToggleRegex: handleToggleRegex,
+    onTogglePackages: handleTogglePackages,
+    onToggleTasks: handleToggleTasks,
     onToggleNotifications: handleToggleNotifications,
     onOpenShortcuts: () => setIsShortcutsOpen(true),
     onGoToLine: () => openPalette(':'),
@@ -914,12 +1040,12 @@ export const App: React.FC = () => {
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
-        version="3.0.0"
+        version="4.0.0"
       />
       <LicenseModal
         isOpen={isLicenseOpen}
         onClose={() => setIsLicenseOpen(false)}
-        version="3.0.0"
+        version="4.0.0"
       />
       <ShortcutsModal
         isOpen={isShortcutsOpen}
@@ -964,6 +1090,20 @@ export const App: React.FC = () => {
           onToggleDatabase={handleToggleDatabase}
           isRestClientOpen={isRightPaneOpen && rightPaneTab === 'rest'}
           onToggleRestClient={handleToggleRestClient}
+          isCryptoOpen={isRightPaneOpen && rightPaneTab === 'crypto'}
+          onToggleCrypto={handleToggleCrypto}
+          isPreviewOpen={isRightPaneOpen && rightPaneTab === 'preview'}
+          onTogglePreview={handleTogglePreview}
+          isDockerOpen={isRightPaneOpen && rightPaneTab === 'docker'}
+          onToggleDocker={handleToggleDocker}
+          isSocketOpen={isRightPaneOpen && rightPaneTab === 'socket'}
+          onToggleSocket={handleToggleSocket}
+          isRegexOpen={isRightPaneOpen && rightPaneTab === 'regex'}
+          onToggleRegex={handleToggleRegex}
+          isPackagesOpen={isRightPaneOpen && rightPaneTab === 'packages'}
+          onTogglePackages={handleTogglePackages}
+          isTasksOpen={isRightPaneOpen && rightPaneTab === 'tasks'}
+          onToggleTasks={handleToggleTasks}
         />
 
         {/* Collapsible Frosted Sidebar with Spring Animation & Resizer */}

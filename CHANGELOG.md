@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.0] - 2026-09-17
+
+### 🚀 Major Release — 7 Functional Developer Workbenches, 5 Dedicated Language Suites & Zero-Overlap Architecture
+
+IndoctrinatedEdit 4.0.0 is a milestone major release introducing 7 interactive Liquid Glass developer workbenches (Cryptography Lab, Live Markdown & Mermaid Studio, Docker Studio, WebSocket Workbench, Visual Regex Lab, Package & Vulnerability Auditor, Task & Cron Runner) and 5 dedicated first-class language suites (Lua & Luau, Zig, Godot 4 / GDScript, Universal Shell / PowerShell, Julia Scientific) with a zero-overlap ecosystem architecture.
+
+#### 🛡️ Cryptography & DevTools Studio (`Ctrl+Alt+C`)
+- **Interactive JWT Inspector & Signer**: Decode headers, claims payload, algorithm validation, token expiration detection, and custom claim generator.
+- **Universal Hash & HMAC Engine**: MD5, SHA-1, SHA-256, SHA-384, SHA-512, SHA-3, Keccak-256, and HMAC keyed hashing with instant clipboard copy.
+- **Universal Codec Suite**: Instant encoding and decoding for Base64, Hexadecimal, URL Percent-encoding, HTML Entities, Binary bitstreams, ASCII code points, ROT13, and Morse Code.
+- **Security & Entropy Generator**: Cryptographically secure UUID v4, monotonic UUID v7, ULID, Nanoid, customizable alphanumeric passwords, and hex API keys.
+- **Epoch Time Machine**: Multi-format timestamp converter (Seconds, Milliseconds, Microseconds, Nanoseconds) with human-readable ISO-8601, UTC, relative time offsets, and customizable format builder.
+- **Data Format Transformer**: Live bidirectional conversion between JSON, YAML, TOML, CSV, and XML with syntax validation and error reporting.
+- **Asymmetric Keypair Generator**: Generate RSA 2048/4096-bit and ECDSA (P-256, P-384, Ed25519) public/private keypairs in PEM format.
+
+#### 📝 Live Markdown, Static HTML & Mermaid Diagram Studio (`Ctrl+Alt+V`)
+- **Live Markdown & HTML Renderer**: Real-time rendering with GitHub Flavored Markdown, GitHub-style alerts (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), syntax-highlighted code blocks, and markdown tables.
+- **Interactive Mermaid.js Diagram Studio**: Live vector rendering of Flowcharts, Sequence Diagrams, Class Diagrams, State Diagrams, and ER Models.
+- **Sandboxed HTML Multi-Device Viewport**: Sandboxed iframe preview with one-click responsive device presets: Full / Desktop (1024px) / Tablet (768px) / Mobile (375px).
+
+#### 🐳 Docker & Container Studio (`Ctrl+Alt+K`)
+- **Container Dashboard**: Real-time listing of active and stopped containers, live CPU & memory resource meters, and port mappings.
+- **Container Lifecycle Controls**: Start, stop, restart, delete containers, and prune dangling images in one click.
+- **Live ANSI Log Stream**: Real-time terminal log viewer with search filtering and auto-scroll.
+- **Images, Volumes & Compose Generator**: Inspect container images and local volumes, with built-in Docker Compose template scaffolding.
+
+#### 🕸️ WebSocket & Event Streams Workbench (`Ctrl+Alt+W`)
+- **Bidirectional WebSocket Client**: Connect to `wss://` / `ws://` endpoints or built-in mock echo streams with subprotocol support.
+- **Real-time Message Waterfall**: Visual timeline separating inbound and outbound packets with timestamp tracking and JSON inspector.
+- **Interactive Packet Composer**: Send formatted JSON or raw text payloads with one-click sample presets.
+
+#### 📊 Visual Regex & Pattern Lab (`Ctrl+Alt+X`)
+- **Interactive Match Arena**: Real-time regex pattern testing with live match counts, capture group inspector, and index offsets.
+- **Natural-Language Regex Explainer**: Token-by-token decomposition explaining lookaheads, quantifiers, character classes, and boundary assertions in plain English.
+- **Preset Library & Code Generator**: Library of validated patterns (Email, URL, IPv4/IPv6, SemVer, UUID, Dates) and multi-language code generators for TypeScript, Python, Go, and Rust.
+
+#### 📦 Package & Dependency Manager (`Ctrl+Alt+P`)
+- **Universal Manifest Scanner**: Automatic detection and parsing of `package.json` (npm), `requirements.txt` (PyPI), `Cargo.toml` (Cargo), and `go.mod` (Go Modules).
+- **Outdated Version & Vulnerability Auditor**: Real-time comparison of current vs latest versions, alongside CVE security advisory detection and SPDX license compliance auditor.
+
+#### ⏱️ Task Runner & Cron Expression Studio (`Ctrl+Alt+T`)
+- **Project Task Runner**: Auto-discovers build, test, lint, and serve scripts from workspace manifests with one-click execution and status tracking.
+- **Visual Cron Expression Builder**: 5-field Cron parser (`* * * * *`) translating complex cron syntax into plain English schedules with a projection table of the next 10 trigger timestamps.
+
+#### 🌙 Dedicated First-Class Language Suites & Zero-Overlap Architecture
+- **Lua, Luau & Game Development Suite (`indoctrinated.ext.lua-luau`)**: Comprehensive first-class IDE support for Lua 5.1–5.4, LuaJIT, Roblox Luau (`--!strict`), LÖVE 2D (Love2D lifecycle, physics & canvas), Neovim configuration (`lazy.nvim`, `vim.api`), and OpenResty / Nginx Lua API gateways.
+- **Zig & Native Systems Toolchain Suite (`indoctrinated.ext.zig`)**: Complete Zig 0.13+ language support featuring GeneralPurposeAllocator idioms, `comptime` generic structures, `build.zig` multi-target build scripts, `@cImport` seamless C-interop, and SIMD `@Vector` acceleration.
+- **Godot 4 & GDScript Game Development Suite (`indoctrinated.ext.gdscript`)**: Dedicated Godot 4.x suite with CharacterBody2D/3D templates, typed signal and event bus architectures, custom Resource data classes (`@export`), and finite state machines.
+- **Universal Shell, PowerShell & Automation Suite (`indoctrinated.ext.shell-powershell`)**: Production-grade scripting support for Bash, Zsh, POSIX sh (`set -euo pipefail`), PowerShell 7 (`[CmdletBinding()]` pipelines), and Windows Batch scripts (`.bat`/`.cmd`).
+- **Julia High-Performance Scientific Computing Suite (`indoctrinated.ext.julia`)**: Multiple dispatch type specialization, Flux.jl neural network architectures, DifferentialEquations.jl ODE solvers, and DataFrames.jl ETL pipelines.
+- **Zero-Overlap Refactoring**: Clean separation of responsibilities across multi-language packs — `systemsGamingSupport` focuses on Odin, Nim, Assembly, and WAT; `dataScienceSupport` focuses on R, Scala 3, and MATLAB/Octave; `devopsSupport` focuses on Terraform HCL, Dockerfile, and Kubernetes YAML; and `beamFunctionalSupport` unifies Elixir, Erlang, Haskell, Clojure, OCaml, and Janet with zero duplication.
+
+---
+
 ## [3.0.0] - 2026-09-16
 
 ### 🚀 Major Release — Terminal Multiplexer, Problems & Linter Engine, Database Studio, REST API Client, Multi-Compiler Debugger & Multi-Cursor Find/Replace

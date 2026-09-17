@@ -1,5 +1,22 @@
 import React from 'react'
-import { Files, GitBranch, Search, Blocks, Palette, Settings, Bot, Database, Globe, Bug } from 'lucide-react'
+import {
+  Files,
+  GitBranch,
+  Search,
+  Blocks,
+  Palette,
+  Settings,
+  Bot,
+  Database,
+  Globe,
+  Bug,
+  ShieldCheck,
+  Eye,
+  Container,
+  Wifi,
+  Package,
+  Play,
+} from 'lucide-react'
 
 export type ActivityView = 'files' | 'git' | 'search' | 'debug' | 'extensions' | 'themes' | 'settings'
 
@@ -13,6 +30,20 @@ interface ActivityBarProps {
   onToggleDatabase?: () => void
   isRestClientOpen?: boolean
   onToggleRestClient?: () => void
+  isCryptoOpen?: boolean
+  onToggleCrypto?: () => void
+  isPreviewOpen?: boolean
+  onTogglePreview?: () => void
+  isDockerOpen?: boolean
+  onToggleDocker?: () => void
+  isSocketOpen?: boolean
+  onToggleSocket?: () => void
+  isRegexOpen?: boolean
+  onToggleRegex?: () => void
+  isPackagesOpen?: boolean
+  onTogglePackages?: () => void
+  isTasksOpen?: boolean
+  onToggleTasks?: () => void
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
@@ -25,6 +56,20 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   onToggleDatabase,
   isRestClientOpen = false,
   onToggleRestClient,
+  isCryptoOpen = false,
+  onToggleCrypto,
+  isPreviewOpen = false,
+  onTogglePreview,
+  isDockerOpen = false,
+  onToggleDocker,
+  isSocketOpen = false,
+  onToggleSocket,
+  isRegexOpen = false,
+  onToggleRegex,
+  isPackagesOpen = false,
+  onTogglePackages,
+  isTasksOpen = false,
+  onToggleTasks,
 }) => {
   const topItems: { id: ActivityView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
@@ -56,11 +101,88 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           )
         })}
 
+        {onToggleCrypto && (
+          <button
+            className={`activity-btn glass-interactive ${isCryptoOpen ? 'active' : ''}`}
+            onClick={onToggleCrypto}
+            title="Cryptography & DevTools Lab (Ctrl+Alt+C)"
+          >
+            <ShieldCheck size={18} />
+            {isCryptoOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onTogglePreview && (
+          <button
+            className={`activity-btn glass-interactive ${isPreviewOpen ? 'active' : ''}`}
+            onClick={onTogglePreview}
+            title="Live Markdown, HTML & Mermaid Preview (Ctrl+Alt+V)"
+          >
+            <Eye size={18} />
+            {isPreviewOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleDocker && (
+          <button
+            className={`activity-btn glass-interactive ${isDockerOpen ? 'active' : ''}`}
+            onClick={onToggleDocker}
+            title="Docker & Container Studio (Ctrl+Alt+K)"
+          >
+            <Container size={18} />
+            {isDockerOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleSocket && (
+          <button
+            className={`activity-btn glass-interactive ${isSocketOpen ? 'active' : ''}`}
+            onClick={onToggleSocket}
+            title="WebSocket & Event Streams Workbench (Ctrl+Alt+W)"
+          >
+            <Wifi size={18} />
+            {isSocketOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleRegex && (
+          <button
+            className={`activity-btn glass-interactive ${isRegexOpen ? 'active' : ''}`}
+            onClick={onToggleRegex}
+            title="Visual Regex & Pattern Lab (Ctrl+Alt+X)"
+          >
+            <Search size={18} />
+            {isRegexOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onTogglePackages && (
+          <button
+            className={`activity-btn glass-interactive ${isPackagesOpen ? 'active' : ''}`}
+            onClick={onTogglePackages}
+            title="Package Manager & Audit (Ctrl+Alt+P)"
+          >
+            <Package size={18} />
+            {isPackagesOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleTasks && (
+          <button
+            className={`activity-btn glass-interactive ${isTasksOpen ? 'active' : ''}`}
+            onClick={onToggleTasks}
+            title="Task Runner & Cron Studio (Ctrl+Alt+T)"
+          >
+            <Play size={18} />
+            {isTasksOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
         {onToggleDatabase && (
           <button
             className={`activity-btn glass-interactive db-bar-btn ${isDatabaseOpen ? 'active' : ''}`}
             onClick={onToggleDatabase}
-            title="Database Studio & SQL Query Runner (Ctrl+Shift+D)"
+            title="Database Studio & SQL Query Runner"
           >
             <Database size={18} />
             {isDatabaseOpen && <div className="active-indicator" />}

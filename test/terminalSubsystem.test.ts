@@ -115,7 +115,7 @@ describe('Terminal Subsystem Suite (Phase 1)', () => {
 
       await terminalService.write(tab.id, 'version')
       const buffer = terminalService.getActiveTab()?.buffer || []
-      expect(buffer.some((line) => line.includes('IndoctrinatedEdit v3.0.0'))).toBe(true)
+      expect(buffer.some((line) => line.includes('IndoctrinatedEdit v4.0.0'))).toBe(true)
 
       await terminalService.write(tab.id, 'echo Hello Liquid Glass')
       const bufferAfterEcho = terminalService.getActiveTab()?.buffer || []

@@ -1,18 +1,47 @@
 import React from 'react'
-import { Bot, Database, Globe, X } from 'lucide-react'
+import {
+  Bot,
+  Database,
+  Globe,
+  X,
+  ShieldCheck,
+  Eye,
+  Container,
+  Wifi,
+  Search,
+  Package,
+  Play,
+} from 'lucide-react'
 import { AiChatPanel } from '../AiChat/AiChatPanel'
 import { DatabaseStudio } from '../Database/DatabaseStudio'
 import { RestClientView } from '../RestClient/RestClientView'
+import { CryptoDevToolsView } from '../CryptoLab/CryptoDevToolsView'
+import { LivePreviewView } from '../LivePreview/LivePreviewView'
+import { DockerStudioView } from '../Docker/DockerStudioView'
+import { WebSocketView } from '../WebSocket/WebSocketView'
+import { RegexLabView } from '../RegexLab/RegexLabView'
+import { PackageManagerView } from '../PackageManager/PackageManagerView'
+import { TaskRunnerView } from '../TaskRunner/TaskRunnerView'
 import { SelectionInfo } from '../Editor/EditorHost'
 
-export type RightDockTab = 'ai' | 'database' | 'rest'
+export type RightDockTab =
+  | 'ai'
+  | 'database'
+  | 'rest'
+  | 'crypto'
+  | 'preview'
+  | 'docker'
+  | 'socket'
+  | 'regex'
+  | 'packages'
+  | 'tasks'
 
 interface RightAuxiliaryPaneProps {
   isOpen: boolean
   activeTab: RightDockTab
   onSelectTab: (tab: RightDockTab) => void
   onClose: () => void
-  // AI Panel Props
+  // AI / Preview Panel Props
   activeFileName?: string
   activeFileContent?: string
   currentSelection: SelectionInfo | null
@@ -39,18 +68,72 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
       <div className="right-dock-tab-bar">
         <div className="dock-tabs-left">
           <button
-            className={`dock-tab-item glass-interactive ${activeTab === 'ai' ? 'active' : ''}`}
-            onClick={() => onSelectTab('ai')}
-            title="AI Multi-Model Assistant"
+            className={`dock-tab-item glass-interactive ${activeTab === 'crypto' ? 'active' : ''}`}
+            onClick={() => onSelectTab('crypto')}
+            title="Cryptography & DevTools Lab (Ctrl+Alt+C)"
           >
-            <Bot size={13} className="tab-icon ai" />
-            <span>AI Assistant</span>
+            <ShieldCheck size={13} className="tab-icon crypto" />
+            <span>Crypto Lab</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'preview' ? 'active' : ''}`}
+            onClick={() => onSelectTab('preview')}
+            title="Live Markdown, HTML & Mermaid Preview (Ctrl+Alt+V)"
+          >
+            <Eye size={13} className="tab-icon preview" />
+            <span>Live Preview</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'docker' ? 'active' : ''}`}
+            onClick={() => onSelectTab('docker')}
+            title="Docker & Container Studio (Ctrl+Alt+K)"
+          >
+            <Container size={13} className="tab-icon docker" />
+            <span>Docker</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'socket' ? 'active' : ''}`}
+            onClick={() => onSelectTab('socket')}
+            title="WebSocket & Event Streams (Ctrl+Alt+W)"
+          >
+            <Wifi size={13} className="tab-icon socket" />
+            <span>WebSocket</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'regex' ? 'active' : ''}`}
+            onClick={() => onSelectTab('regex')}
+            title="Visual Regex & Pattern Lab (Ctrl+Alt+X)"
+          >
+            <Search size={13} className="tab-icon regex" />
+            <span>Regex Lab</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'packages' ? 'active' : ''}`}
+            onClick={() => onSelectTab('packages')}
+            title="Package Manager & Audit (Ctrl+Alt+P)"
+          >
+            <Package size={13} className="tab-icon pkg" />
+            <span>Packages</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'tasks' ? 'active' : ''}`}
+            onClick={() => onSelectTab('tasks')}
+            title="Task Runner & Cron Studio (Ctrl+Alt+T)"
+          >
+            <Play size={13} className="tab-icon task" />
+            <span>Tasks & Cron</span>
           </button>
 
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'database' ? 'active' : ''}`}
             onClick={() => onSelectTab('database')}
-            title="Database Schema Viewer & SQL Query Runner"
+            title="Database Schema Viewer & SQL Query Runner (Ctrl+Shift+D)"
           >
             <Database size={13} className="tab-icon db" />
             <span>Database Studio</span>
@@ -59,10 +142,19 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'rest' ? 'active' : ''}`}
             onClick={() => onSelectTab('rest')}
-            title="REST & GraphQL API Client"
+            title="REST & GraphQL API Client (Ctrl+Alt+R)"
           >
             <Globe size={13} className="tab-icon rest" />
             <span>REST Client</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'ai' ? 'active' : ''}`}
+            onClick={() => onSelectTab('ai')}
+            title="AI Multi-Model Assistant (Ctrl+Alt+A)"
+          >
+            <Bot size={13} className="tab-icon ai" />
+            <span>AI Assistant</span>
           </button>
         </div>
 
@@ -75,6 +167,32 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
+        {activeTab === 'crypto' && <CryptoDevToolsView isDocked={true} />}
+
+        {activeTab === 'preview' && (
+          <LivePreviewView
+            activeFileName={activeFileName}
+            activeFileContent={activeFileContent}
+            isDocked={true}
+            onClose={onClose}
+          />
+        )}
+
+        {activeTab === 'docker' && <DockerStudioView />}
+
+        {activeTab === 'socket' && <WebSocketView />}
+
+        {activeTab === 'regex' && <RegexLabView />}
+
+        {activeTab === 'packages' && (
+          <PackageManagerView
+            activeFileName={activeFileName}
+            activeFileContent={activeFileContent}
+          />
+        )}
+
+        {activeTab === 'tasks' && <TaskRunnerView />}
+
         {activeTab === 'ai' && (
           <AiChatPanel
             isOpen={isOpen}

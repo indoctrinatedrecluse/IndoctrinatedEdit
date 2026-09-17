@@ -16,23 +16,7 @@ export const R_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 2. Julia Snippets
-export const JULIA_SNIPPETS: SnippetDefinition[] = [
-  {
-    label: 'julia-flux-model',
-    detail: 'Julia: Flux.jl Deep Learning Model with CUDA Support',
-    documentation: 'Flux.jl neural network architecture, training loop, and loss function',
-    insertText: 'using Flux\nusing Statistics\n\n# Define Liquid Glass Classifier Neural Network\nmodel = Chain(\n    Dense(128 => 64, relu),\n    Dropout(0.2),\n    Dense(64 => 32, relu),\n    Dense(32 => 10),\n    softmax\n)\n\nloss(model, x, y) = Flux.Losses.logitcrossentropy(model(x), y)\nopt_state = Flux.setup(Adam(0.001), model)\n\nfunction train_step!(x_batch, y_batch)\n    grads = Flux.gradient(model) do m\n        loss(m, x_batch, y_batch)\n    end\n    Flux.update!(opt_state, model, grads[1])\nend\n$0',
-  },
-  {
-    label: 'julia-diffeq-sim',
-    detail: 'Julia: DifferentialEquations.jl High-Performance ODE Solver',
-    documentation: 'Solve non-linear differential equations with Tsit5 adaptive integrator',
-    insertText: 'using DifferentialEquations\nusing Plots\n\nfunction lorenz!(du, u, p, t)\n    sigma, rho, beta = p\n    du[1] = sigma * (u[2] - u[1])\n    du[2] = u[1] * (rho - u[3]) - u[2]\n    du[3] = u[1] * u[2] - beta * u[3]\nend\n\nu0 = [1.0, 0.0, 0.0]\ntspan = (0.0, 100.0)\np = [10.0, 28.0, 8.0/3.0]\n\nprob = ODEProblem(lorenz!, u0, tspan, p)\nsol = solve(prob, Tsit5(), saveat = 0.01)\n\nplot(sol, idxs = (1, 2, 3), title = "Liquid Glass Lorenz Attractor", lw = 1.2)\n$0',
-  },
-]
-
-// 3. Scala Snippets
+// 2. Scala Snippets
 export const SCALA_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'scala3-spark-pipeline',
@@ -42,7 +26,7 @@ export const SCALA_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 4. MATLAB / Octave Snippets
+// 3. MATLAB / Octave Snippets
 export const MATLAB_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'matlab-matrix-simulation',
@@ -54,7 +38,6 @@ export const MATLAB_SNIPPETS: SnippetDefinition[] = [
 
 export const DATASCIENCE_SNIPPETS: SnippetDefinition[] = [
   ...R_SNIPPETS,
-  ...JULIA_SNIPPETS,
   ...SCALA_SNIPPETS,
   ...MATLAB_SNIPPETS,
 ]

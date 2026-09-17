@@ -26,6 +26,11 @@ import { web3ExtensionManifest, registerWeb3Extension } from './web3Support/web3
 import { logicFormalExtensionManifest, registerLogicFormalExtension } from './logicFormalSupport/logicFormalExtension'
 import { databaseExtensionManifest, registerDatabaseExtension } from './databaseStudio/databaseExtension'
 import { restClientExtensionManifest, registerRestClientExtension } from './restClient/restClientExtension'
+import { luaExtensionManifest, registerLuaExtension } from './luaSupport/luaExtension'
+import { zigExtensionManifest, registerZigExtension } from './zigSupport/zigExtension'
+import { gdscriptExtensionManifest, registerGDScriptExtension } from './gdscriptSupport/gdscriptExtension'
+import { shellScriptExtensionManifest, registerShellScriptExtension } from './shellScriptSupport/shellScriptExtension'
+import { juliaExtensionManifest, registerJuliaExtension } from './juliaSupport/juliaExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
 
@@ -84,10 +89,10 @@ class ExtensionRegistry {
     // 17. Kotlin & Android Multiplatform Suite
     this.register(kotlinExtensionManifest)
 
-    // 18. DevOps, Cloud IaC & Shell Automation Suite
+    // 18. DevOps, Cloud IaC & Container Suite
     this.register(devopsExtensionManifest)
 
-    // 19. Data Science, AI & Scientific Computing Suite
+    // 19. Data Science, R & Numerical Computing Suite
     this.register(dataScienceExtensionManifest)
 
     // 20. BEAM & Functional Programming Suite
@@ -111,7 +116,113 @@ class ExtensionRegistry {
     // 26. REST & GraphQL API Client
     this.register(restClientExtensionManifest)
 
-    // 27. Liquid Glass Shader Shaper
+    // 27. Dedicated Lua & Luau Game Engine Suite
+    this.register(luaExtensionManifest)
+
+    // 28. Dedicated Zig Native Systems Suite
+    this.register(zigExtensionManifest)
+
+    // 29. Dedicated Godot & GDScript 4 Suite
+    this.register(gdscriptExtensionManifest)
+
+    // 30. Universal Shell & PowerShell Automation Suite
+    this.register(shellScriptExtensionManifest)
+
+    // 31. Dedicated Julia High-Performance Scientific Suite
+    this.register(juliaExtensionManifest)
+
+    // 32. Cryptography & DevTools Studio
+    this.register({
+      id: 'indoctrinated.ext.cryptolab',
+      name: 'Cryptography & DevTools Studio',
+      version: '1.0.0',
+      description: 'Interactive JWT inspector/signer, universal hashes/HMAC, codecs, UUID/ULID entropy generators, epoch time machine, and format transformers.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'ShieldCheck',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 33. Live Markdown, Static HTML & Mermaid Diagram Studio
+    this.register({
+      id: 'indoctrinated.ext.livepreview',
+      name: 'Live Markdown, HTML & Mermaid Diagram Studio',
+      version: '1.0.0',
+      description: 'Split-canvas and dock live preview for Markdown and HTML with GitHub alerts, tables, and Mermaid.js vector diagram rendering.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Eye',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 34. Docker & Container Studio
+    this.register({
+      id: 'indoctrinated.ext.docker',
+      name: 'Docker & Container Studio',
+      version: '1.0.0',
+      description: 'Visual Docker container dashboard, CPU/Memory telemetry meters, live log streaming, volumes/images inspector, and compose generator.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Container',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 35. WebSocket & Event Streams Workbench
+    this.register({
+      id: 'indoctrinated.ext.websocket',
+      name: 'WebSocket & Event Streams Workbench',
+      version: '1.0.0',
+      description: 'Real-time bidirectional WebSocket and event stream testing client with interactive packet composer and message waterfall.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Radio',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 36. Visual Regex & Pattern Lab
+    this.register({
+      id: 'indoctrinated.ext.regexlab',
+      name: 'Visual Regex & Pattern Lab',
+      version: '1.0.0',
+      description: 'Interactive regex arena with real-time match highlighting, capture group inspector, token-by-token natural language explainer, and multi-language code generation.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Code2',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 37. Package & Dependency Manager
+    this.register({
+      id: 'indoctrinated.ext.packagemanager',
+      name: 'Package & Dependency Manager',
+      version: '1.0.0',
+      description: 'Universal manifest scanner for package.json, requirements.txt, Cargo.toml, and go.mod with outdated dependency and CVE vulnerability detection.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Package',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 38. Task Runner & Cron Expression Studio
+    this.register({
+      id: 'indoctrinated.ext.taskrunner',
+      name: 'Task Runner & Cron Expression Studio',
+      version: '1.0.0',
+      description: 'Workspace project scripts discovery runner and 5-field Cron schedule builder with natural English translation and projection triggers.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Play',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    // 39. Liquid Glass Shader Shaper
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Shader Shaper',
@@ -124,12 +235,12 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
-    // 28. Unified Diagnostics & Toolchain Bus
+    // 40. Unified Diagnostics & Toolchain Bus
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
       version: '1.0.1',
-      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, SQL, Solidity, and Prolog with real-time error markers.',
+      description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, Lua, GDScript, SQL, Solidity, and Shell with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
       iconName: 'Cpu',
@@ -193,7 +304,7 @@ class ExtensionRegistry {
     safeInit('Native Apple & Swift', () => registerSwiftExtension(monacoInstance))
     safeInit('Kotlin & Android Multiplatform', () => registerKotlinExtension(monacoInstance))
     safeInit('DevOps & Cloud IaC', () => registerDevopsExtension(monacoInstance))
-    safeInit('Data Science & AI', () => registerDataScienceExtension(monacoInstance))
+    safeInit('Data Science & R Analytics', () => registerDataScienceExtension(monacoInstance))
     safeInit('BEAM & Functional Programming', () => registerBeamFunctionalExtension(monacoInstance))
     safeInit('Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
     safeInit('Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
@@ -201,9 +312,12 @@ class ExtensionRegistry {
     safeInit('REST & GraphQL Client', () => registerRestClientExtension(monacoInstance))
     safeInit('Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
     safeInit('Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
+    safeInit('Lua & Luau Game Engine', () => registerLuaExtension(monacoInstance))
+    safeInit('Zig Native Systems', () => registerZigExtension(monacoInstance))
+    safeInit('Godot & GDScript', () => registerGDScriptExtension(monacoInstance))
+    safeInit('Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
+    safeInit('Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
   }
 }
 
 export const extensionRegistry = new ExtensionRegistry()
-
-

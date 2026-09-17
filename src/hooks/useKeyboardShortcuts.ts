@@ -18,6 +18,13 @@ interface ShortcutHandlers {
   onToggleAi?: () => void
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
+  onToggleCrypto?: () => void
+  onTogglePreview?: () => void
+  onToggleDocker?: () => void
+  onToggleSocket?: () => void
+  onToggleRegex?: () => void
+  onTogglePackages?: () => void
+  onToggleTasks?: () => void
   onToggleNotifications?: () => void
   onOpenShortcuts?: () => void
   onGoToLine?: () => void
@@ -280,6 +287,55 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.altKey && key === 'r') {
         e.preventDefault()
         handlers.onToggleRestClient?.()
+        return
+      }
+
+      // Ctrl+Alt+C -> Toggle Cryptography & DevTools Lab
+      if (e.altKey && key === 'c') {
+        e.preventDefault()
+        handlers.onToggleCrypto?.()
+        return
+      }
+
+      // Ctrl+Alt+V -> Toggle Live Markdown & HTML Preview
+      if (e.altKey && key === 'v') {
+        e.preventDefault()
+        handlers.onTogglePreview?.()
+        return
+      }
+
+      // Ctrl+Alt+K -> Toggle Docker & Container Studio
+      if (e.altKey && key === 'k') {
+        e.preventDefault()
+        handlers.onToggleDocker?.()
+        return
+      }
+
+      // Ctrl+Alt+W -> Toggle WebSocket & Streams Workbench
+      if (e.altKey && key === 'w') {
+        e.preventDefault()
+        handlers.onToggleSocket?.()
+        return
+      }
+
+      // Ctrl+Alt+X -> Toggle Visual Regex & Pattern Lab
+      if (e.altKey && key === 'x') {
+        e.preventDefault()
+        handlers.onToggleRegex?.()
+        return
+      }
+
+      // Ctrl+Alt+P -> Toggle Package & Dependency Manager
+      if (e.altKey && key === 'p') {
+        e.preventDefault()
+        handlers.onTogglePackages?.()
+        return
+      }
+
+      // Ctrl+Alt+T -> Toggle Task Runner & Cron Studio
+      if (e.altKey && key === 't') {
+        e.preventDefault()
+        handlers.onToggleTasks?.()
         return
       }
 

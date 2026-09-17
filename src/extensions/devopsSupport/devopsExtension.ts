@@ -1,7 +1,6 @@
 import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import {
-  SHELL_SNIPPETS,
   TERRAFORM_SNIPPETS,
   DOCKER_SNIPPETS,
   KUBERNETES_SNIPPETS,
@@ -12,29 +11,17 @@ import { notificationService } from '../../services/notificationService'
 
 export const devopsExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.devops-iac',
-  name: 'DevOps, Cloud IaC & Shell Automation Suite',
+  name: 'DevOps, Cloud IaC & Container Suite',
   version: '1.0.0',
   description:
-    'Complete DevOps, Cloud Infrastructure as Code, Containerization, and Shell Scripting suite for Bash, Zsh, PowerShell, Terraform HCL, Docker, and Kubernetes.',
+    'Complete DevOps, Cloud Infrastructure as Code, and Containerization suite for Terraform HCL, OpenTofu, Docker, and Kubernetes.',
   author: 'indoctrinatedrecluse',
   category: 'Tools',
-  iconName: 'Terminal',
+  iconName: 'Server',
   status: 'Active',
   type: 'Built-in',
   snippetsCount: devopsSnippets.length,
   languages: [
-    {
-      id: 'shell',
-      extensions: ['.sh', '.bash', '.zsh'],
-      aliases: ['Shell Script', 'Bash', 'Zsh'],
-      snippets: SHELL_SNIPPETS,
-    },
-    {
-      id: 'powershell',
-      extensions: ['.ps1', '.psm1', '.psd1'],
-      aliases: ['PowerShell', 'pwsh'],
-      snippets: SHELL_SNIPPETS,
-    },
     {
       id: 'hcl',
       extensions: ['.tf', '.hcl', '.tfvars'],
@@ -50,7 +37,7 @@ export const devopsExtensionManifest: ExtensionManifest = {
     {
       id: 'yaml',
       extensions: ['.yml', '.yaml'],
-      aliases: ['Kubernetes Manifests', 'Docker Compose', 'GitHub Actions'],
+      aliases: ['Kubernetes Manifests', 'Docker Compose', 'Helm'],
       snippets: [...DOCKER_SNIPPETS, ...KUBERNETES_SNIPPETS],
     },
   ],
@@ -62,7 +49,7 @@ export function registerDevopsExtension(monacoInstance: typeof monaco) {
   if (isRegistered || !monacoInstance) return
   isRegistered = true
 
-  const registerForLang = (lang: string, snippetsList: typeof SHELL_SNIPPETS) => {
+  const registerForLang = (lang: string, snippetsList: typeof TERRAFORM_SNIPPETS, prefix: string) => {
     try {
       monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
@@ -74,58 +61,57 @@ export function registerDevopsExtension(monacoInstance: typeof monaco) {
               startColumn: word.startColumn,
               endColumn: word.endColumn,
             }
-            return {
-              suggestions: snippetsList.map((s) => ({
-                label: s.label,
-                kind: monacoInstance.languages.CompletionItemKind.Snippet,
-                detail: s.detail || 'DevOps / IaC Snippet',
-                documentation: s.documentation,
-                insertText: s.insertText,
-                insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                range,
-              })),
-            }
-          } catch (innerErr) {
-            notificationService.notifyError(
-              'DevOps & IaC Engine',
-              `Completion provider failed for ${lang}: ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`
-            )
+
+            const suggestions: monaco.languages.CompletionItem[] = snippetsList.map((snip) => ({
+              label: snip.label,
+              kind: monacoInstance.languages.CompletionItemKind.Snippet,
+              detail: `${prefix} ${snip.detail}`,
+              documentation: {
+                value: `**${snip.detail}**\n\n${snip.documentation}`,
+              },
+              insertText: snip.insertText,
+              insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            }))
+
+            return { suggestions }
+          } catch (err) {
+            console.error(`DevOps snippet provider failed for ${lang}:`, err)
             return { suggestions: [] }
           }
         },
       })
     } catch (err) {
-      notificationService.notifyError(
-        'DevOps & IaC Engine',
-        `Failed to register language provider for ${lang}: ${err instanceof Error ? err.message : String(err)}`
-      )
+      console.error(`Could not register completion provider for ${lang}:`, err)
     }
   }
 
-  registerForLang('shell', SHELL_SNIPPETS)
-  registerForLang('powershell', SHELL_SNIPPETS)
-  registerForLang('hcl', TERRAFORM_SNIPPETS)
-  registerForLang('dockerfile', DOCKER_SNIPPETS)
-  registerForLang('yaml', [...DOCKER_SNIPPETS, ...KUBERNETES_SNIPPETS])
+  registerForLang('hcl', TERRAFORM_SNIPPETS, '☁️')
+  registerForLang('dockerfile', DOCKER_SNIPPETS, '🐳')
+  registerForLang('yaml', [...DOCKER_SNIPPETS, ...KUBERNETES_SNIPPETS], '☸️')
 
-  triggerDevopsToolchainCheck()
-}
-
-export function triggerDevopsToolchainCheck() {
-  let unsubscribe: (() => void) | undefined
-  unsubscribe = toolchainService.onDidDetect((results) => {
-    const gitToolchain = results.find((tc) => tc.language === 'git')
-    if (gitToolchain) {
-      if (!gitToolchain.found) {
-        notificationService.notifyMissingToolchain(
-          'DevOps, Cloud IaC & Shell Suite',
-          'git / docker / terraform',
-          'https://git-scm.com/downloads'
-        )
-      }
-      unsubscribe?.()
-    }
+  // Register toolchains for Terraform & Docker
+  toolchainService.registerToolchain({
+    id: 'toolchain.terraform',
+    name: 'Terraform / OpenTofu CLI',
+    language: 'hcl',
+    binaryNames: ['tofu', 'terraform'],
+    versionFlag: 'version',
+    versionPattern: '(?:Terraform|OpenTofu)\\s+v([0-9]+\\.[0-9]+\\.[0-9]+)',
+    downloadUrl: 'https://opentofu.org',
+    description: 'Infrastructure as Code tool for declarative cloud provisioning',
   })
 
-  toolchainService.detectOne('toolchain.git').catch(() => {})
+  toolchainService.registerToolchain({
+    id: 'toolchain.docker',
+    name: 'Docker Engine CLI',
+    language: 'dockerfile',
+    binaryNames: ['docker', 'podman'],
+    versionFlag: '--version',
+    versionPattern: '(?:Docker|podman)\\s+version\\s+([0-9]+\\.[0-9]+\\.[0-9]+)',
+    downloadUrl: 'https://www.docker.com',
+    description: 'Container application development and virtualization engine',
+  })
+
+  notificationService.notifyInfo('Extension System', '☁️ DevOps, Cloud IaC & Container Suite activated')
 }

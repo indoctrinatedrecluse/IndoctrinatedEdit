@@ -4,13 +4,13 @@ import { SWIFT_SNIPPETS, OBJC_SNIPPETS } from '../src/extensions/swiftSupport/sw
 import { kotlinExtensionManifest } from '../src/extensions/kotlinSupport/kotlinExtension'
 import { KOTLIN_SNIPPETS, COMPOSE_SNIPPETS, GRADLE_KTS_SNIPPETS } from '../src/extensions/kotlinSupport/kotlinSnippets'
 import { devopsExtensionManifest } from '../src/extensions/devopsSupport/devopsExtension'
-import { BASH_SNIPPETS, POWERSHELL_SNIPPETS, TERRAFORM_SNIPPETS, DOCKER_SNIPPETS, KUBERNETES_SNIPPETS } from '../src/extensions/devopsSupport/devopsSnippets'
+import { TERRAFORM_SNIPPETS, DOCKER_SNIPPETS, KUBERNETES_SNIPPETS } from '../src/extensions/devopsSupport/devopsSnippets'
 import { dataScienceExtensionManifest } from '../src/extensions/dataScienceSupport/dataScienceExtension'
-import { R_SNIPPETS, JULIA_SNIPPETS, SCALA_SNIPPETS, MATLAB_SNIPPETS } from '../src/extensions/dataScienceSupport/dataScienceSnippets'
+import { R_SNIPPETS, SCALA_SNIPPETS, MATLAB_SNIPPETS } from '../src/extensions/dataScienceSupport/dataScienceSnippets'
 import { beamFunctionalExtensionManifest } from '../src/extensions/beamFunctionalSupport/beamFunctionalExtension'
 import { ELIXIR_SNIPPETS, ERLANG_SNIPPETS, HASKELL_SNIPPETS, CLOJURE_SNIPPETS, OCAML_SNIPPETS, JANET_SNIPPETS } from '../src/extensions/beamFunctionalSupport/beamFunctionalSnippets'
 import { systemsGamingExtensionManifest } from '../src/extensions/systemsGamingSupport/systemsGamingExtension'
-import { ZIG_SNIPPETS, ODIN_SNIPPETS, NIM_SNIPPETS, LUA_SNIPPETS, GDSCRIPT_SNIPPETS, ASSEMBLY_SNIPPETS } from '../src/extensions/systemsGamingSupport/systemsGamingSnippets'
+import { ODIN_SNIPPETS, NIM_SNIPPETS, ASSEMBLY_SNIPPETS } from '../src/extensions/systemsGamingSupport/systemsGamingSnippets'
 import { databaseSchemaExtensionManifest } from '../src/extensions/databaseSchemaSupport/databaseSchemaExtension'
 import { SQL_SNIPPETS, GRAPHQL_SNIPPETS, PRISMA_SNIPPETS } from '../src/extensions/databaseSchemaSupport/databaseSchemaSnippets'
 import { web3ExtensionManifest } from '../src/extensions/web3Support/web3Extension'
@@ -73,47 +73,42 @@ describe('Kotlin & Android Multiplatform Suite', () => {
   })
 })
 
-describe('DevOps, Cloud IaC & Shell Automation Suite', () => {
+describe('DevOps, Cloud IaC & Container Suite', () => {
   it('should have valid DevOps extension manifest registered in ExtensionRegistry', () => {
     expect(devopsExtensionManifest.id).toBe('indoctrinated.ext.devops-iac')
     const registered = extensionRegistry.get('indoctrinated.ext.devops-iac')
     expect(registered).toBeDefined()
-    expect(registered?.languages?.map((l) => l.id)).toContain('shell')
     expect(registered?.languages?.map((l) => l.id)).toContain('hcl')
     expect(registered?.languages?.map((l) => l.id)).toContain('dockerfile')
+    expect(registered?.languages?.map((l) => l.id)).toContain('yaml')
   })
 
-  it('should contain Bash, PowerShell, Terraform, Docker, and K8s snippets', () => {
-    expect(BASH_SNIPPETS.length).toBeGreaterThan(0)
-    expect(POWERSHELL_SNIPPETS.length).toBeGreaterThan(0)
+  it('should contain Terraform, Docker, and K8s snippets', () => {
     expect(TERRAFORM_SNIPPETS.length).toBeGreaterThan(0)
     expect(DOCKER_SNIPPETS.length).toBeGreaterThan(0)
     expect(KUBERNETES_SNIPPETS.length).toBeGreaterThan(0)
   })
 })
 
-describe('Data Science, AI & Scientific Computing Suite', () => {
+describe('Data Science, R & Numerical Computing Suite', () => {
   it('should have valid Data Science manifest registered in ExtensionRegistry', () => {
     expect(dataScienceExtensionManifest.id).toBe('indoctrinated.ext.datascience-scientific')
     const registered = extensionRegistry.get('indoctrinated.ext.datascience-scientific')
     expect(registered).toBeDefined()
     expect(registered?.languages?.map((l) => l.id)).toContain('r')
-    expect(registered?.languages?.map((l) => l.id)).toContain('julia')
     expect(registered?.languages?.map((l) => l.id)).toContain('scala')
+    expect(registered?.languages?.map((l) => l.id)).toContain('matlab')
   })
 
-  it('should contain R, Julia, Scala 3, and MATLAB snippets', () => {
+  it('should contain R, Scala 3, and MATLAB snippets', () => {
     expect(R_SNIPPETS.length).toBeGreaterThan(0)
-    expect(JULIA_SNIPPETS.length).toBeGreaterThan(0)
     expect(SCALA_SNIPPETS.length).toBeGreaterThan(0)
     expect(MATLAB_SNIPPETS.length).toBeGreaterThan(0)
   })
 
-  it('should check toolchain.r and toolchain.julia', async () => {
+  it('should check toolchain.r', async () => {
     const rInfo = await toolchainService.detectOne('toolchain.r')
     expect(rInfo).toBeDefined()
-    const juliaInfo = await toolchainService.detectOne('toolchain.julia')
-    expect(juliaInfo).toBeDefined()
   })
 })
 
@@ -148,34 +143,31 @@ describe('BEAM & Functional Programming Suite (with Janet and Elixir)', () => {
   })
 })
 
-describe('Systems, Native Performance & Game Scripting Suite (with Odin & Zig)', () => {
+describe('Systems, Native Performance & Game Scripting Suite (with Odin, Nim & Assembly)', () => {
   it('should have valid Systems Gaming manifest registered in ExtensionRegistry', () => {
     expect(systemsGamingExtensionManifest.id).toBe('indoctrinated.ext.systems-gaming')
     const registered = extensionRegistry.get('indoctrinated.ext.systems-gaming')
     expect(registered).toBeDefined()
     const langIds = registered?.languages?.map((l) => l.id)
-    expect(langIds).toContain('zig')
     expect(langIds).toContain('odin')
     expect(langIds).toContain('nim')
-    expect(langIds).toContain('lua')
-    expect(langIds).toContain('gdscript')
     expect(langIds).toContain('assembly')
+    expect(langIds).toContain('wat')
   })
 
-  it('should contain snippets for Zig, Odin, Nim, Lua, GDScript, Assembly, and WAT', () => {
-    expect(ZIG_SNIPPETS.length).toBeGreaterThan(0)
+  it('should contain snippets for Odin, Nim, Assembly, and WAT', () => {
     expect(ODIN_SNIPPETS.length).toBeGreaterThan(0)
     expect(NIM_SNIPPETS.length).toBeGreaterThan(0)
-    expect(LUA_SNIPPETS.length).toBeGreaterThan(0)
-    expect(GDSCRIPT_SNIPPETS.length).toBeGreaterThan(0)
     expect(ASSEMBLY_SNIPPETS.length).toBeGreaterThan(0)
     expect(ODIN_SNIPPETS.map((s) => s.label)).toContain('odin-main')
     expect(ODIN_SNIPPETS.map((s) => s.label)).toContain('odin-struct')
   })
 
-  it('should check toolchain.zig', async () => {
-    const info = await toolchainService.detectOne('toolchain.zig')
-    expect(info).toBeDefined()
+  it('should check toolchain.odin and toolchain.nim', async () => {
+    const odinInfo = await toolchainService.detectOne('toolchain.odin')
+    expect(odinInfo).toBeDefined()
+    const nimInfo = await toolchainService.detectOne('toolchain.nim')
+    expect(nimInfo).toBeDefined()
   })
 })
 

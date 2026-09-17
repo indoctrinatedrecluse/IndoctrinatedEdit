@@ -1,22 +1,6 @@
 import { SnippetDefinition } from '../extensionTypes'
 
-// 1. Zig Snippets
-export const ZIG_SNIPPETS: SnippetDefinition[] = [
-  {
-    label: 'zig-allocator-main',
-    detail: 'Zig: Main Entrypoint with GeneralPurposeAllocator',
-    documentation: 'Zig idiomatic memory management using GPA with defer deinit and error handling',
-    insertText: 'const std = @import("std");\n\npub fn main() !void {\n    var gpa = std.heap.GeneralPurposeAllocator(.{}){};\n    defer _ = gpa.deinit();\n    const allocator = gpa.allocator();\n\n    const stdout = std.io.getStdOut().writer();\n    try stdout.print("✨ [IndoctrinatedEdit] Zig Systems Engine Initialized\\n", .{});\n\n    const buffer = try allocator.alloc(u8, 1024);\n    defer allocator.free(buffer);\n    @memset(buffer, 0x42);\n\n    try stdout.print("Allocated bytes: {d} at address {*} \\n", .{ buffer.len, buffer.ptr });\n}\n$0',
-  },
-  {
-    label: 'zig-comptime-struct',
-    detail: 'Zig: Comptime Generic Data Structure',
-    documentation: 'Zig compile-time generic struct generation with methods',
-    insertText: 'const std = @import("std");\n\npub fn CircularBuffer(comptime T: type, comptime capacity: usize) type {\n    return struct {\n        items: [capacity]T = undefined,\n        head: usize = 0,\n        tail: usize = 0,\n        count: usize = 0,\n\n        const Self = @This();\n\n        pub fn push(self: *Self, item: T) bool {\n            if (self.count == capacity) return false;\n            self.items[self.head] = item;\n            self.head = (self.head + 1) % capacity;\n            self.count += 1;\n            return true;\n        }\n    };\n}\n$0',
-  },
-]
-
-// 2. Odin Snippets (Game & Systems programming)
+// 1. Odin Snippets (Game & Systems programming)
 export const ODIN_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'odin-main',
@@ -38,7 +22,7 @@ export const ODIN_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 3. Nim Snippets
+// 2. Nim Snippets
 export const NIM_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'nim-async-http',
@@ -48,27 +32,7 @@ export const NIM_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 4. Lua / Luau Snippets
-export const LUA_SNIPPETS: SnippetDefinition[] = [
-  {
-    label: 'lua-love2d-loop',
-    detail: 'Lua / Love2D: Game Lifecycle (load, update, draw)',
-    documentation: 'LÖVE 2D game lifecycle callbacks with delta-time physics and canvas draw',
-    insertText: 'function love.load()\n    love.graphics.setBackgroundColor(0.05, 0.05, 0.08)\n    player = { x = 400, y = 300, speed = 250, radius = 20 }\nend\n\nfunction love.update(dt)\n    if love.keyboard.isDown("right") then player.x = player.x + player.speed * dt end\n    if love.keyboard.isDown("left") then player.x = player.x - player.speed * dt end\n    if love.keyboard.isDown("down") then player.y = player.y + player.speed * dt end\n    if love.keyboard.isDown("up") then player.y = player.y - player.speed * dt end\nend\n\nfunction love.draw()\n    love.graphics.setColor(0.04, 0.52, 1.0, 0.85)\n    love.graphics.circle("fill", player.x, player.y, player.radius)\n    love.graphics.setColor(1, 1, 1, 1)\n    love.graphics.print("✨ IndoctrinatedEdit Lua Engine", 10, 10)\nend\n$0',
-  },
-]
-
-// 5. GDScript Snippets (Godot 4)
-export const GDSCRIPT_SNIPPETS: SnippetDefinition[] = [
-  {
-    label: 'gdscript-character-body',
-    detail: 'GDScript (Godot 4): CharacterBody3D Controller with Physics',
-    documentation: 'Godot 4 CharacterBody3D script with gravity, acceleration, and move_and_slide()',
-    insertText: 'extends CharacterBody3D\n\n@export var speed: float = 5.0\n@export var jump_velocity: float = 4.5\n\nvar gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")\n\nfunc _physics_process(delta: float) -> void:\n\tif not is_on_floor():\n\t\tvelocity.y -= gravity * delta\n\n\tif Input.is_action_just_pressed("ui_accept") and is_on_floor():\n\t\tvelocity.y = jump_velocity\n\n\tvar input_dir := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")\n\tvar direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()\n\tif direction:\n\t\tvelocity.x = direction.x * speed\n\t\tvelocity.z = direction.z * speed\n\telse:\n\t\tvelocity.x = move_toward(velocity.x, 0, speed)\n\t\tvelocity.z = move_toward(velocity.z, 0, speed)\n\n\tmove_and_slide()\n$0',
-  },
-]
-
-// 6. Assembly & WAT Snippets
+// 3. Assembly & WAT Snippets
 export const ASSEMBLY_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'asm-x86-64-entry',
@@ -85,11 +49,8 @@ export const ASSEMBLY_SNIPPETS: SnippetDefinition[] = [
 ]
 
 export const SYSTEMS_GAMING_SNIPPETS: SnippetDefinition[] = [
-  ...ZIG_SNIPPETS,
   ...ODIN_SNIPPETS,
   ...NIM_SNIPPETS,
-  ...LUA_SNIPPETS,
-  ...GDSCRIPT_SNIPPETS,
   ...ASSEMBLY_SNIPPETS,
 ]
 

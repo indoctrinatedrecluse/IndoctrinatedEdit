@@ -1,49 +1,6 @@
 import { SnippetDefinition } from '../extensionTypes'
 
-// 1. Bash / Zsh Shell Snippets
-export const BASH_SNIPPETS: SnippetDefinition[] = [
-  {
-    label: 'bash-strict-template',
-    detail: 'Bash: Robust Script Boilerplate with Strict Mode',
-    documentation: 'Production Bash script with set -euo pipefail, trap error handler, and help flag parsing',
-    insertText: '#!/usr/bin/env bash\nset -euo pipefail\nIFS=$\'\\n\\t\'\n\n# -----------------------------------------------------------------------------\n# IndoctrinatedEdit Automation Pipeline\n# -----------------------------------------------------------------------------\n\nreadonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n\nlog_info() { echo -e "\\033[0;34m[INFO]\\033[0m $*"; }\nlog_warn() { echo -e "\\033[0;33m[WARN]\\033[0m $*"; }\nlog_error() { echo -e "\\033[0;31m[ERROR]\\033[0m $*" >&2; }\n\ntrap \'log_error "Script failed on line $LINENO"\' ERR\n\nmain() {\n    log_info "✨ Starting deployment orchestration..."\n    ${1:# Execute workflow tasks}\n    log_info "✅ Completed successfully."\n}\n\nmain "$@"\n$0',
-  },
-  {
-    label: 'bash-arg-parser',
-    detail: 'Bash: Command-Line Flag & Argument Parser (getopts / while)',
-    documentation: 'Standard shell flag parser supporting short flags and positional parameters',
-    insertText: 'while [[ $# -gt 0 ]]; do\n  case "$1" in\n    -h|--help)\n      echo "Usage: $0 [--env <environment>] [--port <port>]"\n      exit 0\n      ;;\n    -e|--env)\n      ENV="$2"\n      shift 2\n      ;;\n    -p|--port)\n      PORT="$2"\n      shift 2\n      ;;\n    *)\n      echo "Unknown option: $1" >&2\n      exit 1\n      ;;\n  esac\ndone\n$0',
-  },
-  {
-    label: 'bash-temp-dir',
-    detail: 'Bash: Secure Temporary Directory with Auto-Cleanup Trap',
-    documentation: 'mktemp -d with EXIT trap to ensure ephemeral workspace directories are always cleaned up',
-    insertText: 'TMP_DIR="$(mktemp -d)"\ncleanup() {\n  rm -rf "$TMP_DIR"\n}\ntrap cleanup EXIT\n\n# Use $TMP_DIR for staging\n$0',
-  },
-]
-
-// 2. PowerShell Snippets
-export const POWERSHELL_SNIPPETS: SnippetDefinition[] = [
-  {
-    label: 'powershell-advanced-function',
-    detail: 'PowerShell: Advanced Function with CmdletBinding & Pipeline',
-    documentation: 'PowerShell script block with [CmdletBinding()], Parameter attributes, and Begin/Process/End blocks',
-    insertText: 'function ${1:Invoke-LiquidGlassBuild} {\n    [CmdletBinding(SupportsShouldProcess = $true)]\n    param (\n        [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]\n        [string]$WorkspacePath,\n\n        [Parameter(Mandatory = $false)]\n        [switch]$CleanArtifacts,\n\n        [ValidateSet("Development", "Staging", "Production")]\n        [string]$Environment = "Production"\n    )\n\n    begin {\n        Write-Host "🚀 Initializing build sequence for $Environment environment..." -ForegroundColor Cyan\n    }\n\n    process {\n        if ($PSCmdlet.ShouldProcess($WorkspacePath, "Compile Assets")) {\n            Write-Host "🔨 Processing: $WorkspacePath" -ForegroundColor Green\n            # Task execution\n        }\n    }\n\n    end {\n        Write-Host "✨ Orchestration completed." -ForegroundColor Green\n    }\n}\n$0',
-  },
-  {
-    label: 'powershell-try-catch-retry',
-    detail: 'PowerShell: Resilient Retry Logic with Exponential Backoff',
-    documentation: 'Robust retry loop catching terminating errors with increasing delay intervals',
-    insertText: '$maxRetries = 3\n$retryCount = 0\n$success = $false\n\nwhile (-not $success -and $retryCount -lt $maxRetries) {\n    try {\n        $retryCount++\n        Write-Host "Attempt $retryCount of $maxRetries..." -ForegroundColor Yellow\n        ${1:# Command to execute}\n        $success = $true\n    } catch {\n        Write-Warning "Attempt $retryCount failed: $($_.Exception.Message)"\n        if ($retryCount -lt $maxRetries) {\n            Start-Sleep -Seconds ($retryCount * 2)\n        } else {\n            throw $_.Exception\n        }\n    }\n}\n$0',
-  },
-]
-
-export const SHELL_SNIPPETS: SnippetDefinition[] = [
-  ...BASH_SNIPPETS,
-  ...POWERSHELL_SNIPPETS,
-]
-
-// 3. Terraform / HCL Snippets
+// 1. Terraform / HCL Snippets
 export const TERRAFORM_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'terraform-module-aws',
@@ -59,7 +16,7 @@ export const TERRAFORM_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 4. Docker / Containerfile Snippets
+// 2. Docker / Containerfile Snippets
 export const DOCKER_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'dockerfile-multistage-node',
@@ -75,7 +32,7 @@ export const DOCKER_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 5. Kubernetes Manifests
+// 3. Kubernetes Manifests
 export const KUBERNETES_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'k8s-deployment-service',
@@ -92,7 +49,6 @@ export const KUBERNETES_SNIPPETS: SnippetDefinition[] = [
 ]
 
 export const DEVOPS_SNIPPETS: SnippetDefinition[] = [
-  ...SHELL_SNIPPETS,
   ...TERRAFORM_SNIPPETS,
   ...DOCKER_SNIPPETS,
   ...KUBERNETES_SNIPPETS,
