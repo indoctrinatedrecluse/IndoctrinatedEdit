@@ -64,7 +64,7 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Download Packaged Artifacts
         uses: actions/download-artifact@v4
