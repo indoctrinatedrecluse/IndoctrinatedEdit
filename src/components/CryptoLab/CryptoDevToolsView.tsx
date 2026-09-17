@@ -135,7 +135,12 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   return (
     <div className="crypto-devtools-root">
       {/* Sub-Header Navigation */}
-      <div className="crypto-subnav-strip">
+      <div
+        className="crypto-subnav-strip"
+        onWheel={(e) => {
+          e.currentTarget.scrollLeft += e.deltaY
+        }}
+      >
         <button
           className={`crypto-nav-btn glass-interactive ${activeTab === 'jwt' ? 'active' : ''}`}
           onClick={() => setActiveTab('jwt')}
@@ -655,6 +660,7 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
           border-radius: var(--radius-sm);
           cursor: pointer;
           white-space: nowrap;
+          flex-shrink: 0;
           transition: all var(--transition-fast);
         }
 

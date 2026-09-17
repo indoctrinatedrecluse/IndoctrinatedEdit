@@ -47,18 +47,47 @@ jobs:
         if: runner.os == 'Linux'
         run: npx electron-builder --linux --publish never
 
-      - name: Publish Artifacts to GitHub Release
-        shell: bash
+      - name: Upload Packaged Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.AppImage
+            release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Download Packaged Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Create or Update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ensure release exists (idempotent across matrix jobs)
-          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes || true
-          
-          # Upload packaged binaries
+          echo "Files to upload:"
+          ls -la release/
+
+          # Ensure release is created with release notes
+          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes || echo "Release already created, continuing..."
+
+          # Upload all binaries with clobber to safely overwrite
           for file in release/*.exe release/*.zip release/*.AppImage release/*.tar.gz; do
             if [ -f "$file" ]; then
-              echo "Uploading $file to release ${{ github.ref_name }}..."
+              echo "Uploading $file..."
               gh release upload "${{ github.ref_name }}" "$file" --clobber
             fi
           done

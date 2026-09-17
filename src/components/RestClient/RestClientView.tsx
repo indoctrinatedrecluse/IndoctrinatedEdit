@@ -368,7 +368,12 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
 
           {/* Request Config Tabs */}
           <div className="request-config-section">
-            <div className="config-tabs-header">
+            <div
+              className="config-tabs-header"
+              onWheel={(e) => {
+                e.currentTarget.scrollLeft += e.deltaY
+              }}
+            >
               <button
                 className={`req-tab-btn ${activeReqTab === 'params' ? 'active' : ''}`}
                 onClick={() => setActiveReqTab('params')}
@@ -1165,6 +1170,9 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
           gap: 2px;
           padding: 6px 14px 0;
           border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .req-tab-btn {
@@ -1176,6 +1184,8 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
           border: none;
           border-bottom: 2px solid transparent;
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .req-tab-btn.active {

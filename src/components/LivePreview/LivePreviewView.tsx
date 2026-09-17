@@ -84,8 +84,18 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
   return (
     <div className="live-preview-root">
       {/* Top Preview Controls Toolbar */}
-      <div className="preview-top-toolbar">
-        <div className="preview-toolbar-left">
+      <div
+        className="preview-top-toolbar"
+        onWheel={(e) => {
+          e.currentTarget.scrollLeft += e.deltaY
+        }}
+      >
+        <div
+          className="preview-toolbar-left"
+          onWheel={(e) => {
+            e.currentTarget.scrollLeft += e.deltaY
+          }}
+        >
           <span className="file-preview-badge">
             {previewType === 'html' ? <Code size={12} /> : <FileText size={12} />}
             <span>{activeFileName}</span>
@@ -106,7 +116,12 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
         <div className="preview-toolbar-right">
           {/* Viewport Switcher */}
           {previewType === 'html' && (
-            <div className="viewport-switcher">
+            <div
+              className="viewport-switcher"
+              onWheel={(e) => {
+                e.currentTarget.scrollLeft += e.deltaY
+              }}
+            >
               <button
                 className={`vp-btn ${viewportMode === 'full' ? 'active' : ''}`}
                 onClick={() => setViewportMode('full')}
@@ -184,6 +199,8 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           background: rgba(0, 0, 0, 0.4);
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
           gap: 10px;
+          overflow-x: auto;
+          scrollbar-width: none;
           flex-shrink: 0;
         }
 
@@ -191,7 +208,9 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           display: flex;
           align-items: center;
           gap: 8px;
-          overflow: hidden;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .file-preview-badge {
@@ -205,12 +224,15 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           border: 1px solid rgba(10, 132, 255, 0.3);
           padding: 2px 8px;
           border-radius: 4px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .preview-stats-pills {
           display: flex;
           align-items: center;
           gap: 4px;
+          flex-shrink: 0;
         }
 
         .stat-pill {
@@ -219,6 +241,8 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           background: rgba(255, 255, 255, 0.05);
           padding: 2px 6px;
           border-radius: 3px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .stat-pill.mermaid-pill {
@@ -226,12 +250,15 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           color: #BF5AF2;
           border: 1px solid rgba(191, 90, 242, 0.3);
           font-weight: 700;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .preview-toolbar-right {
           display: flex;
           align-items: center;
           gap: 6px;
+          flex-shrink: 0;
         }
 
         .viewport-switcher {
@@ -241,6 +268,7 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           border-radius: 4px;
           border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 1px;
+          flex-shrink: 0;
         }
 
         .vp-btn {

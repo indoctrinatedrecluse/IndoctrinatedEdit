@@ -379,7 +379,12 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
 
           {/* Results / History Navigation Tabs */}
           <div className="results-navigation-bar">
-            <div className="nav-tabs">
+            <div
+              className="nav-tabs"
+              onWheel={(e) => {
+                e.currentTarget.scrollLeft += e.deltaY
+              }}
+            >
               <button
                 className={`tab-btn glass-interactive ${activeViewTab === 'results' ? 'active' : ''}`}
                 onClick={() => setActiveViewTab('results')}
@@ -1004,12 +1009,17 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
           padding: 6px 14px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
           background: rgba(255, 255, 255, 0.02);
+          overflow-x: auto;
+          scrollbar-width: none;
           flex-shrink: 0;
         }
 
         .nav-tabs {
           display: flex;
           gap: 4px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .tab-btn {
@@ -1024,6 +1034,8 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
           font-size: 0.74rem;
           font-weight: 500;
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .tab-btn:hover {

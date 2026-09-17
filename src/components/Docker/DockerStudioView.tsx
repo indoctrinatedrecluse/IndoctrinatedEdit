@@ -47,7 +47,12 @@ export const DockerStudioView: React.FC = () => {
   return (
     <div className="docker-studio-root">
       {/* Sub-Nav */}
-      <div className="docker-subnav-strip">
+      <div
+        className="docker-subnav-strip"
+        onWheel={(e) => {
+          e.currentTarget.scrollLeft += e.deltaY
+        }}
+      >
         <button
           className={`docker-nav-btn glass-interactive ${activeTab === 'containers' ? 'active' : ''}`}
           onClick={() => setActiveTab('containers')}
@@ -285,6 +290,7 @@ export const DockerStudioView: React.FC = () => {
           border-radius: var(--radius-sm);
           cursor: pointer;
           white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .docker-nav-btn.active {

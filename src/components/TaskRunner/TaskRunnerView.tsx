@@ -31,7 +31,12 @@ export const TaskRunnerView: React.FC = () => {
   return (
     <div className="task-runner-root">
       {/* Sub-Nav Strip */}
-      <div className="task-subnav-strip">
+      <div
+        className="task-subnav-strip"
+        onWheel={(e) => {
+          e.currentTarget.scrollLeft += e.deltaY
+        }}
+      >
         <button
           className={`task-nav-btn glass-interactive ${activeTab === 'tasks' ? 'active' : ''}`}
           onClick={() => setActiveTab('tasks')}
@@ -107,7 +112,12 @@ export const TaskRunnerView: React.FC = () => {
               />
 
               {/* Quick Presets */}
-              <div className="cron-presets">
+              <div
+                className="cron-presets"
+                onWheel={(e) => {
+                  e.currentTarget.scrollLeft += e.deltaY
+                }}
+              >
                 {[
                   { label: 'Every Minute', val: '* * * * *' },
                   { label: 'Every 15 Min', val: '*/15 * * * *' },
@@ -177,6 +187,8 @@ export const TaskRunnerView: React.FC = () => {
           padding: 6px 10px;
           background: rgba(0, 0, 0, 0.4);
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          overflow-x: auto;
+          scrollbar-width: none;
           flex-shrink: 0;
         }
 
@@ -192,6 +204,8 @@ export const TaskRunnerView: React.FC = () => {
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: var(--radius-sm);
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .task-nav-btn.active {
@@ -330,7 +344,9 @@ export const TaskRunnerView: React.FC = () => {
         .cron-presets {
           display: flex;
           gap: 4px;
-          flex-wrap: wrap;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .cron-preset-pill {
@@ -341,6 +357,8 @@ export const TaskRunnerView: React.FC = () => {
           border-radius: 3px;
           color: var(--text-secondary);
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .cron-preset-pill:hover {

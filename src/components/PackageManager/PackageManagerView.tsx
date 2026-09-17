@@ -50,7 +50,12 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
           />
         </div>
 
-        <div className="filter-toggles">
+        <div
+          className="filter-toggles"
+          onWheel={(e) => {
+            e.currentTarget.scrollLeft += e.deltaY
+          }}
+        >
           <button
             className={`filter-chip ${onlyOutdated ? 'active' : ''}`}
             onClick={() => setOnlyOutdated(!onlyOutdated)}
@@ -156,6 +161,9 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
           display: flex;
           align-items: center;
           gap: 6px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .filter-chip {
@@ -170,6 +178,8 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
           padding: 2px 8px;
           border-radius: var(--radius-xs);
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .filter-chip.active {

@@ -57,7 +57,12 @@ export const RegexLabView: React.FC = () => {
           <span className="flags-label">{flags}</span>
         </div>
 
-        <div className="flags-toggle-row">
+        <div
+          className="flags-toggle-row"
+          onWheel={(e) => {
+            e.currentTarget.scrollLeft += e.deltaY
+          }}
+        >
           {['g', 'i', 'm', 's', 'u'].map((f) => (
             <button
               key={f}
@@ -77,7 +82,12 @@ export const RegexLabView: React.FC = () => {
           <span className="presets-label">
             <BookOpen size={11} /> PRESETS:
           </span>
-          <div className="presets-list">
+          <div
+            className="presets-list"
+            onWheel={(e) => {
+              e.currentTarget.scrollLeft += e.deltaY
+            }}
+          >
             {regexService.presets.map((p) => (
               <button
                 key={p.name}
@@ -155,7 +165,12 @@ export const RegexLabView: React.FC = () => {
         {/* Multi-Language Code Exporter */}
         <div className="snippet-export-box glass-panel">
           <div className="snippet-header">
-            <div className="lang-switcher">
+            <div
+              className="lang-switcher"
+              onWheel={(e) => {
+                e.currentTarget.scrollLeft += e.deltaY
+              }}
+            >
               {(['typescript', 'python', 'go', 'rust'] as const).map((l) => (
                 <button
                   key={l}
@@ -246,6 +261,9 @@ export const RegexLabView: React.FC = () => {
           display: flex;
           align-items: center;
           gap: 4px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .flag-chip {
@@ -258,6 +276,8 @@ export const RegexLabView: React.FC = () => {
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 3px;
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .flag-chip.active {
@@ -281,6 +301,7 @@ export const RegexLabView: React.FC = () => {
           gap: 6px;
           overflow-x: auto;
           scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .presets-label {
@@ -297,6 +318,9 @@ export const RegexLabView: React.FC = () => {
           display: flex;
           align-items: center;
           gap: 4px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex: 1;
         }
 
         .preset-chip {
@@ -308,6 +332,7 @@ export const RegexLabView: React.FC = () => {
           border-radius: var(--radius-xs);
           cursor: pointer;
           white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .preset-chip:hover {
@@ -420,6 +445,9 @@ export const RegexLabView: React.FC = () => {
         .lang-switcher {
           display: flex;
           gap: 4px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .lang-btn {
@@ -430,6 +458,8 @@ export const RegexLabView: React.FC = () => {
           border-radius: 3px;
           color: var(--text-muted);
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .lang-btn.active {

@@ -66,7 +66,12 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
     <div className="right-auxiliary-pane glass-panel">
       {/* Top Multi-Extension Dock Tabs */}
       <div className="right-dock-tab-bar">
-        <div className="dock-tabs-left">
+        <div
+          className="dock-tabs-left"
+          onWheel={(e) => {
+            e.currentTarget.scrollLeft += e.deltaY
+          }}
+        >
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'crypto' ? 'active' : ''}`}
             onClick={() => onSelectTab('crypto')}
@@ -250,6 +255,17 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           display: flex;
           align-items: center;
           gap: 4px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          white-space: nowrap;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          flex: 1;
+          margin-right: 6px;
+        }
+
+        .dock-tabs-left::-webkit-scrollbar {
+          display: none;
         }
 
         .dock-tab-item {
@@ -264,6 +280,8 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           font-size: 0.74rem;
           font-weight: 500;
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
           transition: all 0.15s ease;
         }
 
