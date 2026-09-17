@@ -3,7 +3,7 @@
  */
 
 export interface PreviewMetadata {
-  type: 'markdown' | 'html' | 'unsupported'
+  type: 'markdown' | 'html' | 'svg' | 'unsupported'
   title: string
   wordCount: number
   characterCount: number
@@ -21,7 +21,7 @@ class PreviewService {
   /**
    * Determine whether a given file name or language is previewable
    */
-  public getPreviewType(fileName: string, language?: string): 'markdown' | 'html' | 'unsupported' {
+  public getPreviewType(fileName: string, language?: string): 'markdown' | 'html' | 'svg' | 'unsupported' {
     const ext = fileName.toLowerCase().split('.').pop() || ''
     const lang = (language || '').toLowerCase()
 
@@ -31,7 +31,21 @@ class PreviewService {
     if (ext === 'html' || ext === 'htm' || ext === 'xhtml' || lang === 'html') {
       return 'html'
     }
+    if (ext === 'svg' || lang === 'svg' || lang === 'xml') {
+      return 'svg'
+    }
     return 'unsupported'
+  }
+
+  /**
+   * Minify SVG XML by removing unnecessary whitespace, comments and newlines
+   */
+  public minifySvg(svg: string): string {
+    return svg
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/>\s+</g, '><')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
   }
 
   /**

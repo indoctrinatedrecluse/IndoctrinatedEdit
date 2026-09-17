@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.0] - 2026-09-17
+
+### 🚀 Minor Release — Visual Diff & 3-Way Merge Studio, Hex Inspector, Snippet Vault & Liquid Glass Studio
+
+IndoctrinatedEdit 4.1.0 delivers 4 brand-new developer workbenches (Visual Diff & 3-Way Merge Studio, Hex & Binary Inspector, Snippet Vault & Scratchpad, and Color Palette & Liquid Glass Studio), enhanced existing tool suites (SVG vector live visualizer & minifier, TOTP 2FA authenticator, X.509 certificate inspector, Kubernetes manifest generator, Dockerfile security linter), and ultra-smooth horizontal mouse-wheel scrolling across all auxiliary toolbars.
+
+#### 🔀 Visual Diff & 3-Way Merge Studio (`Ctrl+Alt+M`)
+- **Side-by-Side & Unified Diff Viewer**: Instant line-by-line and character-level diff computation between active editor buffer and target/clipboard text.
+- **3-Way Git Merge Conflict Resolver**: Parses standard conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) and enables one-click conflict resolution (Accept Current / HEAD, Accept Incoming, or Accept Both).
+- **Unified Patch Exporter**: Generates and copies standard unified diff `.patch` files.
+
+#### 💾 Hex & Binary Inspector (`Ctrl+Alt+H`)
+- **16-Byte Hex Matrix**: Visual hex dump viewer with 8-digit byte offset columns, hex values, and printable ASCII representation.
+- **Interactive Byte Inspector**: Click any byte to decode data types in real-time (`Int8`, `UInt8`, `Int16 LE/BE`, `UInt16 LE/BE`, `Int32 LE/BE`, `UInt32 LE/BE`, `Float32`, `Float64`, binary bits, and UTF-8 characters).
+- **Hex & Text Byte Search**: Fast search for ASCII substrings and hexadecimal byte patterns.
+
+#### 🔖 Snippet Vault & Scratchpad (`Ctrl+Alt+S`)
+- **Production Snippet Library**: Curated, categorized templates across TypeScript, Python, Rust, Go, SQL, Shell, Docker, and Liquid Glass.
+- **Custom Snippet Creator**: Create, tag, and persist custom snippets with one-click insertion into the active editor buffer.
+- **Auto-Saved Scratchpad**: Persistent multi-line scratch buffer for temporary notes, payloads, and drafts.
+
+#### 🎨 Color Palette & Liquid Glass Studio (`Ctrl+Alt+O`)
+- **Universal Color Converter**: Live conversions between HEX, RGB/RGBA, HSL/HSLA, OKLCH (Modern CSS), and CMYK (Print).
+- **Liquid Glass Theme Scaffolding**: Generates ready-to-use Antigravity Liquid Glass design tokens (`glassBackground`, `specularBorder`, `accentGlow`, `textPrimary`, `textMuted`) with live interactive glass card preview.
+- **Color Harmonies**: Instant complementary, analogous, and triadic color schemes.
+
+#### ⚡ Enhanced Workbenches & UI Polish
+- **SVG Vector Visualizer & Minifier**: Live vector diagram rendering with whitespace & comment minification inside Live Preview Studio.
+- **TOTP 2FA Authenticator (RFC 6238)**: Generates and validates 6-digit real-time two-factor authentication tokens in Crypto Lab.
+- **X.509 Certificate Inspector**: Parses SSL/TLS `.crt`, `.pem`, and `.cer` certificates with Subject Alternative Names (SAN) and expiry tracking.
+- **Kubernetes Manifest Generator & Dockerfile Linter**: Interactive K8s Deployment/Service manifest scaffolding and security rule auditing in Docker Studio.
+- **Smooth Mouse-Wheel Horizontal Scrolling**: Fluid wheel and swipe scrolling across all dock headers, toolbars, subbars, and tag chips.
+- **Optimized Release Pipeline**: Decoupled multi-platform packaging from publication to eliminate concurrent release upload collisions.
+
+---
+
 ## [4.0.0] - 2026-09-17
 
 ### 🚀 Major Release — 7 Functional Developer Workbenches, 5 Dedicated Language Suites & Zero-Overlap Architecture

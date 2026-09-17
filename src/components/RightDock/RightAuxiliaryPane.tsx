@@ -11,6 +11,10 @@ import {
   Search,
   Package,
   Play,
+  GitCompare,
+  Binary,
+  Bookmark,
+  Palette,
 } from 'lucide-react'
 import { AiChatPanel } from '../AiChat/AiChatPanel'
 import { DatabaseStudio } from '../Database/DatabaseStudio'
@@ -22,6 +26,10 @@ import { WebSocketView } from '../WebSocket/WebSocketView'
 import { RegexLabView } from '../RegexLab/RegexLabView'
 import { PackageManagerView } from '../PackageManager/PackageManagerView'
 import { TaskRunnerView } from '../TaskRunner/TaskRunnerView'
+import { DiffStudioView } from '../DiffStudio/DiffStudioView'
+import { HexInspectorView } from '../HexInspector/HexInspectorView'
+import { SnippetVaultView } from '../SnippetVault/SnippetVaultView'
+import { ColorStudioView } from '../ColorStudio/ColorStudioView'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab =
@@ -35,6 +43,10 @@ export type RightDockTab =
   | 'regex'
   | 'packages'
   | 'tasks'
+  | 'diff'
+  | 'hex'
+  | 'snippets'
+  | 'colors'
 
 interface RightAuxiliaryPaneProps {
   isOpen: boolean
@@ -127,6 +139,42 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           </button>
 
           <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'diff' ? 'active' : ''}`}
+            onClick={() => onSelectTab('diff')}
+            title="Visual Diff & 3-Way Merge Studio (Ctrl+Alt+M)"
+          >
+            <GitCompare size={13} className="tab-icon diff" />
+            <span>Diff Studio</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'hex' ? 'active' : ''}`}
+            onClick={() => onSelectTab('hex')}
+            title="Hex & Binary Inspector (Ctrl+Alt+H)"
+          >
+            <Binary size={13} className="tab-icon hex" />
+            <span>Hex Inspector</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'snippets' ? 'active' : ''}`}
+            onClick={() => onSelectTab('snippets')}
+            title="Snippet Vault & Scratchpad (Ctrl+Alt+S)"
+          >
+            <Bookmark size={13} className="tab-icon snippet" />
+            <span>Snippets</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'colors' ? 'active' : ''}`}
+            onClick={() => onSelectTab('colors')}
+            title="Color Palette & Liquid Glass Studio (Ctrl+Alt+O)"
+          >
+            <Palette size={13} className="tab-icon color" />
+            <span>Colors & Glass</span>
+          </button>
+
+          <button
             className={`dock-tab-item glass-interactive ${activeTab === 'tasks' ? 'active' : ''}`}
             onClick={() => onSelectTab('tasks')}
             title="Task Runner & Cron Studio (Ctrl+Alt+T)"
@@ -182,6 +230,29 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
             onClose={onClose}
           />
         )}
+
+        {activeTab === 'diff' && (
+          <DiffStudioView
+            activeFileName={activeFileName}
+            activeFileContent={activeFileContent}
+            onApplyToEditor={onReplaceSelection}
+          />
+        )}
+
+        {activeTab === 'hex' && (
+          <HexInspectorView
+            activeFileName={activeFileName}
+            activeFileContent={activeFileContent}
+          />
+        )}
+
+        {activeTab === 'snippets' && (
+          <SnippetVaultView
+            onInsertSnippet={onInsertAtCursor}
+          />
+        )}
+
+        {activeTab === 'colors' && <ColorStudioView />}
 
         {activeTab === 'docker' && <DockerStudioView />}
 
@@ -297,17 +368,20 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
 
-        .dock-tab-item .tab-icon.ai {
-          color: #BF5AF2;
-        }
-
-        .dock-tab-item .tab-icon.db {
-          color: #30D158;
-        }
-
-        .dock-tab-item .tab-icon.rest {
-          color: #0A84FF;
-        }
+        .dock-tab-item .tab-icon.diff { color: #FF9F0A; }
+        .dock-tab-item .tab-icon.hex { color: #64D2FF; }
+        .dock-tab-item .tab-icon.snippet { color: #FFD60A; }
+        .dock-tab-item .tab-icon.color { color: #BF5AF2; }
+        .dock-tab-item .tab-icon.crypto { color: #30D158; }
+        .dock-tab-item .tab-icon.preview { color: #64D2FF; }
+        .dock-tab-item .tab-icon.docker { color: #0A84FF; }
+        .dock-tab-item .tab-icon.socket { color: #FF9F0A; }
+        .dock-tab-item .tab-icon.regex { color: #BF5AF2; }
+        .dock-tab-item .tab-icon.pkg { color: #FF453A; }
+        .dock-tab-item .tab-icon.task { color: #30D158; }
+        .dock-tab-item .tab-icon.ai { color: #BF5AF2; }
+        .dock-tab-item .tab-icon.db { color: #30D158; }
+        .dock-tab-item .tab-icon.rest { color: #0A84FF; }
 
         .dock-close-trigger {
           width: 24px;

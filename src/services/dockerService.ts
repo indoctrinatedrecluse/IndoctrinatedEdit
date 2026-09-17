@@ -209,6 +209,117 @@ volumes:
   pgdata:
 `
   }
+
+  /**
+   * Generate Kubernetes Deployment + Service Manifest
+   */
+  public generateKubernetesManifest(appName = 'indoctrinated-app', image = 'indoctrinated/app:v4.1.0', port = 8080, replicas = 3): string {
+    return `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${appName}-deployment
+  labels:
+    app: ${appName}
+spec:
+  replicas: ${replicas}
+  selector:
+    matchLabels:
+      app: ${appName}
+  template:
+    metadata:
+      labels:
+        app: ${appName}
+    spec:
+      containers:
+      - name: ${appName}
+        image: ${image}
+        ports:
+        - containerPort: ${port}
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: ${port}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${appName}-service
+spec:
+  type: ClusterIP
+  selector:
+    app: ${appName}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: ${port}
+`
+  }
+
+  /**
+   * Lint Dockerfile content for security best practices
+   */
+  public lintDockerfile(content: string): Array<{ line: number; rule: string; severity: 'warning' | 'error' | 'info'; message: string }> {
+    const lines = content.split(/\r?\n/)
+    const issues: Array<{ line: number; rule: string; severity: 'warning' | 'error' | 'info'; message: string }> = []
+    let hasUser = false
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim()
+      const lineNum = idx + 1
+
+      if (trimmed.startsWith('FROM') && trimmed.includes(':latest')) {
+        issues.push({
+          line: lineNum,
+          rule: 'avoid-latest-tag',
+          severity: 'warning',
+          message: 'Avoid using ":latest" tag in base image. Pin to explicit digest or version for reproducible builds.',
+        })
+      }
+
+      if (trimmed.startsWith('USER')) {
+        hasUser = true
+      }
+
+      if (trimmed.startsWith('RUN') && trimmed.includes('sudo')) {
+        issues.push({
+          line: lineNum,
+          rule: 'no-sudo',
+          severity: 'error',
+          message: 'Avoid running "sudo" inside Docker layers. Elevate permissions via USER root if necessary.',
+        })
+      }
+
+      if (trimmed.startsWith('ADD') && !trimmed.includes('.tar.') && !trimmed.includes('.tgz')) {
+        issues.push({
+          line: lineNum,
+          rule: 'prefer-copy-over-add',
+          severity: 'info',
+          message: 'Use COPY instead of ADD unless automatic tar extraction is required.',
+        })
+      }
+    })
+
+    if (!hasUser && lines.some((l) => l.trim().startsWith('FROM'))) {
+      issues.push({
+        line: 1,
+        rule: 'missing-non-root-user',
+        severity: 'warning',
+        message: 'Container runs as root by default. Add a non-root USER instruction before ENTRYPOINT/CMD.',
+      })
+    }
+
+    return issues
+  }
 }
 
 export const dockerService = new DockerService()
+

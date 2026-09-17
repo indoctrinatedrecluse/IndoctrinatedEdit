@@ -443,6 +443,62 @@ export const App: React.FC = () => {
     })
   }, [rightPaneTab])
 
+  const handleToggleDiff = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('diff')
+        return true
+      }
+      if (rightPaneTab !== 'diff') {
+        setRightPaneTab('diff')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleHex = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('hex')
+        return true
+      }
+      if (rightPaneTab !== 'hex') {
+        setRightPaneTab('hex')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleSnippets = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('snippets')
+        return true
+      }
+      if (rightPaneTab !== 'snippets') {
+        setRightPaneTab('snippets')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleColors = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('colors')
+        return true
+      }
+      if (rightPaneTab !== 'colors') {
+        setRightPaneTab('colors')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
   const handleInsertAtCursor = useCallback((code: string) => {
     editorHostRef.current?.insertAtCursor(code)
   }, [])
@@ -922,6 +978,18 @@ export const App: React.FC = () => {
       // Package & Dependency Manager
       { id: 'packages.toggle', title: 'Packages: Toggle Package & Dependency Manager', category: 'Tools', shortcut: 'Ctrl+Alt+P', description: 'Scan dependencies, detect outdated versions, and audit CVE security advisories', handler: handleTogglePackages },
 
+      // Visual Diff & 3-Way Merge Studio
+      { id: 'diff.toggle', title: 'Diff Studio: Toggle Visual Diff & 3-Way Merge Studio', category: 'Tools', shortcut: 'Ctrl+Alt+M', description: 'Side-by-side diff, inline char highlighting, and git conflict resolution', handler: handleToggleDiff },
+
+      // Hex & Binary Inspector
+      { id: 'hex.toggle', title: 'Hex Inspector: Toggle Hex & Binary Inspector', category: 'Tools', shortcut: 'Ctrl+Alt+H', description: 'Interactive hex matrix, endianness decode, and data type inspection', handler: handleToggleHex },
+
+      // Snippet Vault & Scratchpad
+      { id: 'snippets.toggle', title: 'Snippets: Toggle Snippet Vault & Scratchpad', category: 'Tools', shortcut: 'Ctrl+Alt+S', description: 'Categorized snippet library, custom templates, and auto-saved scratchpad', handler: handleToggleSnippets },
+
+      // Color Palette & Glass Studio
+      { id: 'colors.toggle', title: 'Colors: Toggle Color Palette & Liquid Glass Studio', category: 'Tools', shortcut: 'Ctrl+Alt+O', description: 'HEX/RGB/HSL/OKLCH conversions, glass tokens, and color harmonies', handler: handleToggleColors },
+
       // Task Runner & Cron Studio
       { id: 'tasks.toggle', title: 'Tasks: Toggle Task Runner & Cron Expression Studio', category: 'Tools', shortcut: 'Ctrl+Alt+T', description: 'Discover scripts, execute project tasks, and calculate Cron schedules', handler: handleToggleTasks },
 
@@ -945,7 +1013,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleSelectTheme, openPalette, tabs])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleSelectTheme, openPalette, tabs])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({

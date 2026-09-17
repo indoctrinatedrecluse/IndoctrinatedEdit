@@ -24,7 +24,7 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
   activeFileName = 'README.md',
   activeFileContent = '',
 }) => {
-  const [previewType, setPreviewType] = useState<'markdown' | 'html' | 'unsupported'>('markdown')
+  const [previewType, setPreviewType] = useState<'markdown' | 'html' | 'svg' | 'unsupported'>('markdown')
   const [renderedHtml, setRenderedHtml] = useState<string>('')
   const [metadata, setMetadata] = useState<PreviewMetadata | null>(null)
   const [viewportMode, setViewportMode] = useState<ViewportMode>('full')
@@ -49,6 +49,17 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
         type: 'html',
         title: activeFileName,
         wordCount: content.split(/\s+/).length,
+        characterCount: content.length,
+        mermaidDiagramsCount: 0,
+        headingsCount: 0,
+      })
+    } else if (type === 'svg') {
+      const content = activeFileContent || sampleHtml
+      setRenderedHtml(content)
+      setMetadata({
+        type: 'svg',
+        title: activeFileName,
+        wordCount: 1,
         characterCount: content.length,
         mermaidDiagramsCount: 0,
         headingsCount: 0,
