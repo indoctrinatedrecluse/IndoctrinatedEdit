@@ -19,10 +19,10 @@ interface LicenseModalProps {
 }
 
 const AUTHOR_EMAIL = 'abmitra1999@gmail.com'
-const COPYRIGHT_HOLDER = 'indoctrinatedrecluse (Abheek Mitra)'
+const COPYRIGHT_HOLDER = 'indoctrinatedrecluse (Abhishek Mitra)'
 
 const FULL_LICENSE_TEXT = `INDOCTRINATED EDIT PROPRIETARY SOFTWARE LICENSE & PERMISSION AGREEMENT
-Copyright (c) 2024-2026 indoctrinatedrecluse (Abheek Mitra). All Rights Reserved.
+Copyright (c) 2024-2026 indoctrinatedrecluse (Abhishek Mitra). All Rights Reserved.
 Author Contact: abmitra1999@gmail.com
 
 ================================================================================
@@ -31,7 +31,7 @@ Author Contact: abmitra1999@gmail.com
 All title, intellectual property rights, and copyrights in and to IndoctrinatedEdit
 (including but not limited to source code, binary executables, architecture, visual
 designs, Liquid Glass UI systems, icons, sound assets, extensions, and documentation)
-belong exclusively to the author, indoctrinatedrecluse (Abheek Mitra).
+belong exclusively to the author, indoctrinatedrecluse (Abhishek Mitra).
 
 ================================================================================
 2. PERMITTED USE & COMPLIMENTARY DOWNLOAD
@@ -236,7 +236,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
             {/* Footer */}
             <div className="license-modal-footer">
               <span>
-                Copyright &copy; 2024-2026 <strong>indoctrinatedrecluse (Abheek Mitra)</strong> • All Rights Reserved
+                Copyright &copy; 2024-2026 <strong>indoctrinatedrecluse (Abhishek Mitra)</strong> • All Rights Reserved
               </span>
             </div>
 

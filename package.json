@@ -3,7 +3,7 @@
   "version": "4.2.0",
   "description": "Flashy iOS Liquid Glass cross-platform text editor for Linux & Windows",
   "main": "dist-electron/main.js",
-  "author": "indoctrinatedrecluse (Abheek Mitra)",
+  "author": "indoctrinatedrecluse (Abhishek Mitra)",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {

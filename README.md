@@ -161,7 +161,7 @@ npm run pack:linux
 
 ## 📄 License & Ownership
 
-Copyright &copy; 2024-2026 **[indoctrinatedrecluse (Abheek Mitra)](https://github.com/indoctrinatedrecluse)**. All Rights Reserved.
+Copyright &copy; 2024-2026 **[indoctrinatedrecluse (Abhishek Mitra)](https://github.com/indoctrinatedrecluse)**. All Rights Reserved.
 
 - **Complimentary Use:** IndoctrinatedEdit is free to download, install, and use for all personal, educational, and commercial software development.
 - **Modification, Forking & Redistribution:** Forking, modifying the underlying code, and distributing custom builds are encouraged, but **you must contact the author first for written permission at `abmitra1999@gmail.com`**.
