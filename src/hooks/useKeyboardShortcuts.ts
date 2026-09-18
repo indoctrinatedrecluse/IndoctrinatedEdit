@@ -25,6 +25,14 @@ interface ShortcutHandlers {
   onToggleRegex?: () => void
   onTogglePackages?: () => void
   onToggleTasks?: () => void
+  onTogglePorts?: () => void
+  onToggleRedis?: () => void
+  onToggleEnv?: () => void
+  onToggleMockLab?: () => void
+  onToggleGraphQL?: () => void
+  onToggleDiagram?: () => void
+  onToggleBundle?: () => void
+  onToggleSvg?: () => void
   onToggleNotifications?: () => void
   onOpenShortcuts?: () => void
   onGoToLine?: () => void
@@ -346,6 +354,62 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.altKey && key === 't') {
         e.preventDefault()
         handlers.onToggleTasks?.()
+        return
+      }
+
+      // Ctrl+Alt+1 -> Toggle Port Sentinel
+      if (e.altKey && key === '1') {
+        e.preventDefault()
+        handlers.onTogglePorts?.()
+        return
+      }
+
+      // Ctrl+Alt+2 -> Toggle Redis Studio
+      if (e.altKey && key === '2') {
+        e.preventDefault()
+        handlers.onToggleRedis?.()
+        return
+      }
+
+      // Ctrl+Alt+3 -> Toggle Env Vault
+      if (e.altKey && key === '3') {
+        e.preventDefault()
+        handlers.onToggleEnv?.()
+        return
+      }
+
+      // Ctrl+Alt+4 -> Toggle MockLab
+      if (e.altKey && key === '4') {
+        e.preventDefault()
+        handlers.onToggleMockLab?.()
+        return
+      }
+
+      // Ctrl+Alt+5 -> Toggle GraphQL Studio
+      if (e.altKey && key === '5') {
+        e.preventDefault()
+        handlers.onToggleGraphQL?.()
+        return
+      }
+
+      // Ctrl+Alt+6 -> Toggle Diagram Studio
+      if (e.altKey && key === '6') {
+        e.preventDefault()
+        handlers.onToggleDiagram?.()
+        return
+      }
+
+      // Ctrl+Alt+7 -> Toggle Bundle Analyzer
+      if (e.altKey && key === '7') {
+        e.preventDefault()
+        handlers.onToggleBundle?.()
+        return
+      }
+
+      // Ctrl+Alt+8 -> Toggle SVG Studio
+      if (e.altKey && key === '8') {
+        e.preventDefault()
+        handlers.onToggleSvg?.()
         return
       }
 

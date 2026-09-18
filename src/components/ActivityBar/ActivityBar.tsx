@@ -16,6 +16,13 @@ import {
   Wifi,
   Package,
   Play,
+  ShieldAlert,
+  Zap,
+  KeyRound,
+  Server,
+  Share2,
+  Layers,
+  Shapes,
 } from 'lucide-react'
 
 export type ActivityView = 'files' | 'git' | 'search' | 'debug' | 'extensions' | 'themes' | 'settings'
@@ -44,6 +51,22 @@ interface ActivityBarProps {
   onTogglePackages?: () => void
   isTasksOpen?: boolean
   onToggleTasks?: () => void
+  isPortsOpen?: boolean
+  onTogglePorts?: () => void
+  isRedisOpen?: boolean
+  onToggleRedis?: () => void
+  isEnvOpen?: boolean
+  onToggleEnv?: () => void
+  isMockLabOpen?: boolean
+  onToggleMockLab?: () => void
+  isGraphQLOpen?: boolean
+  onToggleGraphQL?: () => void
+  isDiagramOpen?: boolean
+  onToggleDiagram?: () => void
+  isBundleOpen?: boolean
+  onToggleBundle?: () => void
+  isSvgOpen?: boolean
+  onToggleSvg?: () => void
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
@@ -70,6 +93,22 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   onTogglePackages,
   isTasksOpen = false,
   onToggleTasks,
+  isPortsOpen = false,
+  onTogglePorts,
+  isRedisOpen = false,
+  onToggleRedis,
+  isEnvOpen = false,
+  onToggleEnv,
+  isMockLabOpen = false,
+  onToggleMockLab,
+  isGraphQLOpen = false,
+  onToggleGraphQL,
+  isDiagramOpen = false,
+  onToggleDiagram,
+  isBundleOpen = false,
+  onToggleBundle,
+  isSvgOpen = false,
+  onToggleSvg,
 }) => {
   const topItems: { id: ActivityView; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
@@ -82,7 +121,12 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
 
   return (
     <aside className="activity-bar">
-      <div className="activity-bar-group top">
+      <div
+        className="activity-bar-group top"
+        onWheel={(e) => {
+          e.currentTarget.scrollTop += e.deltaY
+        }}
+      >
         {topItems.map((item) => {
           const isActive = activeView === item.id
           return (
@@ -100,6 +144,94 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
             </button>
           )
         })}
+
+        {onTogglePorts && (
+          <button
+            className={`activity-btn glass-interactive ${isPortsOpen ? 'active' : ''}`}
+            onClick={onTogglePorts}
+            title="Port & Process Sentinel (Ctrl+Alt+1)"
+          >
+            <ShieldAlert size={18} />
+            {isPortsOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleRedis && (
+          <button
+            className={`activity-btn glass-interactive ${isRedisOpen ? 'active' : ''}`}
+            onClick={onToggleRedis}
+            title="Redis & Key-Value Cache Studio (Ctrl+Alt+2)"
+          >
+            <Zap size={18} />
+            {isRedisOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleEnv && (
+          <button
+            className={`activity-btn glass-interactive ${isEnvOpen ? 'active' : ''}`}
+            onClick={onToggleEnv}
+            title="Env & Secret Vault Studio (Ctrl+Alt+3)"
+          >
+            <KeyRound size={18} />
+            {isEnvOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleMockLab && (
+          <button
+            className={`activity-btn glass-interactive ${isMockLabOpen ? 'active' : ''}`}
+            onClick={onToggleMockLab}
+            title="MockLab API Mock Server (Ctrl+Alt+4)"
+          >
+            <Server size={18} />
+            {isMockLabOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleGraphQL && (
+          <button
+            className={`activity-btn glass-interactive ${isGraphQLOpen ? 'active' : ''}`}
+            onClick={onToggleGraphQL}
+            title="GraphQL & gRPC Studio (Ctrl+Alt+5)"
+          >
+            <Globe size={18} />
+            {isGraphQLOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleDiagram && (
+          <button
+            className={`activity-btn glass-interactive ${isDiagramOpen ? 'active' : ''}`}
+            onClick={onToggleDiagram}
+            title="Architecture & Diagram Studio (Ctrl+Alt+6)"
+          >
+            <Share2 size={18} />
+            {isDiagramOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleBundle && (
+          <button
+            className={`activity-btn glass-interactive ${isBundleOpen ? 'active' : ''}`}
+            onClick={onToggleBundle}
+            title="Bundle & Dependency Analyzer (Ctrl+Alt+7)"
+          >
+            <Layers size={18} />
+            {isBundleOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleSvg && (
+          <button
+            className={`activity-btn glass-interactive ${isSvgOpen ? 'active' : ''}`}
+            onClick={onToggleSvg}
+            title="SVG & Asset Studio (Ctrl+Alt+8)"
+          >
+            <Shapes size={18} />
+            {isSvgOpen && <div className="active-indicator" />}
+          </button>
+        )}
 
         {onToggleCrypto && (
           <button
@@ -235,6 +367,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           border-right: var(--specular-border-subtle);
           backdrop-filter: var(--glass-blur-sm);
           z-index: 50;
+          overflow: hidden;
+          height: 100%;
         }
 
         .activity-bar-group {
@@ -245,10 +379,30 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           width: 100%;
         }
 
+        .activity-bar-group.top {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          padding-bottom: 6px;
+        }
+
+        .activity-bar-group.top::-webkit-scrollbar {
+          display: none;
+        }
+
+        .activity-bar-group.bottom {
+          flex-shrink: 0;
+          padding-top: 6px;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
         .activity-btn {
           position: relative;
           width: 36px;
           height: 36px;
+          flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -257,6 +411,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           background: transparent;
           color: var(--text-secondary);
           cursor: pointer;
+          transition: all 0.15s ease;
         }
 
         .activity-btn:hover {

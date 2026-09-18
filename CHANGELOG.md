@@ -5,6 +5,67 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - 2026-09-18
+
+### 🚀 Minor Release — 8 Developer GUI Extensions (Auxiliary Right Dock), Scrollable Activity Bar, and Interactive Dev Tools
+
+IndoctrinatedEdit 4.4.0 introduces 8 developer-centric GUI extensions integrated into the Liquid Glass Auxiliary Right Dock, accessible via the Left Activity Bar, Command Palette, View Menu, and dedicated keyboard shortcuts (`Ctrl+Alt+1` through `Ctrl+Alt+8`):
+
+#### 🛡️ Port & Process Sentinel (`Ctrl+Alt+1`)
+- **Active Port Scanner & Conflict Detector**: Scans common development ports (3000, 5173, 8080, 8000, 4000, 5432, 6379, 27017, etc.) with real-time status badges and process metadata (`PID`, `Process Name`, `Protocol`).
+- **HTTP / TCP Health Probe**: Real-time HTTP ping and status latency checker (`200 OK`, `404`, `500`).
+- **Process Killer & Free Port Action**: Terminate hung dev servers directly from the UI without opening Task Manager or terminal kill commands.
+- **Custom Port Watcher**: Add custom port ranges to watch for unexpected bindings and background services.
+
+#### 🗄️ Redis & KV Cache Studio (`Ctrl+Alt+2`)
+- **Key-Value Tree & Namespace Browser**: Explore string, hash, list, set, and zset keys organized by folder namespaces (`user:`, `session:`, `cache:`).
+- **Interactive Multi-Type Value Editor**: Modify cached values, hash fields, and sets in real-time with JSON syntax validation.
+- **TTL Manager & Key Expiry Inspector**: View remaining TTL seconds and update or remove expirations instantly.
+- **Interactive REPL CLI**: Execute raw Redis commands (`GET`, `SET`, `HGETALL`, `FLUSHDB`, `INFO`) with formatted output.
+- **Pub/Sub Stream Monitor**: Subscribe to live channels and inspect streaming payloads.
+
+#### 🔐 Env & Secret Vault Studio (`Ctrl+Alt+3`)
+- **Multi-Environment Profile Switcher**: Manage `.env.local`, `.env.development`, `.env.staging`, and `.env.production` profiles.
+- **Secret Masking & Reveal Toggle**: Mask sensitive tokens, API keys, and database passwords with 1-click reveal.
+- **`.env.example` Diff & Sync Auditor**: Automatically scan for missing environment variables between active `.env` and `.env.example`.
+- **Template Generator**: 1-click generation of boilerplate `.env` presets for Node.js, Next.js, Django, FastAPI, Go, and Rust.
+- **Code Exporter**: Export environment configs as TypeScript, Python, Shell, or JSON snippets.
+
+#### 🧪 MockLab API Mock Server (`Ctrl+Alt+4`)
+- **Zero-Config Local Mock HTTP Server**: Spins up a local mock router on port `4040` for rapid frontend prototyping without backend dependencies.
+- **Status & Latency Simulation**: Configure custom HTTP response codes (`200`, `201`, `400`, `401`, `404`, `500`) and simulated network latency delays (0ms - 2000ms).
+- **Dynamic Faker Token Interpolation**: Inject randomized placeholders (`{{id}}`, `{{name}}`, `{{email}}`, `{{avatar}}`, `{{timestamp}}`) into mock JSON responses.
+- **Live Traffic Stream**: Real-time log of incoming requests with method, path, response status, and duration.
+
+#### ⚡ GraphQL & gRPC Studio (`Ctrl+Alt+5`)
+- **Introspection Schema Explorer**: Query remote GraphQL endpoints and explore schema documentation, types, queries, and mutations.
+- **Query & Mutation Runner**: Integrated query editor with variable payload support and formatted JSON response viewer.
+- **Latency & Header Inspector**: Real-time response timing metrics, payload size calculation, and custom request header configuration.
+- **Client Code Exporter**: Generate type-safe queries for TypeScript, Apollo Client, `urql`, `fetch`, and cURL.
+
+#### 📊 Architecture & Diagram Studio (`Ctrl+Alt+6`)
+- **Interactive Mermaid Diagram Visualizer**: Live rendering of flowcharts, sequence diagrams, state machines, class diagrams, ER diagrams, and git graphs.
+- **Interactive Pan & Zoom Canvas**: Smooth zoom and pan navigation for complex architecture diagrams with 1-click SVG download.
+- **Code-to-Diagram Auto-Analyzer**: Automatically generate visual class diagrams and module dependency graphs from active TypeScript/JavaScript source code.
+- **Template Gallery**: Pre-built templates for Microservices Architecture, Auth OAuth2 Flow, Database Schema, and Gitflow.
+
+#### 📦 Bundle & Dependency Analyzer (`Ctrl+Alt+7`)
+- **Interactive Bundle TreeMap**: Visual breakdown of direct and transitive dependencies with size percentages and file counts.
+- **Import Cost Estimator**: Instant Gzip and minified size cost estimation for packages and modules before committing.
+- **Duplicate & Bloat Detector**: Flags duplicate transitive dependency versions and oversized libraries.
+- **Markdown Audit Exporter**: Generate exportable bundle health reports for PR reviews and CI/CD pipelines.
+
+#### 🎨 SVG & Asset Studio (`Ctrl+Alt+8`)
+- **Dark & Light Checkerboard Preview**: Live rendering of SVG code with zoom, dark/light grid backgrounds, and dimension badges.
+- **Palette Recolor Engine**: Extract and swap fill/stroke color palettes interactively.
+- **SVGO Optimizer & Minifier**: Strip unnecessary metadata, comments, and empty tags to reduce file size.
+- **React TSX Component Generator**: Convert SVGs into clean, typed React/Lucide-compatible JSX components.
+- **CSS Snippet & Data URI Exporter**: Export as inline background CSS, base64 Data URIs, or Sprite Sheet symbols.
+
+#### 📜 Scrollable Activity Bar & Icon Dock
+- **Hidden Scrollbar Vertical Navigation**: Smooth mouse wheel scrolling (`overflow-y: auto`) across all primary and dock extension icons without an intrusive scrollbar (`scrollbar-width: none;`, `::-webkit-scrollbar { display: none; }`).
+- **Pinned Bottom Group**: Settings and lower actions stay persistently anchored at the bottom of the viewport.
+
 ---
 
 ## [4.3.0] - 2026-09-18

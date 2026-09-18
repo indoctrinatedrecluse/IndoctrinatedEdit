@@ -118,6 +118,56 @@ export class GitWorkflowService {
   private initDefaultRuns() {
     this.runs = [
       {
+        id: 'run_440_release',
+        workflowId: 'release.yml',
+        name: 'Release & Cross-Platform Packaging',
+        runNumber: 44,
+        event: 'release',
+        status: 'in_progress',
+        conclusion: null,
+        branch: 'master',
+        actor: { name: 'indoctrinatedrecluse', email: 'abmitra1999@gmail.com' },
+        commit: {
+          hash: '7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
+          shortHash: '7c8d9e0',
+          message: 'release: v4.4.0 8 Developer GUI Extensions, scrollable Activity Bar, and interactive dev tools',
+        },
+        startedAt: new Date().toISOString(),
+        durationFormatted: '1m 12s',
+        jobs: [
+          {
+            id: 'job_win_440',
+            name: 'Build Windows (x64 NSIS / Portable)',
+            runner: 'windows-latest',
+            status: 'in_progress',
+            conclusion: null,
+            durationSeconds: 72,
+            steps: [
+              { number: 1, name: 'Set up Node.js 22.x', status: 'completed', conclusion: 'success', durationSeconds: 6 },
+              { number: 2, name: 'Install dependencies (npm ci)', status: 'completed', conclusion: 'success', durationSeconds: 24 },
+              { number: 3, name: 'Build TypeScript & Vite bundle (4.4.0)', status: 'completed', conclusion: 'success', durationSeconds: 34 },
+              { number: 4, name: 'Package Electron binary & NSIS installer', status: 'in_progress', conclusion: null, durationSeconds: 8 },
+              { number: 5, name: 'Upload Release Asset (IndoctrinatedEdit-4.4.0-Setup.exe)', status: 'queued', conclusion: null, durationSeconds: 0 },
+            ],
+          },
+          {
+            id: 'job_linux_440',
+            name: 'Build Linux AppImage & Tarball',
+            runner: 'ubuntu-22.04',
+            status: 'in_progress',
+            conclusion: null,
+            durationSeconds: 68,
+            steps: [
+              { number: 1, name: 'Set up Node.js 22.x', status: 'completed', conclusion: 'success', durationSeconds: 5 },
+              { number: 2, name: 'Install libfuse2 & build tools', status: 'completed', conclusion: 'success', durationSeconds: 20 },
+              { number: 3, name: 'Compile Web & Main Processes (v4.4.0)', status: 'completed', conclusion: 'success', durationSeconds: 33 },
+              { number: 4, name: 'Generate AppImage & Tarball binaries', status: 'in_progress', conclusion: null, durationSeconds: 10 },
+              { number: 5, name: 'Upload release assets (IndoctrinatedEdit-4.4.0.AppImage)', status: 'queued', conclusion: null, durationSeconds: 0 },
+            ],
+          },
+        ],
+      },
+      {
         id: 'run_410_1',
         workflowId: 'release.yml',
         name: 'Release & Cross-Platform Packaging',

@@ -15,6 +15,13 @@ import {
   Binary,
   Bookmark,
   Palette,
+  ShieldAlert,
+  Zap,
+  KeyRound,
+  Server,
+  Share2,
+  Layers,
+  Shapes,
 } from 'lucide-react'
 import { AiChatPanel } from '../AiChat/AiChatPanel'
 import { DatabaseStudio } from '../Database/DatabaseStudio'
@@ -30,6 +37,14 @@ import { DiffStudioView } from '../DiffStudio/DiffStudioView'
 import { HexInspectorView } from '../HexInspector/HexInspectorView'
 import { SnippetVaultView } from '../SnippetVault/SnippetVaultView'
 import { ColorStudioView } from '../ColorStudio/ColorStudioView'
+import { PortSentinelView } from '../PortSentinel/PortSentinelView'
+import { RedisStudioView } from '../RedisStudio/RedisStudioView'
+import { EnvVaultView } from '../EnvVault/EnvVaultView'
+import { MockLabView } from '../MockLab/MockLabView'
+import { GraphQLStudioView } from '../GraphQLStudio/GraphQLStudioView'
+import { DiagramStudioView } from '../DiagramStudio/DiagramStudioView'
+import { BundleAnalyzerView } from '../BundleAnalyzer/BundleAnalyzerView'
+import { SvgStudioView } from '../SvgStudio/SvgStudioView'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab =
@@ -47,6 +62,14 @@ export type RightDockTab =
   | 'hex'
   | 'snippets'
   | 'colors'
+  | 'ports'
+  | 'redis'
+  | 'env'
+  | 'mocklab'
+  | 'graphql'
+  | 'diagram'
+  | 'bundle'
+  | 'svg'
 
 interface RightAuxiliaryPaneProps {
   isOpen: boolean
@@ -84,6 +107,78 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
             e.currentTarget.scrollLeft += e.deltaY
           }}
         >
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'ports' ? 'active' : ''}`}
+            onClick={() => onSelectTab('ports')}
+            title="Port & Process Sentinel (Ctrl+Alt+1)"
+          >
+            <ShieldAlert size={13} className="tab-icon ports" />
+            <span>Port Sentinel</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'redis' ? 'active' : ''}`}
+            onClick={() => onSelectTab('redis')}
+            title="Redis & Key-Value Cache Studio (Ctrl+Alt+2)"
+          >
+            <Zap size={13} className="tab-icon redis" />
+            <span>Redis Studio</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'env' ? 'active' : ''}`}
+            onClick={() => onSelectTab('env')}
+            title="Env & Secret Vault Studio (Ctrl+Alt+3)"
+          >
+            <KeyRound size={13} className="tab-icon env" />
+            <span>Env Vault</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'mocklab' ? 'active' : ''}`}
+            onClick={() => onSelectTab('mocklab')}
+            title="MockLab API Mock Server (Ctrl+Alt+4)"
+          >
+            <Server size={13} className="tab-icon mocklab" />
+            <span>MockLab Server</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'graphql' ? 'active' : ''}`}
+            onClick={() => onSelectTab('graphql')}
+            title="GraphQL & gRPC Studio (Ctrl+Alt+5)"
+          >
+            <Globe size={13} className="tab-icon graphql" />
+            <span>GraphQL Studio</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'diagram' ? 'active' : ''}`}
+            onClick={() => onSelectTab('diagram')}
+            title="Architecture & Diagram Studio (Ctrl+Alt+6)"
+          >
+            <Share2 size={13} className="tab-icon diagram" />
+            <span>Diagram Studio</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'bundle' ? 'active' : ''}`}
+            onClick={() => onSelectTab('bundle')}
+            title="Bundle & Dependency Analyzer (Ctrl+Alt+7)"
+          >
+            <Layers size={13} className="tab-icon bundle" />
+            <span>Bundle Analyzer</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'svg' ? 'active' : ''}`}
+            onClick={() => onSelectTab('svg')}
+            title="SVG & Asset Studio (Ctrl+Alt+8)"
+          >
+            <Shapes size={13} className="tab-icon svg" />
+            <span>SVG Studio</span>
+          </button>
+
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'crypto' ? 'active' : ''}`}
             onClick={() => onSelectTab('crypto')}
@@ -220,6 +315,20 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
+        {activeTab === 'ports' && <PortSentinelView />}
+        {activeTab === 'redis' && <RedisStudioView />}
+        {activeTab === 'env' && <EnvVaultView />}
+        {activeTab === 'mocklab' && <MockLabView />}
+        {activeTab === 'graphql' && <GraphQLStudioView />}
+        {activeTab === 'diagram' && (
+          <DiagramStudioView
+            activeFileName={activeFileName}
+            activeFileContent={activeFileContent}
+          />
+        )}
+        {activeTab === 'bundle' && <BundleAnalyzerView />}
+        {activeTab === 'svg' && <SvgStudioView />}
+
         {activeTab === 'crypto' && <CryptoDevToolsView isDocked={true} />}
 
         {activeTab === 'preview' && (
@@ -368,6 +477,14 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
 
+        .dock-tab-item .tab-icon.ports { color: #30D158; }
+        .dock-tab-item .tab-icon.redis { color: #FF453A; }
+        .dock-tab-item .tab-icon.env { color: #30D158; }
+        .dock-tab-item .tab-icon.mocklab { color: #BF5AF2; }
+        .dock-tab-item .tab-icon.graphql { color: #FF9F0A; }
+        .dock-tab-item .tab-icon.diagram { color: #64D2FF; }
+        .dock-tab-item .tab-icon.bundle { color: #0A84FF; }
+        .dock-tab-item .tab-icon.svg { color: #BF5AF2; }
         .dock-tab-item .tab-icon.diff { color: #FF9F0A; }
         .dock-tab-item .tab-icon.hex { color: #64D2FF; }
         .dock-tab-item .tab-icon.snippet { color: #FFD60A; }

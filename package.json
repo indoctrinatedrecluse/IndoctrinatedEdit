@@ -1,6 +1,6 @@
 {
   "name": "indoctrinated-edit",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "description": "Flashy iOS Liquid Glass cross-platform text editor for Linux & Windows",
   "main": "dist-electron/main.js",
   "author": "indoctrinatedrecluse (Abhishek Mitra)",

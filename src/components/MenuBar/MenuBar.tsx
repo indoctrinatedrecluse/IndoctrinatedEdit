@@ -30,6 +30,12 @@ import {
   Globe,
   Keyboard,
   Sliders,
+  ShieldAlert,
+  Zap,
+  Server,
+  Share2,
+  Layers,
+  Shapes,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -59,6 +65,14 @@ export interface MenuActionHandlers {
   onOpenProblems?: () => void
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
+  onTogglePorts?: () => void
+  onToggleRedis?: () => void
+  onToggleEnv?: () => void
+  onToggleMockLab?: () => void
+  onToggleGraphQL?: () => void
+  onToggleDiagram?: () => void
+  onToggleBundle?: () => void
+  onToggleSvg?: () => void
   // Run & Execution Handlers
   onRunActiveFile?: () => void
   onRunWithArgs?: () => void
@@ -223,6 +237,62 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+Alt+R',
           icon: <Globe size={14} />,
           onClick: handlers.onToggleRestClient,
+        },
+        {
+          id: 'view.ports',
+          label: 'Port & Process Sentinel',
+          shortcut: 'Ctrl+Alt+1',
+          icon: <ShieldAlert size={14} />,
+          onClick: handlers.onTogglePorts,
+        },
+        {
+          id: 'view.redis',
+          label: 'Redis & KV Cache Studio',
+          shortcut: 'Ctrl+Alt+2',
+          icon: <Zap size={14} />,
+          onClick: handlers.onToggleRedis,
+        },
+        {
+          id: 'view.env',
+          label: 'Env & Secret Vault Studio',
+          shortcut: 'Ctrl+Alt+3',
+          icon: <KeyRound size={14} />,
+          onClick: handlers.onToggleEnv,
+        },
+        {
+          id: 'view.mocklab',
+          label: 'MockLab API Mock Server',
+          shortcut: 'Ctrl+Alt+4',
+          icon: <Server size={14} />,
+          onClick: handlers.onToggleMockLab,
+        },
+        {
+          id: 'view.graphql',
+          label: 'GraphQL & gRPC Studio',
+          shortcut: 'Ctrl+Alt+5',
+          icon: <Globe size={14} />,
+          onClick: handlers.onToggleGraphQL,
+        },
+        {
+          id: 'view.diagram',
+          label: 'Architecture & Diagram Studio',
+          shortcut: 'Ctrl+Alt+6',
+          icon: <Share2 size={14} />,
+          onClick: handlers.onToggleDiagram,
+        },
+        {
+          id: 'view.bundle',
+          label: 'Bundle & Dependency Analyzer',
+          shortcut: 'Ctrl+Alt+7',
+          icon: <Layers size={14} />,
+          onClick: handlers.onToggleBundle,
+        },
+        {
+          id: 'view.svg',
+          label: 'SVG & Asset Studio',
+          shortcut: 'Ctrl+Alt+8',
+          icon: <Shapes size={14} />,
+          onClick: handlers.onToggleSvg,
         },
         { id: 'sep5', label: '', isSeparator: true },
         {

@@ -503,6 +503,118 @@ export const App: React.FC = () => {
     })
   }, [rightPaneTab])
 
+  const handleTogglePorts = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('ports')
+        return true
+      }
+      if (rightPaneTab !== 'ports') {
+        setRightPaneTab('ports')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleRedis = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('redis')
+        return true
+      }
+      if (rightPaneTab !== 'redis') {
+        setRightPaneTab('redis')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleEnv = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('env')
+        return true
+      }
+      if (rightPaneTab !== 'env') {
+        setRightPaneTab('env')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleMockLab = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('mocklab')
+        return true
+      }
+      if (rightPaneTab !== 'mocklab') {
+        setRightPaneTab('mocklab')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleGraphQL = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('graphql')
+        return true
+      }
+      if (rightPaneTab !== 'graphql') {
+        setRightPaneTab('graphql')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleDiagram = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('diagram')
+        return true
+      }
+      if (rightPaneTab !== 'diagram') {
+        setRightPaneTab('diagram')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleBundle = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('bundle')
+        return true
+      }
+      if (rightPaneTab !== 'bundle') {
+        setRightPaneTab('bundle')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleToggleSvg = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('svg')
+        return true
+      }
+      if (rightPaneTab !== 'svg') {
+        setRightPaneTab('svg')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
   const handleInsertAtCursor = useCallback((code: string) => {
     editorHostRef.current?.insertAtCursor(code)
   }, [])
@@ -957,6 +1069,14 @@ export const App: React.FC = () => {
       onToggleAi: handleToggleAi,
       onToggleDatabase: handleToggleDatabase,
       onToggleRestClient: handleToggleRestClient,
+      onTogglePorts: handleTogglePorts,
+      onToggleRedis: handleToggleRedis,
+      onToggleEnv: handleToggleEnv,
+      onToggleMockLab: handleToggleMockLab,
+      onToggleGraphQL: handleToggleGraphQL,
+      onToggleDiagram: handleToggleDiagram,
+      onToggleBundle: handleToggleBundle,
+      onToggleSvg: handleToggleSvg,
       onToggleSidebar: handleToggleSidebar,
       onOpenSettings: () => setActiveView('settings'),
       onToggleNotifications: handleToggleNotifications,
@@ -1105,6 +1225,30 @@ export const App: React.FC = () => {
       // Git & Toolchain
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
       
+      // Port & Process Sentinel
+      { id: 'ports.toggle', title: 'Port Sentinel: Toggle Port & Process Sentinel', category: 'Tools', shortcut: 'Ctrl+Alt+1', description: 'Inspect active listening ports, detect conflicts, probe latency, and kill processes', handler: handleTogglePorts },
+
+      // Redis & Key-Value Cache Studio
+      { id: 'redis.toggle', title: 'Redis Studio: Toggle Redis & Key-Value Cache Studio', category: 'Tools', shortcut: 'Ctrl+Alt+2', description: 'In-memory Redis client with multi-type value editor, TTL manager, REPL CLI, and Pub/Sub', handler: handleToggleRedis },
+
+      // Env & Secret Vault Studio
+      { id: 'env.toggle', title: 'Env Vault: Toggle Env & Secret Vault Studio', category: 'Tools', shortcut: 'Ctrl+Alt+3', description: 'Multi-environment profile manager, secret masking, .env.example sync check, and code export', handler: handleToggleEnv },
+
+      // MockLab API Mock Server
+      { id: 'mocklab.toggle', title: 'MockLab: Toggle MockLab API Mock Server', category: 'Tools', shortcut: 'Ctrl+Alt+4', description: 'Zero-config local HTTP mock server, endpoint route builder, delay simulation, and traffic logs', handler: handleToggleMockLab },
+
+      // GraphQL & gRPC Studio
+      { id: 'graphql.toggle', title: 'GraphQL Studio: Toggle GraphQL & gRPC Studio', category: 'Tools', shortcut: 'Ctrl+Alt+5', description: 'Interactive GraphQL schema explorer, query/mutation runner, variables editor, and code export', handler: handleToggleGraphQL },
+
+      // Architecture & Diagram Studio
+      { id: 'diagram.toggle', title: 'Diagram Studio: Toggle Architecture & Diagram Studio', category: 'Tools', shortcut: 'Ctrl+Alt+6', description: 'Interactive Mermaid.js flowchart and architecture visualizer with auto-diagram code generation', handler: handleToggleDiagram },
+
+      // Bundle & Dependency Analyzer
+      { id: 'bundle.toggle', title: 'Bundle Analyzer: Toggle Bundle & Dependency Analyzer', category: 'Tools', shortcut: 'Ctrl+Alt+7', description: 'Visual TreeMap chunk breakdown, import cost estimator, and duplicate package detector', handler: handleToggleBundle },
+
+      // SVG & Asset Studio
+      { id: 'svg.toggle', title: 'SVG Studio: Toggle SVG & Asset Studio', category: 'Tools', shortcut: 'Ctrl+Alt+8', description: 'Live SVG canvas preview, SVGO path minifier, palette recolor, and React TSX component exporter', handler: handleToggleSvg },
+
       // Cryptography & DevTools Lab
       { id: 'crypto.toggle', title: 'Crypto Lab: Toggle Cryptography & DevTools Lab', category: 'Tools', shortcut: 'Ctrl+Alt+C', description: 'JWT Inspector, Hashes, HMAC, Encoders, UUID/ULID, and Epoch converter', handler: handleToggleCrypto },
 
@@ -1158,7 +1302,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleSelectTheme, openPalette, tabs])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleSelectTheme, openPalette, tabs])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -1186,6 +1330,14 @@ export const App: React.FC = () => {
     onToggleRegex: handleToggleRegex,
     onTogglePackages: handleTogglePackages,
     onToggleTasks: handleToggleTasks,
+    onTogglePorts: handleTogglePorts,
+    onToggleRedis: handleToggleRedis,
+    onToggleEnv: handleToggleEnv,
+    onToggleMockLab: handleToggleMockLab,
+    onToggleGraphQL: handleToggleGraphQL,
+    onToggleDiagram: handleToggleDiagram,
+    onToggleBundle: handleToggleBundle,
+    onToggleSvg: handleToggleSvg,
     onToggleNotifications: handleToggleNotifications,
     onOpenShortcuts: () => setIsShortcutsOpen(true),
     onGoToLine: () => openPalette(':'),
@@ -1306,6 +1458,22 @@ export const App: React.FC = () => {
           onToggleDatabase={handleToggleDatabase}
           isRestClientOpen={isRightPaneOpen && rightPaneTab === 'rest'}
           onToggleRestClient={handleToggleRestClient}
+          isPortsOpen={isRightPaneOpen && rightPaneTab === 'ports'}
+          onTogglePorts={handleTogglePorts}
+          isRedisOpen={isRightPaneOpen && rightPaneTab === 'redis'}
+          onToggleRedis={handleToggleRedis}
+          isEnvOpen={isRightPaneOpen && rightPaneTab === 'env'}
+          onToggleEnv={handleToggleEnv}
+          isMockLabOpen={isRightPaneOpen && rightPaneTab === 'mocklab'}
+          onToggleMockLab={handleToggleMockLab}
+          isGraphQLOpen={isRightPaneOpen && rightPaneTab === 'graphql'}
+          onToggleGraphQL={handleToggleGraphQL}
+          isDiagramOpen={isRightPaneOpen && rightPaneTab === 'diagram'}
+          onToggleDiagram={handleToggleDiagram}
+          isBundleOpen={isRightPaneOpen && rightPaneTab === 'bundle'}
+          onToggleBundle={handleToggleBundle}
+          isSvgOpen={isRightPaneOpen && rightPaneTab === 'svg'}
+          onToggleSvg={handleToggleSvg}
           isCryptoOpen={isRightPaneOpen && rightPaneTab === 'crypto'}
           onToggleCrypto={handleToggleCrypto}
           isPreviewOpen={isRightPaneOpen && rightPaneTab === 'preview'}
