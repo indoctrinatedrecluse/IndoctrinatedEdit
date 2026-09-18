@@ -15,10 +15,12 @@ import { TerminalConfigModal } from './components/Modals/TerminalConfigModal'
 import { RunConfigModal } from './components/Modals/RunConfigModal'
 import { RunWithArgsModal } from './components/Modals/RunWithArgsModal'
 import { UnsavedChangesModal } from './components/Modals/UnsavedChangesModal'
+import { UpdateModal } from './components/Modals/UpdateModal'
 import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
 import { DebugToolbar } from './components/Debug/DebugToolbar'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
 import { notificationService, NotificationItem } from './services/notificationService'
+import { rendererUpdateService } from './services/updateService'
 import { commandRegistry } from './services/commandRegistry'
 import { registeredThemes, getThemeById, applyGlassTheme } from './themes/themeRegistry'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -246,6 +248,9 @@ export const App: React.FC = () => {
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
   const [untitledCount, setUntitledCount] = useState<number>(1)
   const [sidebarWidth, setSidebarWidth] = useState<number>(260)
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false)
+  const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false)
+  const [latestUpdateVersion, setLatestUpdateVersion] = useState<string>('')
 
   // Left Sidebar Drag-to-Resize
   const isResizingSidebar = useRef(false)
@@ -637,6 +642,21 @@ export const App: React.FC = () => {
 
   // Mount initialization & Session Auto-Restore
   useEffect(() => {
+    // Initialize Auto-Updater Subsystem & background schedule
+    rendererUpdateService.init()
+    const unsubscribeUpdater = rendererUpdateService.subscribe(() => {
+      const status = rendererUpdateService.getStatus()
+      const info = rendererUpdateService.getUpdateInfo()
+      if (status === 'available' && info?.updateAvailable) {
+        setIsUpdateAvailable(true)
+        setLatestUpdateVersion(info.latestVersion)
+      } else if (status === 'idle' || status === 'upToDate') {
+        if (!info?.updateAvailable) {
+          setIsUpdateAvailable(false)
+        }
+      }
+    })
+
     // Non-blocking background toolchain detection (idle time)
     toolchainService.scheduleBackgroundDetection(1500)
 
@@ -660,7 +680,10 @@ export const App: React.FC = () => {
     const fallbackTimer = setTimeout(() => {
       window.electronAPI?.notifyReady?.()
     }, 8000)
-    return () => clearTimeout(fallbackTimer)
+    return () => {
+      clearTimeout(fallbackTimer)
+      unsubscribeUpdater()
+    }
   }, [])
 
   // Auto-persist workspace session on state change
@@ -1114,6 +1137,10 @@ export const App: React.FC = () => {
           handleNewFile()
         }
       },
+      onCheckForUpdates: () => {
+        setIsUpdateModalOpen(true)
+        rendererUpdateService.checkForUpdates(true)
+      },
       onOpenLicense: () => setIsLicenseOpen(true),
       onOpenAbout: () => setIsAboutOpen(true),
     }),
@@ -1299,6 +1326,7 @@ export const App: React.FC = () => {
 
       // Help & Shortcuts
       { id: 'help.shortcuts', title: 'Help: Keyboard Shortcuts Reference', category: 'Help', shortcut: 'Ctrl+K Ctrl+S', description: 'Show all keyboard shortcuts', handler: () => setIsShortcutsOpen(true) },
+      { id: 'help.checkForUpdates', title: 'Check for Software Updates...', category: 'Help', description: 'Check for latest IndoctrinatedEdit releases and packages', handler: () => { setIsUpdateModalOpen(true); rendererUpdateService.checkForUpdates(true); } },
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
@@ -1635,6 +1663,9 @@ export const App: React.FC = () => {
         gitBranch={gitBranch}
         errorCount={diagnosticCounts.errors}
         warningCount={diagnosticCounts.warnings}
+        isUpdateAvailable={isUpdateAvailable}
+        updateVersion={latestUpdateVersion}
+        onUpdateClick={() => setIsUpdateModalOpen(true)}
         onThemeClick={() => setActiveView('themes')}
         onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
         onTerminalClick={handleToggleTerminal}
@@ -1724,6 +1755,12 @@ export const App: React.FC = () => {
         dirtyTabs={tabs.filter((t) => t.isDirty)}
         onSaveAllAndProceed={handleSaveAllDirtyAndProceed}
         onDiscardAndProceed={handleDiscardDirtyAndProceed}
+      />
+
+      {/* Software Update Modal */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
       />
 
       <style>{`

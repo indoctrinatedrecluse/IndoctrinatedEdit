@@ -1,9 +1,15 @@
-name: Release
+name: Release & Packaging
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag (e.g. v4.5.0)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -12,7 +18,7 @@ jobs:
   build:
     name: Build & Package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +27,8 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,19 +42,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libarchive-tools libfuse2
 
-      - name: Install Node Dependencies
-        run: npm install
+      - name: Install Dependencies
+        run: npm ci || npm install
 
-      - name: Compile & Build Application
+      - name: Compile & Production Build
         run: npm run build
 
       - name: Package with Electron Builder (Windows)
         if: runner.os == 'Windows'
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Package with Electron Builder (Linux)
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux --publish never
+        run: npx electron-builder --linux AppImage tar.gz --x64 --publish never
+
+      - name: Generate SHA-256 Checksums (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem release\*.exe, release\*.zip | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -FilePath release\SHA256SUMS_win.txt -Append -Encoding ascii
+          }
+
+      - name: Generate SHA-256 Checksums (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd release
+          sha256sum *.AppImage *.tar.gz > SHA256SUMS_linux.txt 2>/dev/null || true
 
       - name: Upload Packaged Artifacts
         uses: actions/upload-artifact@v4
@@ -57,8 +80,9 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.tar.gz
+            release/SHA256SUMS_*.txt
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 2
 
   publish:
     name: Publish GitHub Release
@@ -73,17 +97,35 @@ jobs:
           path: release
           merge-multiple: true
 
+      - name: Aggregate Master SHA256SUMS
+        run: |
+          cd release
+          cat SHA256SUMS_*.txt > SHA256SUMS.txt 2>/dev/null || true
+          rm -f SHA256SUMS_*.txt
+          echo "Generated SHA256SUMS.txt:"
+          cat SHA256SUMS.txt
+
+      - name: Determine Release Tag
+        id: tag_info
+        run: |
+          if [ -n "${{ inputs.release_tag }}" ]; then
+            echo "tag=${{ inputs.release_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.tag_info.outputs.tag }}
+          name: IndoctrinatedEdit ${{ steps.tag_info.outputs.tag }}
           generate_release_notes: true
           files: |
             release/*.exe
             release/*.zip
             release/*.AppImage
             release/*.tar.gz
+            release/SHA256SUMS.txt
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

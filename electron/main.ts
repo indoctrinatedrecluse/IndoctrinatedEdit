@@ -21,6 +21,7 @@ import {
   DEFAULT_TOOLCHAINS,
 } from './toolchain-service'
 import { terminalService } from './terminal-service'
+import { updateService } from './update-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -365,6 +366,11 @@ ipcMain.handle('toolchain:getDefaultDefinitions', async () => {
 // Terminal Subsystem IPC Handlers
 // ==========================================
 terminalService.setupIPC(ipcMain, () => win)
+
+// ==========================================
+// Auto-Updater Subsystem IPC Handlers
+// ==========================================
+updateService.setupIPC(ipcMain, () => win)
 
 app.on('second-instance', () => {
   if (win && !win.isDestroyed()) {

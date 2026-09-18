@@ -5,6 +5,35 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-09-18
+
+### 🚀 Minor Release — Auto-Updater Subsystem, Cross-Platform Release Packaging & Integrity Verification
+
+IndoctrinatedEdit 4.5.0 introduces an integrated, secure **Auto-Updater Subsystem** across Windows, Linux, and macOS:
+
+#### 🔄 Autonomous Release Discovery & Check Frequency
+- **Graceful Startup Check**: Automatically evaluates available releases 5 seconds after launch.
+- **Periodic Background Scheduler**: Configurable check intervals (*On Startup*, *Daily*, *Weekly*, or *Manual Only*).
+- **Channels**: Switch dynamically between `Stable` (default), `Beta`, and `Nightly` release streams.
+- **Manual Trigger**: Quick check via **Help &rarr; Check for Updates...** and Command Palette.
+
+#### 🎯 Platform & Architecture Matcher
+- **Windows (`win32` / `x64`)**: Automatically matches NSIS installers (`.exe`), portable binaries, and standalone `.zip` archives.
+- **Linux (`linux` / `x64`)**: Matches AppImage packages (`.AppImage`), Debian packages (`.deb`), and `.tar.gz` archives.
+- **macOS (`darwin` / `x64`, `arm64`)**: Matches Apple Silicon and Intel `.dmg` installer packages.
+
+#### ⚡ Real-Time Streaming & Checksum Security
+- **Chunked Stream Downloader**: Real-time progress tracking with download rate (`MB/s`), total size indicators, and estimated time remaining (ETA).
+- **SHA-256 Checksum Validation**: Automatically verifies package integrity against release `SHA256SUMS.txt` before execution.
+- **Clean Installer Execution**: Spawns detached installer processes (`.exe` on Windows, `chmod +x` on Linux `.AppImage`, `.dmg` on macOS) and closes the running instance cleanly.
+
+#### 🪟 Liquid Glass Update Modal & Status Indicators
+- **`UpdateModal`**: Dark Velvet themed dialog with version diff banner, release notes scrollbox, live download progress bar, and 1-click **"Download & Install"** / **"Restart App"** actions.
+- **Status Bar Indicator**: Real-time cyan update chip (`Update v4.5.0`) in the status bar footer.
+- **GitHub Release Automation (`release.yml`)**: Automated dual-runner CI matrix that builds and publishes Windows and Linux artifacts with aggregated `SHA256SUMS.txt`.
+
+---
+
 ## [4.4.0] - 2026-09-18
 
 ### 🚀 Minor Release — 8 Developer GUI Extensions (Auxiliary Right Dock), Scrollable Activity Bar, and Interactive Dev Tools

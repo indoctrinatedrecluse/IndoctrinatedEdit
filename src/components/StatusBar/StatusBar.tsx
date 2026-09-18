@@ -1,5 +1,5 @@
 import React from 'react'
-import { GitBranch, AlertCircle, Check, Palette, Sparkles, Terminal } from 'lucide-react'
+import { GitBranch, AlertCircle, Check, Palette, Sparkles, Terminal, ArrowUpCircle } from 'lucide-react'
 
 interface StatusBarProps {
   line: number
@@ -11,6 +11,9 @@ interface StatusBarProps {
   gitBranch?: string
   errorCount?: number
   warningCount?: number
+  isUpdateAvailable?: boolean
+  updateVersion?: string
+  onUpdateClick?: () => void
   onThemeClick?: () => void
   onGitClick?: () => void
   onTerminalClick?: () => void
@@ -27,6 +30,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   gitBranch = 'master',
   errorCount = 0,
   warningCount = 0,
+  isUpdateAvailable = false,
+  updateVersion,
+  onUpdateClick,
   onThemeClick,
   onGitClick,
   onTerminalClick,
@@ -77,6 +83,17 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
       {/* Right segmented glass chips */}
       <div className="status-group right">
+        {isUpdateAvailable && (
+          <button
+            className="status-chip update-chip glass-interactive"
+            onClick={onUpdateClick}
+            title={`Software Update Available: v${updateVersion || 'Latest'} (Click to view)`}
+          >
+            <ArrowUpCircle size={12} className="text-cyan-400" />
+            <span className="update-badge-text">Update v{updateVersion}</span>
+          </button>
+        )}
+
         <div className="status-chip position-chip" title="Cursor Position">
           <span>Ln {line}, Col {column}</span>
         </div>
@@ -155,6 +172,19 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         .branch-icon {
           color: var(--accent-cyan);
+        }
+
+        .update-chip {
+          background: rgba(10, 132, 255, 0.15) !important;
+          border-color: rgba(56, 189, 248, 0.4) !important;
+          color: #38bdf8 !important;
+          font-weight: 600;
+          box-shadow: 0 0 10px rgba(10, 132, 255, 0.25);
+        }
+
+        .update-badge-text {
+          font-family: monospace;
+          font-size: 10px;
         }
 
         .diagnostics-chip {

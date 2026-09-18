@@ -87,6 +87,16 @@ export interface ElectronTerminalAPI {
   onExit: (callback: (payload: { id: string; code: number | null; signal: string | null }) => void) => () => void
 }
 
+export interface ElectronUpdaterAPI {
+  checkForUpdates: (channel?: 'stable' | 'beta' | 'nightly') => Promise<any>
+  downloadUpdate: (downloadUrl: string, version: string, expectedSha256?: string) => Promise<{ filePath: string; verified: boolean }>
+  cancelDownload: () => Promise<boolean>
+  installUpdate: (installerPath?: string) => Promise<boolean>
+  getConfig: () => Promise<any>
+  saveConfig: (config: any) => Promise<any>
+  onDownloadProgress: (callback: (progress: any) => void) => () => void
+}
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<boolean>
@@ -115,6 +125,9 @@ export interface ElectronAPI {
 
   // Terminal subsystem operations
   terminal: ElectronTerminalAPI
+
+  // Auto-updater operations
+  updater: ElectronUpdaterAPI
 
   // Lifecycle notification
   notifyReady: () => Promise<void>
@@ -190,6 +203,23 @@ const api: ElectronAPI = {
       ipcRenderer.on('terminal:exit', handler)
       return () => {
         ipcRenderer.removeListener('terminal:exit', handler)
+      }
+    },
+  },
+
+  updater: {
+    checkForUpdates: (channel) => ipcRenderer.invoke('updater:checkForUpdates', channel),
+    downloadUpdate: (downloadUrl, version, expectedSha256) =>
+      ipcRenderer.invoke('updater:downloadUpdate', downloadUrl, version, expectedSha256),
+    cancelDownload: () => ipcRenderer.invoke('updater:cancelDownload'),
+    installUpdate: (installerPath) => ipcRenderer.invoke('updater:installUpdate', installerPath),
+    getConfig: () => ipcRenderer.invoke('updater:getConfig'),
+    saveConfig: (config) => ipcRenderer.invoke('updater:saveConfig', config),
+    onDownloadProgress: (callback) => {
+      const handler = (_: unknown, progress: any) => callback(progress)
+      ipcRenderer.on('updater:downloadProgress', handler)
+      return () => {
+        ipcRenderer.removeListener('updater:downloadProgress', handler)
       }
     },
   },

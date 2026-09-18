@@ -36,6 +36,7 @@ import {
   Share2,
   Layers,
   Shapes,
+  ArrowUpCircle,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -73,6 +74,7 @@ export interface MenuActionHandlers {
   onToggleDiagram?: () => void
   onToggleBundle?: () => void
   onToggleSvg?: () => void
+  onCheckForUpdates?: () => void
   // Run & Execution Handlers
   onRunActiveFile?: () => void
   onRunWithArgs?: () => void
@@ -460,6 +462,12 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+K Ctrl+S',
           icon: <Keyboard size={14} />,
           onClick: handlers.onOpenShortcuts,
+        },
+        {
+          id: 'help.updates',
+          label: 'Check for Updates...',
+          icon: <ArrowUpCircle size={14} className="text-cyan-400" />,
+          onClick: handlers.onCheckForUpdates,
         },
         { id: 'sep7', label: '', isSeparator: true },
         {
