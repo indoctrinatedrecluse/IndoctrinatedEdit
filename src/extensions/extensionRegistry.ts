@@ -31,6 +31,7 @@ import { zigExtensionManifest, registerZigExtension } from './zigSupport/zigExte
 import { gdscriptExtensionManifest, registerGDScriptExtension } from './gdscriptSupport/gdscriptExtension'
 import { shellScriptExtensionManifest, registerShellScriptExtension } from './shellScriptSupport/shellScriptExtension'
 import { juliaExtensionManifest, registerJuliaExtension } from './juliaSupport/juliaExtension'
+import { mcpExtensionManifest, registerMcpExtension } from './mcpSupport/mcpExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
 
@@ -131,7 +132,10 @@ class ExtensionRegistry {
     // 31. Dedicated Julia High-Performance Scientific Suite
     this.register(juliaExtensionManifest)
 
-    // 32. Cryptography & DevTools Studio
+    // 32. Model Context Protocol (MCP) & AI Agent Studio
+    this.register(mcpExtensionManifest)
+
+    // 33. Cryptography & DevTools Studio
     this.register({
       id: 'indoctrinated.ext.cryptolab',
       name: 'Cryptography & DevTools Studio',
@@ -317,6 +321,7 @@ class ExtensionRegistry {
     safeInit('Godot & GDScript', () => registerGDScriptExtension(monacoInstance))
     safeInit('Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
     safeInit('Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
+    safeInit('MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
   }
 }
 

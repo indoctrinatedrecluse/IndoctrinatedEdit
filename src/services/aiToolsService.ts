@@ -12,6 +12,7 @@ import { AiService } from './aiService'
 import { DiagnosticsService } from './diagnosticsService'
 import { terminalService } from './terminalService'
 import { RunService } from './runService'
+import { McpService } from './mcpService'
 
 /* =========================================================================
  * 🛡️ Security Guardrails Service
@@ -279,11 +280,69 @@ export class AiToolsRegistry {
   }
 
   static getTool(name: string): AiToolDefinition | undefined {
-    return this.tools.get(name)
+    const builtin = this.tools.get(name)
+    if (builtin) return builtin
+
+    // Resolve dynamic MCP server tool
+    try {
+      const mcpTools = McpService.listTools()
+      const cleanName = name.startsWith('mcp_') ? name.slice(4) : name
+      const foundMcp = mcpTools.find((t) => t.name === name || t.name === cleanName)
+      if (foundMcp) {
+        const params: Record<string, any> = {}
+        if (foundMcp.inputSchema?.properties) {
+          for (const [k, v] of Object.entries(foundMcp.inputSchema.properties)) {
+            params[k] = {
+              type: v.type || 'string',
+              description: v.description || '',
+              enum: v.enum,
+            }
+          }
+        }
+        return {
+          name: foundMcp.name,
+          description: `[MCP: ${foundMcp.serverName}] ${foundMcp.description || ''}`,
+          category: 'browser',
+          requiredParams: foundMcp.inputSchema?.required || [],
+          parameters: params,
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    return undefined
   }
 
   static getAllTools(): AiToolDefinition[] {
-    return Array.from(this.tools.values())
+    const list = Array.from(this.tools.values())
+    try {
+      const mcpTools = McpService.listTools()
+      for (const mcp of mcpTools) {
+        if (!this.tools.has(mcp.name)) {
+          const params: Record<string, any> = {}
+          if (mcp.inputSchema?.properties) {
+            for (const [k, v] of Object.entries(mcp.inputSchema.properties)) {
+              params[k] = {
+                type: v.type || 'string',
+                description: v.description || '',
+                enum: v.enum,
+              }
+            }
+          }
+          list.push({
+            name: mcp.name,
+            description: `[MCP: ${mcp.serverName}] ${mcp.description || ''}`,
+            category: 'browser',
+            requiredParams: mcp.inputSchema?.required || [],
+            parameters: params,
+          })
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return list
   }
 
   /**
@@ -640,14 +699,24 @@ export class AiToolExecutor {
           }
         }
 
-        default:
+        default: {
+          const mcpResult = await McpService.callTool(call.toolName, call.toolName, call.arguments)
+          if (!mcpResult.isError) {
+            return {
+              toolCallId: call.id,
+              toolName: call.toolName,
+              success: mcpResult.success,
+              output: AiGuardrailService.sanitizeOutput(mcpResult.output),
+            }
+          }
           return {
             toolCallId: call.id,
             toolName: call.toolName,
             success: false,
             output: '',
-            error: `Unsupported tool: "${call.toolName}"`,
+            error: mcpResult.content?.[0]?.text || `Unsupported tool: "${call.toolName}"`,
           }
+        }
       }
     } catch (err: any) {
       return {

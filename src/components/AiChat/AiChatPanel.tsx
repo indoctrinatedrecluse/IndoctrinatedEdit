@@ -38,7 +38,9 @@ import {
   FileCheck,
   Cpu,
   CornerDownLeft,
+  Server,
 } from 'lucide-react'
+import { McpService } from '../../services/mcpService'
 import {
   AiChatMessage,
   AiModelOption,
@@ -914,6 +916,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         </div>
 
         <div className="ai-header-right">
+          <button
+            className="icon-btn glass-interactive"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('open-mcp-studio'))
+            }}
+            title={`MCP Host Studio: ${McpService.getServers().filter((s) => s.enabled).length} active servers, ${McpService.listTools().length} tools`}
+          >
+            <Server size={13} />
+          </button>
           <button
             className={`icon-btn glass-interactive ${isSettingsOpen && settingsTab === 'permissions' ? 'active' : ''}`}
             onClick={() => {

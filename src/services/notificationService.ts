@@ -170,6 +170,24 @@ export class NotificationService {
   }
 
   /**
+   * Helper to format and display success notifications.
+   */
+  public notifySuccess(
+    title: string,
+    message: string,
+    source: string = 'Runtime Engine',
+    actions?: NotificationAction[]
+  ): string {
+    return this.addNotification({
+      title,
+      message,
+      type: 'success',
+      source,
+      actions,
+    })
+  }
+
+  /**
    * Helper to format and display human-readable major errors (e.g. AI Agent crashes, network failures).
    */
   public notifyError(

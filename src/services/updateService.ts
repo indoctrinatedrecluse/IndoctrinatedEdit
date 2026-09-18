@@ -253,9 +253,9 @@ export class RendererUpdateService {
       this.status = 'error'
       const errInfo: UpdateInfo = {
         updateAvailable: false,
-        currentVersion: '4.5.0',
-        latestVersion: '4.5.0',
-        releaseName: 'IndoctrinatedEdit 4.5.0',
+        currentVersion: '4.6.0',
+        latestVersion: '4.6.0',
+        releaseName: 'IndoctrinatedEdit 4.6.0',
         releaseNotes: 'Could not connect to update servers. Check your internet connection.',
         publishedAt: new Date().toISOString(),
         releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',
@@ -385,8 +385,8 @@ export class RendererUpdateService {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const release = await res.json()
-      const currentVersion = '4.5.0'
-      const latestVersion = (release.tag_name || 'v4.5.0').replace(/^v/i, '')
+      const currentVersion = '4.6.0'
+      const latestVersion = (release.tag_name || 'v4.6.0').replace(/^v/i, '')
       const isNewer = RendererUpdateService.compareSemVer(latestVersion, currentVersion) > 0
 
       return {
@@ -404,9 +404,9 @@ export class RendererUpdateService {
     } catch {
       return {
         updateAvailable: false,
-        currentVersion: '4.5.0',
-        latestVersion: '4.5.0',
-        releaseName: 'IndoctrinatedEdit 4.5.0',
+        currentVersion: '4.6.0',
+        latestVersion: '4.6.0',
+        releaseName: 'IndoctrinatedEdit 4.6.0',
         releaseNotes: 'You are on the latest release.',
         publishedAt: new Date().toISOString(),
         releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',

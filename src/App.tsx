@@ -16,6 +16,7 @@ import { RunConfigModal } from './components/Modals/RunConfigModal'
 import { RunWithArgsModal } from './components/Modals/RunWithArgsModal'
 import { UnsavedChangesModal } from './components/Modals/UnsavedChangesModal'
 import { UpdateModal } from './components/Modals/UpdateModal'
+import { McpStudioModal } from './components/McpStudio/McpStudioModal'
 import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
 import { DebugToolbar } from './components/Debug/DebugToolbar'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
@@ -249,6 +250,7 @@ export const App: React.FC = () => {
   const [untitledCount, setUntitledCount] = useState<number>(1)
   const [sidebarWidth, setSidebarWidth] = useState<number>(260)
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false)
+  const [isMcpStudioOpen, setIsMcpStudioOpen] = useState<boolean>(false)
   const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false)
   const [latestUpdateVersion, setLatestUpdateVersion] = useState<string>('')
 
@@ -307,6 +309,17 @@ export const App: React.FC = () => {
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
   }
+
+  // Global event listener for MCP Studio modal launcher
+  useEffect(() => {
+    const handleOpenMcp = () => {
+      setIsMcpStudioOpen(true)
+    }
+    window.addEventListener('open-mcp-studio', handleOpenMcp)
+    return () => {
+      window.removeEventListener('open-mcp-studio', handleOpenMcp)
+    }
+  }, [])
 
   // AI Multi-Model Chat Panel & Editor Integration State
   const editorHostRef = useRef<EditorHostHandle>(null)
@@ -1324,13 +1337,16 @@ export const App: React.FC = () => {
       { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: handleToggleAi },
       { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: handleToggleAi },
 
+      // Model Context Protocol (MCP) Studio
+      { id: 'mcp.studio', title: 'MCP Studio: Manage Model Context Protocol Servers & Tools', category: 'AI', shortcut: 'Ctrl+Shift+M', description: 'Open MCP Server and Tooling Studio to configure stdio & SSE servers', handler: () => setIsMcpStudioOpen(true) },
+
       // Help & Shortcuts
       { id: 'help.shortcuts', title: 'Help: Keyboard Shortcuts Reference', category: 'Help', shortcut: 'Ctrl+K Ctrl+S', description: 'Show all keyboard shortcuts', handler: () => setIsShortcutsOpen(true) },
       { id: 'help.checkForUpdates', title: 'Check for Software Updates...', category: 'Help', description: 'Check for latest IndoctrinatedEdit releases and packages', handler: () => { setIsUpdateModalOpen(true); rendererUpdateService.checkForUpdates(true); } },
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleSelectTheme, openPalette, tabs])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleSelectTheme, openPalette, tabs, setIsMcpStudioOpen])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -1540,6 +1556,11 @@ export const App: React.FC = () => {
                 workspaceFiles={workspaceFiles}
                 onOpenFolderClick={handleOpenFolderNative}
                 onNewFileClick={handleNewFile}
+                onCheckForUpdates={() => {
+                  setIsUpdateModalOpen(true)
+                  rendererUpdateService.checkForUpdates(true)
+                }}
+                onOpenMcpStudio={() => setIsMcpStudioOpen(true)}
               />
             </motion.div>
           )}
@@ -1761,6 +1782,12 @@ export const App: React.FC = () => {
       <UpdateModal
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
+      />
+
+      {/* MCP Studio & Agent Tooling Modal */}
+      <McpStudioModal
+        isOpen={isMcpStudioOpen}
+        onClose={() => setIsMcpStudioOpen(false)}
       />
 
       <style>{`

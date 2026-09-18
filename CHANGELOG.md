@@ -5,6 +5,40 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-09-18
+
+### 🚀 Minor Release — Model Context Protocol (MCP) Host Studio, AI Agent Tools Bridge, & Settings Reactivity
+
+IndoctrinatedEdit 4.6.0 establishes the editor as a comprehensive **Model Context Protocol (MCP) Host** and integrates seamless server management, live tool inspection, and dual-mode AI agent capabilities:
+
+#### 🌐 Full MCP Host Runtime & Multi-Transport Engine
+- **JSON-RPC 2.0 Client/Host Architecture**: Standard protocol communication across `stdio`, `sse` (Server-Sent Events), and `builtin` in-memory services.
+- **Protocol Discovery**: Implements full discovery for `tools/list`, `resources/list`, and `prompts/list`.
+- **Tool Execution Dispatcher**: Dynamic tool execution (`tools/call`) with live latency measurement, argument validation, and output security sanitization.
+- **`mcp_config.json` Compatibility**: Live editing, export to clipboard/file, and 1-click import of standard multi-server configurations.
+- **Pre-Packaged MCP Presets**: Ready-to-use production servers for *Filesystem* (`@modelcontextprotocol/server-filesystem`), *Git* (`@modelcontextprotocol/server-git`), *Memory Graph* (`@modelcontextprotocol/server-memory`), *Web Content Fetcher* (`@modelcontextprotocol/server-fetch`), *Google Gemini & SDK Docs* (`gemini-api-docs-mcp`), and *SQLite Database* (`@modelcontextprotocol/server-sqlite`).
+
+#### 🧩 Dedicated MCP Studio Modal & Extension
+- **`indoctrinated.ext.mcp-studio` Built-in Extension**: Registered in the extension registry with Monaco autocomplete snippets for `mcp_config.json`, TypeScript servers (`@modelcontextprotocol/sdk`), and Python FastMCP (`fastmcp`).
+- **MCP Studio Modal UI**:
+  - **Servers Tab**: Detailed server manager with custom executable commands, args, environment variables, SSE URLs, timeouts, and live ping health checks.
+  - **Live Tool Tester Tab**: Interactive parameter schema browser and JSON argument runner with instant output execution diffs.
+  - **Resources & Prompts Tab**: Context document URIs and prompt templates inspector.
+  - **Catalog Tab**: 1-click server installer.
+- **Command Palette & AI Header Shortcuts**: Access via `Ctrl+Shift+M` or the new MCP Host launcher button in the AI Assistant header.
+
+#### 🤖 Dual-Mode AI Agent Operation (With or Without MCP)
+- **Seamless Fallback**: When MCP servers are disabled or unavailable, AI agents operate 100% autonomously using native built-in workspace tools without dependencies.
+- **Dynamic Tool Injection**: When MCP servers are enabled, active tools are automatically registered in `AiToolsRegistry` and injected into the agent system prompt.
+- **Security & Auto-Approve**: MCP tool calls are governed by the granular *Auto-Approve Web & MCP* permission setting.
+
+#### ⚙️ Settings Panel Enhancements & Reactivity Fix
+- **Instant Reactivity**: Fixed state binding in `Sidebar.tsx` so AI Auto-Approve checkboxes toggle visually immediately on click with bidirectional sync to the AI Chat dock.
+- **Application & Software Updates in Settings**: Added dedicated update management in the Settings view with version display, release channel badge, and direct "Check for Updates..." trigger.
+- **MCP Summary in Settings**: Active servers count and quick launcher button directly inside the Settings panel.
+
+---
+
 ## [4.5.0] - 2026-09-18
 
 ### 🚀 Minor Release — Auto-Updater Subsystem, Cross-Platform Release Packaging & Integrity Verification

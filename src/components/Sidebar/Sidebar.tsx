@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { ActivityView } from '../ActivityBar/ActivityBar'
 import {
   Folder,
@@ -19,12 +19,17 @@ import {
   Server,
   Globe,
   Box,
+  Download,
+  Wrench,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { GitGraphView } from '../GitGraph/GitGraphView'
 import { DebugView } from '../Debug/DebugView'
 import { AiService } from '../../services/aiService'
+import { AiAutoApproveSettings, AutoApprovePreset } from '@sdk/types'
+import { McpService, McpServerConfig } from '../../services/mcpService'
+import { rendererUpdateService, UpdateStatus, UpdateInfo } from '../../services/updateService'
 
 export interface WorkspaceFileItem {
   name: string
@@ -44,6 +49,8 @@ interface SidebarProps {
   workspaceFiles: WorkspaceFileItem[]
   onOpenFolderClick?: () => void
   onNewFileClick?: () => void
+  onCheckForUpdates?: () => void
+  onOpenMcpStudio?: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -57,7 +64,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
   workspaceFiles,
   onOpenFolderClick,
   onNewFileClick,
+  onCheckForUpdates,
+  onOpenMcpStudio,
 }) => {
+  const [autoApprove, setAutoApprove] = useState<AiAutoApproveSettings>(() => AiService.getAutoApproveSettings())
+  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>(() => McpService.getServers())
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => rendererUpdateService.getStatus())
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(() => rendererUpdateService.getUpdateInfo())
+
+  useEffect(() => {
+    const unsubAi = AiService.onAutoApproveChanged((newSettings) => {
+      setAutoApprove(newSettings)
+    })
+    const unsubMcp = McpService.onServersChanged((servers) => {
+      setMcpServers(servers)
+    })
+    const unsubUpdate = rendererUpdateService.subscribe(() => {
+      setUpdateStatus(rendererUpdateService.getStatus())
+      setUpdateInfo(rendererUpdateService.getUpdateInfo())
+    })
+    return () => {
+      unsubAi()
+      unsubMcp()
+      unsubUpdate()
+    }
+  }, [])
+
+  const handleToggleAutoApprove = (key: keyof AiAutoApproveSettings, val: boolean) => {
+    const updated = { ...autoApprove, [key]: val }
+    setAutoApprove(updated)
+    AiService.saveAutoApproveSettings(updated)
+  }
+
+  const handleApplyPreset = (preset: AutoApprovePreset) => {
+    const updated = AiService.applyAutoApprovePreset(preset)
+    setAutoApprove(updated)
+  }
+
   if (!activeView) return null
 
   const extensions = extensionRegistry.getAll()
@@ -287,19 +330,78 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </label>
           </div>
 
+          {/* APPLICATION & SOFTWARE UPDATES */}
+          <div className="sidebar-header" style={{ marginTop: '20px' }}>
+            <span className="sidebar-title">APPLICATION & UPDATES</span>
+          </div>
+          <div className="settings-list">
+            <div className="settings-row">
+              <span>Version</span>
+              <span className="font-mono text-violet-400 font-semibold">v4.6.0</span>
+            </div>
+            <div className="settings-row">
+              <span>Release Channel</span>
+              <span className="channel-badge-sm">Stable (Production)</span>
+            </div>
+            {updateStatus !== 'idle' && (
+              <div className="settings-row">
+                <span>Update Status</span>
+                <span className={`status-pill-sm ${updateStatus}`}>
+                  {updateStatus === 'checking' && 'Checking GitHub...'}
+                  {updateStatus === 'available' && `Update Available (${updateInfo?.latestVersion || ''})`}
+                  {updateStatus === 'upToDate' && 'Up to Date'}
+                  {updateStatus === 'downloading' && 'Downloading...'}
+                  {updateStatus === 'downloaded' && 'Ready to Install'}
+                  {updateStatus === 'error' && 'Check Failed'}
+                </span>
+              </div>
+            )}
+            <div style={{ marginTop: '8px' }}>
+              <button
+                className="sidebar-action-btn"
+                onClick={() => onCheckForUpdates?.()}
+                title="Check GitHub for latest IndoctrinatedEdit release"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Check for Updates...</span>
+              </button>
+            </div>
+          </div>
+
+          {/* AI & AUTONOMOUS AUTO-APPROVE */}
           <div className="sidebar-header" style={{ marginTop: '20px' }}>
             <span className="sidebar-title">AI & AUTONOMOUS AUTO-APPROVE</span>
+          </div>
+          <div className="preset-quick-row">
+            <button
+              className="preset-btn-sm"
+              onClick={() => handleApplyPreset('paranoid')}
+              title="Manual approval for everything"
+            >
+              Conservative
+            </button>
+            <button
+              className="preset-btn-sm active"
+              onClick={() => handleApplyPreset('balanced')}
+              title="Auto-approve read and web tools"
+            >
+              Standard
+            </button>
+            <button
+              className="preset-btn-sm autonomous"
+              onClick={() => handleApplyPreset('autonomous')}
+              title="Auto-approve all tools including edit, terminal, and git"
+            >
+              Autonomous
+            </button>
           </div>
           <div className="settings-list">
             <label className="settings-row" title="Auto-approve file reading and workspace symbol search">
               <span>Auto-Approve Read</span>
               <input
                 type="checkbox"
-                checked={AiService.getAutoApproveSettings().autoApproveRead}
-                onChange={(e) => {
-                  const current = AiService.getAutoApproveSettings()
-                  AiService.saveAutoApproveSettings({ ...current, autoApproveRead: e.target.checked })
-                }}
+                checked={!!autoApprove.autoApproveRead}
+                onChange={(e) => handleToggleAutoApprove('autoApproveRead', e.target.checked)}
                 className="glass-checkbox"
               />
             </label>
@@ -307,11 +409,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Auto-Approve Write</span>
               <input
                 type="checkbox"
-                checked={AiService.getAutoApproveSettings().autoApproveWrite}
-                onChange={(e) => {
-                  const current = AiService.getAutoApproveSettings()
-                  AiService.saveAutoApproveSettings({ ...current, autoApproveWrite: e.target.checked })
-                }}
+                checked={!!autoApprove.autoApproveWrite}
+                onChange={(e) => handleToggleAutoApprove('autoApproveWrite', e.target.checked)}
                 className="glass-checkbox"
               />
             </label>
@@ -319,11 +418,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Auto-Approve Run (Terminal)</span>
               <input
                 type="checkbox"
-                checked={AiService.getAutoApproveSettings().autoApproveRun}
-                onChange={(e) => {
-                  const current = AiService.getAutoApproveSettings()
-                  AiService.saveAutoApproveSettings({ ...current, autoApproveRun: e.target.checked })
-                }}
+                checked={!!autoApprove.autoApproveRun}
+                onChange={(e) => handleToggleAutoApprove('autoApproveRun', e.target.checked)}
                 className="glass-checkbox"
               />
             </label>
@@ -331,11 +427,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Auto-Approve Web & MCP</span>
               <input
                 type="checkbox"
-                checked={AiService.getAutoApproveSettings().autoApproveBrowser}
-                onChange={(e) => {
-                  const current = AiService.getAutoApproveSettings()
-                  AiService.saveAutoApproveSettings({ ...current, autoApproveBrowser: e.target.checked })
-                }}
+                checked={!!autoApprove.autoApproveBrowser}
+                onChange={(e) => handleToggleAutoApprove('autoApproveBrowser', e.target.checked)}
                 className="glass-checkbox"
               />
             </label>
@@ -343,14 +436,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Auto-Approve Git</span>
               <input
                 type="checkbox"
-                checked={AiService.getAutoApproveSettings().autoApproveGit}
-                onChange={(e) => {
-                  const current = AiService.getAutoApproveSettings()
-                  AiService.saveAutoApproveSettings({ ...current, autoApproveGit: e.target.checked })
-                }}
+                checked={!!autoApprove.autoApproveGit}
+                onChange={(e) => handleToggleAutoApprove('autoApproveGit', e.target.checked)}
                 className="glass-checkbox"
               />
             </label>
+          </div>
+
+          {/* MCP (MODEL CONTEXT PROTOCOL) SERVERS */}
+          <div className="sidebar-header" style={{ marginTop: '20px' }}>
+            <span className="sidebar-title">MCP SERVERS & AGENTS</span>
+          </div>
+          <div className="mcp-sidebar-summary">
+            <div className="mcp-summary-row">
+              <span className="text-zinc-400">Configured Servers:</span>
+              <span className="font-semibold text-cyan-400">{mcpServers.length}</span>
+            </div>
+            <div className="mcp-summary-row">
+              <span className="text-zinc-400">Active / Connected:</span>
+              <span className="font-semibold text-emerald-400">
+                {mcpServers.filter((s) => s.enabled).length}
+              </span>
+            </div>
+            <div className="mcp-mini-list">
+              {mcpServers.slice(0, 4).map((s) => (
+                <div key={s.id} className="mcp-mini-item">
+                  <span className={`status-dot ${s.enabled ? 'connected' : 'disabled'}`} />
+                  <span className="mcp-mini-name">{s.name}</span>
+                  <span className="mcp-mini-badge">{s.transport}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              className="sidebar-action-btn primary"
+              onClick={() => onOpenMcpStudio?.()}
+              style={{ marginTop: '10px' }}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              <span>Launch MCP Studio...</span>
+            </button>
           </div>
         </div>
       )}
@@ -737,6 +861,147 @@ export const Sidebar: React.FC<SidebarProps> = ({
           font-size: 12px;
           color: var(--text-secondary);
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .channel-badge-sm {
+          font-size: 10px;
+          padding: 2px 7px;
+          border-radius: 4px;
+          background: rgba(48, 209, 88, 0.12);
+          color: #30d158;
+          border: 1px solid rgba(48, 209, 88, 0.25);
+        }
+
+        .status-pill-sm {
+          font-size: 10px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-primary);
+        }
+
+        .status-pill-sm.available {
+          background: rgba(10, 132, 255, 0.15);
+          color: #38bdf8;
+          border: 1px solid rgba(10, 132, 255, 0.3);
+        }
+
+        .status-pill-sm.ready-to-install {
+          background: rgba(48, 209, 88, 0.15);
+          color: #30d158;
+          border: 1px solid rgba(48, 209, 88, 0.3);
+        }
+
+        .sidebar-action-btn {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 7px 12px;
+          border-radius: 6px;
+          font-size: 11.5px;
+          font-weight: 500;
+          cursor: pointer;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: var(--text-primary);
+          transition: all 0.15s ease;
+        }
+
+        .sidebar-action-btn:hover {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .sidebar-action-btn.primary {
+          background: linear-gradient(135deg, rgba(124, 58, 237, 0.25), rgba(99, 102, 241, 0.25));
+          border-color: rgba(139, 92, 246, 0.4);
+          color: #c4b5fd;
+        }
+
+        .sidebar-action-btn.primary:hover {
+          background: linear-gradient(135deg, rgba(124, 58, 237, 0.35), rgba(99, 102, 241, 0.35));
+          border-color: rgba(139, 92, 246, 0.6);
+          color: #fff;
+        }
+
+        .preset-quick-row {
+          display: flex;
+          gap: 4px;
+          margin-bottom: 8px;
+        }
+
+        .preset-btn-sm {
+          flex: 1;
+          padding: 4px 6px;
+          font-size: 10px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: rgba(255, 255, 255, 0.7);
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .preset-btn-sm:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+        }
+
+        .preset-btn-sm.autonomous {
+          color: #a78bfa;
+          border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .mcp-sidebar-summary {
+          background: rgba(0, 0, 0, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 6px;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .mcp-summary-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11.5px;
+        }
+
+        .mcp-mini-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin-top: 4px;
+        }
+
+        .mcp-mini-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 10.5px;
+          color: rgba(255, 255, 255, 0.7);
+          background: rgba(255, 255, 255, 0.02);
+          padding: 3px 6px;
+          border-radius: 4px;
+        }
+
+        .mcp-mini-name {
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .mcp-mini-badge {
+          font-size: 8.5px;
+          padding: 1px 4px;
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 3px;
+          color: rgba(255, 255, 255, 0.5);
+          text-transform: uppercase;
         }
       `}</style>
     </div>
