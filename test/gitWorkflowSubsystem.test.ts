@@ -22,11 +22,11 @@ describe('Git Workflow & GitHub Actions CI/CD Subsystem', () => {
   })
 
   it('should trigger a new manual workflow dispatch run', () => {
-    const newRun = gitWorkflowService.triggerWorkflow('release.yml', 'master', { tag: 'v4.2.0' })
+    const newRun = gitWorkflowService.triggerWorkflow('release.yml', 'master', { tag: 'v4.3.0' })
     expect(newRun).toBeDefined()
     expect(newRun.status).toBe('in_progress')
     expect(newRun.branch).toBe('master')
-    expect(newRun.commit.message).toContain('v4.2.0')
+    expect(newRun.commit.message).toContain('v4.3.0')
 
     const currentRuns = gitWorkflowService.getRuns()
     expect(currentRuns[0].id).toBe(newRun.id)

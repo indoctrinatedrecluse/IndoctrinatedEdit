@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.3.0] - 2026-09-18
+
+### 🚀 Minor Release — Autonomous AI Local Tools, Context Mentions (@), Slash Commands (/), Multi-Layer Security Guardrails, and Interactive Diff Studio
+
+IndoctrinatedEdit 4.3.0 introduces an agentic AI pairing engine tightly integrated with the local workspace and Monaco editor: a **Local AI Tool Registry** with 10 tools; **Multi-Layer Security Guardrails** enforcing path traversal sandboxing and destructive command protection; **Context Mentions (`@`)** and **Slash Commands (`/`)** with live autocomplete popups; **Interactive Tool Call & Unified Diff Cards**; and **Smooth Mouse Wheel Horizontal Scrolling** on bottom toolbars.
+
+#### 🛠️ Local AI Tools Subsystem & Editor Grounding
+- **`read_file`**: Reads workspace files with 1-indexed line-range slices.
+- **`list_workspace_files`**: Explores workspace folders and subfolder directory trees.
+- **`search_code`**: Fast text and regex pattern matching across active files.
+- **`get_editor_diagnostics`**: Real-time queries for Monaco, LSP, and compiler error markers, warnings, and problems.
+- **`get_git_status` & `get_git_diff`**: Deep inspection of branch states, ahead/behind counters, staged diffs, and working tree changes.
+- **`propose_file_edit`**: Emits unified code patch proposals with side-by-side diff viewers and 1-click **Accept Diff** / **Discard** actions.
+- **`execute_terminal_command`**: Runs CLI commands, unit tests, and build scripts with execution timeouts and output capture.
+- **`trigger_project_run`**: Integrates with the VS Code Run Subsystem to trigger configured run targets.
+- **`open_editor_file`**: Programmatic navigation to specific files, lines, and columns in Monaco Editor.
+
+#### 🛡️ Multi-Layer Security Guardrails Engine (`AiGuardrailService`)
+- **Strict Path Sandboxing**: Normalizes and confines file access strictly to workspace boundaries, blocking path traversal (`../..`) and access to sensitive OS system roots (`C:\Windows\System32`, `/etc/shadow`, `/proc`, `/root`).
+- **Destructive Command Blocklist**: Proactively flags and blocks dangerous commands (`rm -rf /`, `del /s /q C:\*`, disk formatting, fork bombs, OS process termination, and pipe-to-shell payloads).
+- **Autonomous Auto-Approve Integration**: Read operations default to Auto-Approve; Write, Run, and Git actions strictly require manual authorization unless the user enables autonomous permissions.
+- **Output Capping & Loop Protection**: Protects token context with automatic output truncation and bounds autonomous multi-turn loops via `maxAutoIterations`.
+
+#### 🎯 Context Mentions (`@`) & Slash Commands (`/`)
+- **`@` Mention Autocomplete**: Instant popup to attach `@selection`, `@file`, `@problems`, `@terminal`, `@git`, and `@workspace`.
+- **`/` Slash Commands**: Rapid triggers for `/fix Problems`, `/test Suite`, `/commit Message`, `/refactor`, `/explain`, `/run`, and `/docs`.
+
+#### 🎛️ Interactive Tool Cards & Smooth Scrolling
+- **Rich Tool Cards**: Visual status badges (`Pending Approval`, `Executing`, `Done`, `Guardrail Blocked`, `Rejected`) with parameter formatting and manual approve/reject actions.
+- **Unified Diff Viewer**: Highlights green additions and red deletions with 1-click **Accept Diff**.
+- **Mouse Wheel Horizontal Scrolling**: Translates mouse wheel vertical scrolls to horizontal navigation on the bottom quick actions bar and permissions drawer.
+
+---
+
 ## [4.2.0] - 2026-09-18
 
 ### 🚀 Minor Release — VS Code Run & Build Engine, Safe Project Switching, Supercharged Debugger, Git Workflows CI/CD, Antigravity & ChatGPT Codex Subscriptions, and AI Auto-Approve Permissions

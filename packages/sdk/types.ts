@@ -189,6 +189,60 @@ export interface AiModelOption {
   supportsReasoning?: boolean
 }
 
+export type AiToolCategory = 'read' | 'write' | 'run' | 'browser' | 'git'
+
+export type AiToolCallStatus = 'pending_approval' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected' | 'blocked_by_guardrail'
+
+export interface AiToolParameterSchema {
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  description: string
+  required?: boolean
+  enum?: string[]
+}
+
+export interface AiToolDefinition {
+  name: string
+  description: string
+  category: AiToolCategory
+  parameters: Record<string, AiToolParameterSchema>
+  requiredParams: string[]
+  requiresApprovalByDefault?: boolean
+}
+
+export interface AiToolCall {
+  id: string
+  toolName: string
+  arguments: Record<string, any>
+  status: AiToolCallStatus
+  category: AiToolCategory
+  requestedAt: number
+  executedAt?: number
+  autoApproved?: boolean
+  guardrailNote?: string
+}
+
+export interface AiToolResult {
+  toolCallId: string
+  toolName: string
+  success: boolean
+  output: string
+  error?: string
+  diff?: {
+    filePath: string
+    originalSnippet?: string
+    newSnippet?: string
+    fullContent?: string
+    applied?: boolean
+  }
+}
+
+export interface AiContextMention {
+  type: 'file' | 'selection' | 'problems' | 'terminal' | 'git' | 'workspace'
+  label: string
+  description: string
+  data?: any
+}
+
 export interface AiChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -196,12 +250,16 @@ export interface AiChatMessage {
   reasoning?: string
   timestamp: number
   attachment?: {
-    type: 'selection' | 'file'
-    fileName: string
-    code: string
+    type: 'selection' | 'file' | 'problems' | 'terminal' | 'git' | 'workspace'
+    fileName?: string
+    code?: string
     startLine?: number
     endLine?: number
+    meta?: Record<string, any>
   }
+  toolCalls?: AiToolCall[]
+  toolResults?: AiToolResult[]
+  isAgentTurn?: boolean
 }
 
 export interface AiProviderConfig {
@@ -216,6 +274,7 @@ export interface AiStreamChunk {
   reasoning?: string
   done?: boolean
   error?: string
+  toolCalls?: AiToolCall[]
 }
 
 export interface AiAutoApproveSettings {
@@ -228,3 +287,4 @@ export interface AiAutoApproveSettings {
 }
 
 export type AutoApprovePreset = 'paranoid' | 'balanced' | 'autonomous'
+

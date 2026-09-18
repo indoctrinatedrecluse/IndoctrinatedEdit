@@ -26,13 +26,18 @@ import {
   Zap,
   TestTube2,
   FileText,
-  Boxes,
   Terminal,
   FileCode,
   FolderSearch,
   Globe,
   GitBranch,
   Sliders,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  FileCheck,
+  Cpu,
+  CornerDownLeft,
 } from 'lucide-react'
 import {
   AiChatMessage,
@@ -40,6 +45,8 @@ import {
   AiProvider,
   AiAutoApproveSettings,
   AutoApprovePreset,
+  AiToolCall,
+  AiToolResult,
 } from '@sdk/types'
 import {
   AiService,
@@ -49,6 +56,11 @@ import {
 } from '../../services/aiService'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { terminalService } from '../../services/terminalService'
+import {
+  AiToolExecutor,
+  AiToolParser,
+} from '../../services/aiToolsService'
+import { DiagnosticsService } from '../../services/diagnosticsService'
 
 interface AiChatPanelProps {
   isOpen: boolean
@@ -56,8 +68,11 @@ interface AiChatPanelProps {
   activeFileName?: string
   activeFileContent?: string
   currentSelection: SelectionInfo | null
+  workspaceRoot?: string
+  openFiles?: Array<{ path: string; name: string; content?: string }>
   onInsertAtCursor?: (code: string) => void
   onReplaceSelection?: (code: string) => void
+  onOpenFile?: (filePath: string, line?: number, column?: number) => void
 }
 
 export const AiChatPanel: React.FC<AiChatPanelProps> = ({
@@ -66,8 +81,11 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   activeFileName = 'untitled.ts',
   activeFileContent = '',
   currentSelection,
+  workspaceRoot,
+  openFiles,
   onInsertAtCursor,
   onReplaceSelection,
+  onOpenFile,
 }) => {
   // Settings & Models
   const [settings, setSettings] = useState<AiSettingsMap>(AiService.getSettings())
@@ -84,7 +102,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     {
       id: 'welcome-msg',
       role: 'assistant',
-      content: `Hello! I'm your **IndoctrinatedEdit** AI Assistant.\n\nI can analyze your active files, explain algorithms, audit security flaws, refactor functions, or generate high-coverage test suites. Highlight any code in the editor and click **"Attach Selection"**, or use the quick actions below!`,
+      content: `Hello! I'm your **IndoctrinatedEdit** AI Assistant.\n\nI have access to local workspace tools (reading files, checking diagnostics, git diffs, file edits, and terminal execution) with strict security guardrails. Type **\`@\`** to inject editor context, or **\`/\`** for instant slash commands!`,
       timestamp: Date.now(),
     },
   ])
@@ -92,12 +110,24 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [isStreaming, setIsStreaming] = useState(false)
   const [cancelFn, setCancelFn] = useState<(() => void) | null>(null)
   const [attachedContext, setAttachedContext] = useState<{
-    type: 'selection' | 'file'
-    fileName: string
-    code: string
+    type: 'selection' | 'file' | 'problems' | 'terminal' | 'git' | 'workspace'
+    fileName?: string
+    code?: string
     startLine?: number
     endLine?: number
+    meta?: Record<string, any>
   } | null>(null)
+
+  // Mentions & Slash Command Autocomplete State
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [mentionFilter, setMentionFilter] = useState('')
+  const [slashOpen, setSlashOpen] = useState(false)
+  const [slashFilter, setSlashFilter] = useState('')
+  const [menuIndex, setMenuIndex] = useState(0)
+
+  // Interactive Tools & Diff States
+  const [executingToolId, setExecutingToolId] = useState<string | null>(null)
+  const [appliedDiffs, setAppliedDiffs] = useState<Record<string, boolean>>({})
 
   // Expand reasoning cards
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
@@ -158,6 +188,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     }
   }
 
+  /* =========================================================================
+   * 🎯 Context Mentions Resolvers
+   * ========================================================================= */
+
   const handleAttachSelection = () => {
     if (!currentSelection || !currentSelection.text) return
     setAttachedContext({
@@ -178,12 +212,80 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     })
   }
 
+  const handleAttachProblems = () => {
+    const groups = DiagnosticsService.getInstance().getAllGroups()
+    const errorCount = groups.reduce((acc, g) => acc + g.errorCount, 0)
+    const warnCount = groups.reduce((acc, g) => acc + g.warningCount, 0)
+
+    const list: string[] = []
+    groups.forEach((g) => {
+      g.items.forEach((item) => {
+        const sev = item.severity === 'error' ? '🔴 Error' : item.severity === 'warning' ? '🟡 Warning' : 'ℹ️ Info'
+        list.push(`[${sev}] ${g.fileName}:${item.startLineNumber}:${item.startColumn} - ${item.message}`)
+      })
+    })
+
+    setAttachedContext({
+      type: 'problems',
+      fileName: `Diagnostics (${errorCount} errors, ${warnCount} warnings)`,
+      code: list.join('\n') || 'No active diagnostics found in workspace.',
+    })
+  }
+
+  const handleAttachTerminal = () => {
+    const active = terminalService.getActiveTab()
+    const buffer = active ? active.buffer.slice(-60).join('\n') : 'No active terminal session.'
+    setAttachedContext({
+      type: 'terminal',
+      fileName: active ? `Terminal (${active.title})` : 'Terminal Buffer',
+      code: buffer,
+    })
+  }
+
+  const handleAttachGit = async () => {
+    let summary = 'Git repository not loaded.'
+    if (typeof window !== 'undefined' && window.electronAPI?.git?.getRepoStatus) {
+      const status = await window.electronAPI.git.getRepoStatus(workspaceRoot)
+      if (status && status.isRepo) {
+        const staged = status.staged.map((s) => `  [Staged] ${s.path}`).join('\n')
+        const working = status.working.map((w) => `  [Modified] ${w.path}`).join('\n')
+        summary = `Branch: ${status.branch} (Ahead: ${status.ahead}, Behind: ${status.behind})\n\nStaged Changes:\n${staged || '  (None)'}\n\nWorking Changes:\n${working || '  (None)'}`
+      }
+    }
+    setAttachedContext({
+      type: 'git',
+      fileName: 'Git Status & Diffs',
+      code: summary,
+    })
+  }
+
+  const handleAttachWorkspace = async () => {
+    let summary = 'Workspace summary'
+    if (typeof window !== 'undefined' && window.electronAPI?.readFolder && workspaceRoot) {
+      const folder = await window.electronAPI.readFolder(workspaceRoot)
+      if (folder && folder.files) {
+        summary = `Workspace: ${folder.folderName} (${folder.folderPath})\nFiles:\n` +
+          folder.files.map((f) => `  ${f.isDirectory ? '📁' : '📄'} ${f.name}`).join('\n')
+      }
+    } else if (openFiles && openFiles.length > 0) {
+      summary = `Open Files (${openFiles.length}):\n` + openFiles.map((f) => `  📄 ${f.name}`).join('\n')
+    }
+    setAttachedContext({
+      type: 'workspace',
+      fileName: 'Workspace Structure',
+      code: summary,
+    })
+  }
+
   const handleRemoveAttachment = () => {
     setAttachedContext(null)
   }
 
-  // Quick Action Prompts
-  const handleQuickAction = (action: 'explain' | 'bugs' | 'refactor' | 'tests' | 'docs' | 'arch') => {
+  /* =========================================================================
+   * ⚡ Quick Actions & Slash Commands
+   * ========================================================================= */
+
+  const handleQuickAction = (action: 'explain' | 'bugs' | 'refactor' | 'tests' | 'docs' | 'arch' | 'fix' | 'commit' | 'run') => {
     let prompt = ''
     if (action === 'explain') {
       prompt = 'Explain the attached code in detail. Break down the architecture, logic, and key data structures.'
@@ -197,9 +299,17 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       prompt = 'Generate comprehensive, clear docstrings and API documentation for all classes, functions, and interfaces.'
     } else if (action === 'arch') {
       prompt = 'Perform an architectural review of this module. Evaluate cohesion, coupling, state management, and design patterns.'
+    } else if (action === 'fix') {
+      handleAttachProblems()
+      prompt = 'Analyze the active compiler and linter problems in the editor and propose a precise fix.'
+    } else if (action === 'commit') {
+      handleAttachGit()
+      prompt = 'Analyze the git status and diffs and write a concise, conventional git commit message.'
+    } else if (action === 'run') {
+      prompt = 'Trigger the configured project run profile and inspect the execution output.'
     }
 
-    if (!attachedContext) {
+    if (!attachedContext && action !== 'fix' && action !== 'commit') {
       if (currentSelection?.text) {
         handleAttachSelection()
       } else if (activeFileContent) {
@@ -213,14 +323,179 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     }
   }
 
-  // Send Message
+  /* =========================================================================
+   * 🛠️ Tool Execution & Multi-Turn Autonomous Loop
+   * ========================================================================= */
+
+  const executeToolCall = async (msgId: string, toolCall: AiToolCall, currentHistory: AiChatMessage[], iteration: number = 0) => {
+    setExecutingToolId(toolCall.id)
+
+    // Mark tool call as executing in state
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === msgId && m.toolCalls) {
+          return {
+            ...m,
+            toolCalls: m.toolCalls.map((tc) => (tc.id === toolCall.id ? { ...tc, status: 'executing' as const } : tc)),
+          }
+        }
+        return m
+      })
+    )
+
+    const context = {
+      workspaceRoot,
+      activeFileName,
+      activeFileContent,
+      openFiles,
+      onOpenFile,
+      onApplyFileEdit: async (filePath: string, newContent: string) => {
+        if (onReplaceSelection && currentSelection?.text) {
+          onReplaceSelection(newContent)
+          return true
+        }
+        if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
+          return await window.electronAPI.saveFile(filePath, newContent)
+        }
+        return false
+      },
+    }
+
+    const result: AiToolResult = await AiToolExecutor.execute(toolCall, context)
+
+    // Update message state with execution result
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === msgId) {
+          const updatedCalls = (m.toolCalls || []).map((tc) =>
+            tc.id === toolCall.id
+              ? {
+                  ...tc,
+                  status: result.success ? ('completed' as const) : ('failed' as const),
+                  executedAt: Date.now(),
+                  guardrailNote: result.error?.includes('Guardrail') ? result.error : undefined,
+                }
+              : tc
+          )
+          const updatedResults = [...(m.toolResults || []), result]
+          return {
+            ...m,
+            toolCalls: updatedCalls,
+            toolResults: updatedResults,
+          }
+        }
+        return m
+      })
+    )
+
+    setExecutingToolId(null)
+
+    // If autoApprove is enabled for write and tool was propose_file_edit, auto-apply diff if preset allows
+    if (toolCall.toolName === 'propose_file_edit' && autoApprove.autoApproveWrite && result.diff?.fullContent) {
+      handleApplyDiff(result.diff)
+    }
+
+    // Multi-turn autonomous follow-up if within max iterations
+    const maxIters = autoApprove.maxAutoIterations || 10
+    if (iteration < maxIters && result.success && autoApprove.autoApproveRead) {
+      // Check if there are other pending calls in this message
+      // If not, trigger next turn with tool response
+      setTimeout(() => {
+        triggerAutonomousFollowup(result, currentHistory, iteration + 1)
+      }, 400)
+    }
+  }
+
+  const triggerAutonomousFollowup = (_result: AiToolResult, history: AiChatMessage[], _iteration: number) => {
+    const assistantMsgId = `assistant-agent-${Date.now()}`
+    const assistantMsg: AiChatMessage = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      isAgentTurn: true,
+      timestamp: Date.now(),
+    }
+
+    const updatedHistory: AiChatMessage[] = [...history, assistantMsg]
+    setMessages(updatedHistory)
+    setIsStreaming(true)
+
+    const cancel = AiService.streamChat(selectedModel, history, (chunk) => {
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === assistantMsgId) {
+            return {
+              ...msg,
+              content: chunk.text ? msg.content + chunk.text : msg.content,
+              reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
+            }
+          }
+          return msg
+        })
+      )
+
+      if (chunk.done || chunk.error) {
+        setIsStreaming(false)
+        setCancelFn(null)
+      }
+    })
+
+    setCancelFn(() => cancel)
+  }
+
+  const handleApproveTool = (msgId: string, toolCall: AiToolCall) => {
+    executeToolCall(msgId, toolCall, messages, 0)
+  }
+
+  const handleRejectTool = (msgId: string, toolCall: AiToolCall) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === msgId && m.toolCalls) {
+          return {
+            ...m,
+            toolCalls: m.toolCalls.map((tc) =>
+              tc.id === toolCall.id ? { ...tc, status: 'rejected' as const } : tc
+            ),
+          }
+        }
+        return m
+      })
+    )
+  }
+
+  const handleApplyDiff = async (diff: NonNullable<AiToolResult['diff']>) => {
+    if (!diff.fullContent && !diff.newSnippet) return
+
+    let success = false
+    if (diff.fullContent) {
+      if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
+        success = await window.electronAPI.saveFile(diff.filePath, diff.fullContent)
+      } else if (onReplaceSelection && currentSelection?.text) {
+        onReplaceSelection(diff.fullContent)
+        success = true
+      }
+    } else if (diff.newSnippet && onReplaceSelection) {
+      onReplaceSelection(diff.newSnippet)
+      success = true
+    }
+
+    if (success) {
+      setAppliedDiffs((prev) => ({ ...prev, [diff.filePath]: true }))
+    }
+  }
+
+  /* =========================================================================
+   * 💬 Send Message & Stream Processing
+   * ========================================================================= */
+
   const handleSendMessage = () => {
     if ((!inputText.trim() && !attachedContext) || isStreaming) return
 
     const userMsg: AiChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: inputText.trim() || (attachedContext ? 'Please analyze this attached code.' : ''),
+      content: inputText.trim() || (attachedContext ? `Please inspect the attached ${attachedContext.type}.` : ''),
       attachment: attachedContext || undefined,
       timestamp: Date.now(),
     }
@@ -238,11 +513,19 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     setMessages([...newHistory, assistantMsg])
     setInputText('')
     setAttachedContext(null)
+    setMentionOpen(false)
+    setSlashOpen(false)
     setIsStreaming(true)
 
     setExpandedReasoning((prev) => ({ ...prev, [assistantMsgId]: true }))
 
-    const cancel = AiService.streamChat(selectedModel, newHistory, (chunk) => {
+    let accumulatedText = ''
+
+    const cancel = AiService.streamChat(selectedModel, newHistory, async (chunk) => {
+      if (chunk.text) {
+        accumulatedText += chunk.text
+      }
+
       setMessages((prevMessages) => {
         return prevMessages.map((msg) => {
           if (msg.id === assistantMsgId) {
@@ -259,6 +542,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       if (chunk.done || chunk.error) {
         setIsStreaming(false)
         setCancelFn(null)
+
         if (chunk.error) {
           setMessages((prevMessages) => {
             return prevMessages.map((msg) => {
@@ -273,6 +557,26 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               return msg
             })
           })
+        } else {
+          // Parse any tool calls emitted by the model
+          const parsedCalls = AiToolParser.parseToolCalls(accumulatedText)
+          if (parsedCalls.length > 0) {
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id === assistantMsgId) {
+                  return { ...msg, toolCalls: parsedCalls }
+                }
+                return msg
+              })
+            )
+
+            // Execute any auto-approved calls
+            for (const call of parsedCalls) {
+              if (call.status === 'approved' || call.autoApproved) {
+                await executeToolCall(assistantMsgId, call, [...newHistory, assistantMsg], 0)
+              }
+            }
+          }
         }
       }
     })
@@ -343,6 +647,65 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         return '#00F0FF'
     }
   }
+
+  // Handle Input typing and Mention / Slash triggers
+  const handleInputChange = (val: string) => {
+    setInputText(val)
+
+    // Check for @ mention trigger
+    const lastAt = val.lastIndexOf('@')
+    if (lastAt !== -1 && (lastAt === 0 || /\s/.test(val[lastAt - 1]))) {
+      const q = val.slice(lastAt + 1)
+      if (!q.includes(' ')) {
+        setMentionOpen(true)
+        setMentionFilter(q.toLowerCase())
+        setSlashOpen(false)
+        setMenuIndex(0)
+        return
+      }
+    }
+    setMentionOpen(false)
+
+    // Check for / slash command trigger
+    if (val.startsWith('/')) {
+      const q = val.slice(1)
+      if (!q.includes(' ')) {
+        setSlashOpen(true)
+        setSlashFilter(q.toLowerCase())
+        setMentionOpen(false)
+        setMenuIndex(0)
+        return
+      }
+    }
+    setSlashOpen(false)
+  }
+
+  const MENTION_OPTIONS = [
+    { id: 'selection', label: '@selection', desc: 'Current editor selection', icon: FileCode, action: handleAttachSelection },
+    { id: 'file', label: '@file', desc: `Active file: ${activeFileName}`, icon: Layers, action: handleAttachActiveFile },
+    { id: 'problems', label: '@problems', desc: 'Active compiler/linter diagnostics', icon: AlertTriangle, action: handleAttachProblems },
+    { id: 'terminal', label: '@terminal', desc: 'Recent terminal output buffer', icon: Terminal, action: handleAttachTerminal },
+    { id: 'git', label: '@git', desc: 'Git status & staged/working diffs', icon: GitBranch, action: handleAttachGit },
+    { id: 'workspace', label: '@workspace', desc: 'Workspace directory tree', icon: FolderSearch, action: handleAttachWorkspace },
+  ]
+
+  const filteredMentions = MENTION_OPTIONS.filter((m) =>
+    m.label.toLowerCase().includes(mentionFilter) || m.desc.toLowerCase().includes(mentionFilter)
+  )
+
+  const SLASH_OPTIONS = [
+    { id: 'fix', label: '/fix', desc: 'Diagnose & fix active editor problems', icon: ShieldCheck, action: () => handleQuickAction('fix') },
+    { id: 'test', label: '/test', desc: 'Generate high-coverage unit tests', icon: TestTube2, action: () => handleQuickAction('tests') },
+    { id: 'commit', label: '/commit', desc: 'Generate conventional git commit message', icon: GitBranch, action: () => handleQuickAction('commit') },
+    { id: 'refactor', label: '/refactor', desc: 'Propose clean, high-performance refactoring', icon: Zap, action: () => handleQuickAction('refactor') },
+    { id: 'explain', label: '/explain', desc: 'Explain code logic and architecture', icon: Sparkles, action: () => handleQuickAction('explain') },
+    { id: 'run', label: '/run', desc: 'Trigger run profile & inspect output', icon: Play, action: () => handleQuickAction('run') },
+    { id: 'docs', label: '/docs', desc: 'Generate comprehensive docstrings', icon: FileText, action: () => handleQuickAction('docs') },
+  ]
+
+  const filteredSlash = SLASH_OPTIONS.filter((s) =>
+    s.label.toLowerCase().includes(slashFilter) || s.desc.toLowerCase().includes(slashFilter)
+  )
 
   // Parse markdown code blocks
   const renderMessageContent = (msg: AiChatMessage) => {
@@ -628,7 +991,14 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
               {/* Presets Bar */}
               <div className="permissions-presets-bar">
                 <span className="presets-label">Security Presets:</span>
-                <div className="presets-buttons">
+                <div
+                  className="presets-buttons custom-scrollbar"
+                  onWheel={(e) => {
+                    if (e.deltaY !== 0) {
+                      e.currentTarget.scrollLeft += e.deltaY
+                    }
+                  }}
+                >
                   <button
                     className="preset-btn glass-interactive"
                     onClick={() => handleApplyPreset('paranoid')}
@@ -895,7 +1265,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 {msg.attachment && (
                   <div className="attached-context-chip glass-card">
                     <Paperclip size={11} className="chip-icon" />
-                    <span className="chip-file">{msg.attachment.fileName}</span>
+                    <span className="chip-type">{msg.attachment.type.toUpperCase()}:</span>
+                    <span className="chip-file">{msg.attachment.fileName || msg.attachment.type}</span>
                     {msg.attachment.startLine && (
                       <span className="chip-lines">
                         (lines {msg.attachment.startLine}-{msg.attachment.endLine})
@@ -930,6 +1301,140 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   </div>
                 )}
 
+                {/* Tool Calls Execution Cards */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="tool-calls-container">
+                    {msg.toolCalls.map((call) => {
+                      const isPending = call.status === 'pending_approval'
+                      const isExecuting = call.status === 'executing' || executingToolId === call.id
+                      const isCompleted = call.status === 'completed'
+                      const isBlocked = call.status === 'blocked_by_guardrail'
+                      const isRejected = call.status === 'rejected'
+                      const isFailed = call.status === 'failed'
+
+                      const result = (msg.toolResults || []).find((tr) => tr.toolCallId === call.id)
+
+                      return (
+                        <div
+                          key={call.id}
+                          className={`tool-call-card glass-card ${
+                            isPending ? 'pending' : isExecuting ? 'executing' : isCompleted ? 'completed' : isBlocked ? 'blocked' : 'failed'
+                          }`}
+                        >
+                          <div className="tool-card-header">
+                            <div className="tool-card-title">
+                              <Cpu size={12} className="tool-icon" />
+                              <span className="tool-name">{call.toolName}</span>
+                              <span className={`tool-category-badge cat-${call.category}`}>
+                                {call.category.toUpperCase()}
+                              </span>
+                            </div>
+
+                            <div className="tool-card-status">
+                              {isPending && <span className="status-badge pending">⚠️ Needs Approval</span>}
+                              {isExecuting && <span className="status-badge executing">⚡ Executing...</span>}
+                              {isCompleted && <span className="status-badge completed">✅ Done</span>}
+                              {isBlocked && <span className="status-badge blocked">🛡️ Guardrail Blocked</span>}
+                              {isRejected && <span className="status-badge rejected">❌ Rejected</span>}
+                              {isFailed && <span className="status-badge failed">⚠️ Failed</span>}
+                            </div>
+                          </div>
+
+                          {/* Arguments Summary */}
+                          <div className="tool-args-preview">
+                            {Object.entries(call.arguments).map(([k, v]) => (
+                              <div key={k} className="tool-arg-item">
+                                <span className="arg-key">{k}:</span>
+                                <span className="arg-val">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Guardrail Note */}
+                          {call.guardrailNote && (
+                            <div className="tool-guardrail-banner">
+                              <AlertTriangle size={11} className="text-warning" />
+                              <span>{call.guardrailNote}</span>
+                            </div>
+                          )}
+
+                          {/* Actions for Pending Tools */}
+                          {isPending && (
+                            <div className="tool-card-actions">
+                              <button
+                                className="tool-action-btn approve glass-interactive"
+                                onClick={() => handleApproveTool(msg.id, call)}
+                                title="Approve and execute this local action"
+                              >
+                                <CheckCircle2 size={12} />
+                                <span>Approve & Execute</span>
+                              </button>
+                              <button
+                                className="tool-action-btn reject glass-interactive"
+                                onClick={() => handleRejectTool(msg.id, call)}
+                                title="Reject this tool call"
+                              >
+                                <XCircle size={12} />
+                                <span>Reject</span>
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Output or Diff View */}
+                          {result && (
+                            <div className="tool-result-box">
+                              {/* Diff Viewer if proposed edit */}
+                              {result.diff && (result.diff.fullContent || result.diff.newSnippet) && (
+                                <div className="tool-diff-card glass-subcard">
+                                  <div className="tool-diff-header">
+                                    <div className="diff-header-left">
+                                      <FileCheck size={12} className="text-cyan" />
+                                      <span className="diff-file-name">{result.diff.filePath}</span>
+                                    </div>
+                                    <div className="diff-header-right">
+                                      {appliedDiffs[result.diff.filePath] ? (
+                                        <span className="diff-applied-badge">
+                                          <Check size={11} /> Applied to Editor
+                                        </span>
+                                      ) : (
+                                        <button
+                                          className="apply-diff-btn glass-interactive"
+                                          onClick={() => handleApplyDiff(result.diff!)}
+                                        >
+                                          <CheckCircle2 size={11} />
+                                          <span>Accept Diff</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {result.diff.originalSnippet && result.diff.newSnippet && (
+                                    <div className="snippet-diff-body">
+                                      <div className="diff-chunk removal">
+                                        <span className="diff-prefix">-</span>
+                                        <pre>{result.diff.originalSnippet}</pre>
+                                      </div>
+                                      <div className="diff-chunk addition">
+                                        <span className="diff-prefix">+</span>
+                                        <pre>{result.diff.newSnippet}</pre>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* General Output */}
+                              <div className="tool-output-content custom-scrollbar">
+                                <pre>{result.output || result.error || '(No output returned)'}</pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
                 {/* Message text / code blocks */}
                 <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
                   {renderMessageContent(msg)}
@@ -943,12 +1448,75 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
       {/* Context Attachment Bar & Quick Actions */}
       <div className="ai-footer-container">
+        {/* Mention Autocomplete Dropdown */}
+        {mentionOpen && filteredMentions.length > 0 && (
+          <div className="autocomplete-popup glass-panel custom-scrollbar">
+            <div className="autocomplete-header">
+              <Paperclip size={11} className="text-cyan" />
+              <span>Attach Context (@)</span>
+            </div>
+            {filteredMentions.map((opt, idx) => {
+              const Icon = opt.icon
+              return (
+                <button
+                  key={opt.id}
+                  className={`autocomplete-item glass-interactive ${idx === menuIndex ? 'selected' : ''}`}
+                  onClick={() => {
+                    opt.action()
+                    setMentionOpen(false)
+                    setInputText((prev) => prev.replace(/@[a-zA-Z0-9_-]*$/, '').trim())
+                  }}
+                >
+                  <Icon size={12} className="item-icon text-cyan" />
+                  <div className="item-details">
+                    <span className="item-label">{opt.label}</span>
+                    <span className="item-desc">{opt.desc}</span>
+                  </div>
+                  <CornerDownLeft size={10} className="item-enter-hint" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Slash Command Autocomplete Dropdown */}
+        {slashOpen && filteredSlash.length > 0 && (
+          <div className="autocomplete-popup glass-panel custom-scrollbar">
+            <div className="autocomplete-header">
+              <Sparkles size={11} className="text-violet" />
+              <span>Slash Commands (/)</span>
+            </div>
+            {filteredSlash.map((opt, idx) => {
+              const Icon = opt.icon
+              return (
+                <button
+                  key={opt.id}
+                  className={`autocomplete-item glass-interactive ${idx === menuIndex ? 'selected' : ''}`}
+                  onClick={() => {
+                    opt.action()
+                    setSlashOpen(false)
+                    setInputText('')
+                  }}
+                >
+                  <Icon size={12} className="item-icon text-violet" />
+                  <div className="item-details">
+                    <span className="item-label">{opt.label}</span>
+                    <span className="item-desc">{opt.desc}</span>
+                  </div>
+                  <CornerDownLeft size={10} className="item-enter-hint" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {/* Active attachment pill if selected */}
         {attachedContext && (
           <div className="attachment-active-bar glass-pill">
             <div className="attachment-details">
               <Paperclip size={12} className="attach-icon" />
-              <span className="attach-name">{attachedContext.fileName}</span>
+              <span className="attach-type">{attachedContext.type.toUpperCase()}:</span>
+              <span className="attach-name">{attachedContext.fileName || attachedContext.type}</span>
               {attachedContext.startLine && (
                 <span className="attach-meta">
                   (Lines {attachedContext.startLine}-{attachedContext.endLine})
@@ -962,7 +1530,14 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         )}
 
         {/* Quick action chips */}
-        <div className="quick-actions-row custom-scrollbar">
+        <div
+          className="quick-actions-row custom-scrollbar"
+          onWheel={(e) => {
+            if (e.deltaY !== 0) {
+              e.currentTarget.scrollLeft += e.deltaY
+            }
+          }}
+        >
           <button
             className={`quick-chip ${currentSelection?.text ? 'highlight' : ''}`}
             onClick={handleAttachSelection}
@@ -985,6 +1560,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             <span>Attach File</span>
           </button>
 
+          <button className="quick-chip" onClick={() => handleQuickAction('fix')} title="Diagnose and repair problems">
+            <ShieldCheck size={11} className="chip-icon success" />
+            <span>/fix Problems</span>
+          </button>
+          <button className="quick-chip" onClick={() => handleQuickAction('tests')} title="Generate unit tests">
+            <TestTube2 size={11} className="chip-icon success" />
+            <span>/test Suite</span>
+          </button>
+          <button className="quick-chip" onClick={() => handleQuickAction('commit')} title="Generate git commit message">
+            <GitBranch size={11} className="chip-icon text-cyan" />
+            <span>/commit Message</span>
+          </button>
           <button className="quick-chip" onClick={() => handleQuickAction('explain')}>
             <Sparkles size={11} className="chip-icon" />
             <span>Explain</span>
@@ -997,17 +1584,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             <Zap size={11} className="chip-icon warning" />
             <span>Refactor</span>
           </button>
-          <button className="quick-chip" onClick={() => handleQuickAction('tests')}>
-            <TestTube2 size={11} className="chip-icon success" />
-            <span>Tests</span>
-          </button>
           <button className="quick-chip" onClick={() => handleQuickAction('docs')}>
             <FileText size={11} className="chip-icon" />
             <span>Docs</span>
-          </button>
-          <button className="quick-chip" onClick={() => handleQuickAction('arch')}>
-            <Boxes size={11} className="chip-icon" />
-            <span>Architecture</span>
           </button>
         </div>
 
@@ -1018,12 +1597,66 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             className="ai-textarea"
             placeholder={
               attachedContext
-                ? `Ask anything about ${attachedContext.fileName}... (Enter to send)`
-                : 'Ask AI assistant or attach code... (Enter to send, Shift+Enter for newline)'
+                ? `Ask anything about ${attachedContext.fileName}... (Type @ to attach more, / for commands)`
+                : 'Ask AI agent... Type @ for editor context, / for commands (Enter to send)'
             }
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={(e) => {
+              if (mentionOpen && filteredMentions.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setMenuIndex((prev) => (prev + 1) % filteredMentions.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setMenuIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  const selected = filteredMentions[menuIndex] || filteredMentions[0]
+                  if (selected) {
+                    selected.action()
+                    setMentionOpen(false)
+                    setInputText((prev) => prev.replace(/@[a-zA-Z0-9_-]*$/, '').trim())
+                  }
+                  return
+                }
+                if (e.key === 'Escape') {
+                  setMentionOpen(false)
+                  return
+                }
+              }
+
+              if (slashOpen && filteredSlash.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setMenuIndex((prev) => (prev + 1) % filteredSlash.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setMenuIndex((prev) => (prev - 1 + filteredSlash.length) % filteredSlash.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  const selected = filteredSlash[menuIndex] || filteredSlash[0]
+                  if (selected) {
+                    selected.action()
+                    setSlashOpen(false)
+                    setInputText('')
+                  }
+                  return
+                }
+                if (e.key === 'Escape') {
+                  setSlashOpen(false)
+                  return
+                }
+              }
+
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handleSendMessage()
@@ -1988,6 +2621,320 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
         .action-send-btn:hover:not(:disabled) {
           transform: scale(1.08);
+        }
+
+        /* Tool Calls Container & Cards */
+        .tool-calls-container {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .tool-call-card {
+          border-radius: 8px;
+          padding: 10px 12px;
+          background: rgba(20, 26, 46, 0.65);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          font-size: 11px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .tool-call-card.pending {
+          border-color: rgba(255, 159, 10, 0.4);
+          background: rgba(255, 159, 10, 0.08);
+        }
+
+        .tool-call-card.executing {
+          border-color: rgba(10, 132, 255, 0.5);
+          background: rgba(10, 132, 255, 0.09);
+        }
+
+        .tool-call-card.completed {
+          border-color: rgba(48, 209, 88, 0.35);
+          background: rgba(48, 209, 88, 0.06);
+        }
+
+        .tool-call-card.blocked {
+          border-color: rgba(255, 69, 58, 0.45);
+          background: rgba(255, 69, 58, 0.08);
+        }
+
+        .tool-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .tool-card-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 600;
+          color: #FFFFFF;
+        }
+
+        .tool-icon {
+          color: #5AC8FA;
+        }
+
+        .tool-category-badge {
+          font-size: 9px;
+          font-weight: 700;
+          padding: 1px 5px;
+          border-radius: 4px;
+        }
+
+        .tool-category-badge.cat-read { background: rgba(10, 132, 255, 0.2); color: #5AC8FA; }
+        .tool-category-badge.cat-write { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
+        .tool-category-badge.cat-run { background: rgba(48, 209, 88, 0.2); color: #30D158; }
+        .tool-category-badge.cat-git { background: rgba(191, 90, 242, 0.2); color: #BF5AF2; }
+
+        .status-badge {
+          font-size: 10px;
+          padding: 2px 6px;
+          border-radius: 999px;
+          font-weight: 500;
+        }
+
+        .status-badge.pending { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
+        .status-badge.executing { background: rgba(10, 132, 255, 0.2); color: #0A84FF; animation: pulse 1.5s infinite; }
+        .status-badge.completed { background: rgba(48, 209, 88, 0.2); color: #30D158; }
+        .status-badge.blocked { background: rgba(255, 69, 58, 0.2); color: #FF453A; }
+        .status-badge.rejected { background: rgba(255, 255, 255, 0.1); color: rgba(235, 235, 245, 0.5); }
+
+        .tool-args-preview {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          color: rgba(235, 235, 245, 0.85);
+          background: rgba(0, 0, 0, 0.25);
+          padding: 4px 8px;
+          border-radius: 4px;
+        }
+
+        .arg-key { color: #5AC8FA; font-weight: 600; }
+        .arg-val { color: #EBEBF5; word-break: break-all; }
+
+        .tool-guardrail-banner {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 8px;
+          background: rgba(255, 69, 58, 0.15);
+          border: 1px solid rgba(255, 69, 58, 0.3);
+          border-radius: 4px;
+          color: #FF453A;
+          font-size: 10px;
+        }
+
+        .tool-card-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 4px;
+        }
+
+        .tool-action-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 10px;
+          border-radius: 5px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          border: 1px solid transparent;
+        }
+
+        .tool-action-btn.approve {
+          background: rgba(48, 209, 88, 0.2);
+          border-color: rgba(48, 209, 88, 0.4);
+          color: #30D158;
+        }
+
+        .tool-action-btn.approve:hover {
+          background: rgba(48, 209, 88, 0.3);
+          box-shadow: 0 0 10px rgba(48, 209, 88, 0.3);
+        }
+
+        .tool-action-btn.reject {
+          background: rgba(255, 69, 58, 0.15);
+          border-color: rgba(255, 69, 58, 0.3);
+          color: #FF453A;
+        }
+
+        .tool-result-box {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-top: 4px;
+        }
+
+        .tool-output-content {
+          max-height: 140px;
+          overflow-y: auto;
+          background: rgba(0, 0, 0, 0.4);
+          padding: 6px 8px;
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          color: rgba(235, 235, 245, 0.85);
+          white-space: pre-wrap;
+          word-break: break-all;
+        }
+
+        /* Diff Viewer Card */
+        .tool-diff-card {
+          background: rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 6px;
+          overflow: hidden;
+        }
+
+        .tool-diff-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 5px 8px;
+          background: rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .diff-header-left {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-weight: 600;
+          color: #FFFFFF;
+        }
+
+        .apply-diff-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 600;
+          background: rgba(10, 132, 255, 0.25);
+          border: 1px solid rgba(10, 132, 255, 0.4);
+          color: #5AC8FA;
+          cursor: pointer;
+        }
+
+        .diff-applied-badge {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 10px;
+          color: #30D158;
+          font-weight: 600;
+        }
+
+        .snippet-diff-body {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .diff-chunk {
+          display: flex;
+          padding: 3px 8px;
+          white-space: pre-wrap;
+        }
+
+        .diff-chunk.removal {
+          background: rgba(255, 69, 58, 0.15);
+          color: #FF453A;
+        }
+
+        .diff-chunk.addition {
+          background: rgba(48, 209, 88, 0.15);
+          color: #30D158;
+        }
+
+        .diff-prefix {
+          width: 14px;
+          font-weight: 700;
+          user-select: none;
+        }
+
+        /* Autocomplete Popup */
+        .autocomplete-popup {
+          position: absolute;
+          bottom: 100%;
+          left: 10px;
+          right: 10px;
+          margin-bottom: 6px;
+          max-height: 220px;
+          background: rgba(13, 18, 35, 0.95);
+          backdrop-filter: blur(24px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 8px;
+          box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+          overflow-y: auto;
+          z-index: 50;
+          display: flex;
+          flex-direction: column;
+          padding: 4px;
+        }
+
+        .autocomplete-header {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 8px;
+          font-size: 10px;
+          font-weight: 700;
+          color: rgba(235, 235, 245, 0.6);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          margin-bottom: 2px;
+        }
+
+        .autocomplete-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 8px;
+          border-radius: 5px;
+          border: none;
+          background: transparent;
+          color: #FFFFFF;
+          cursor: pointer;
+          text-align: left;
+          width: 100%;
+          transition: background 0.1s;
+        }
+
+        .autocomplete-item:hover, .autocomplete-item.selected {
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .item-details {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+        }
+
+        .item-label {
+          font-weight: 600;
+          font-size: 11px;
+          color: #FFFFFF;
+        }
+
+        .item-desc {
+          font-size: 10px;
+          color: rgba(235, 235, 245, 0.5);
+        }
+
+        .item-enter-hint {
+          color: rgba(235, 235, 245, 0.3);
         }
       `}</style>
     </aside>

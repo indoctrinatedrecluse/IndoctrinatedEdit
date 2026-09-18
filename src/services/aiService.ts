@@ -325,15 +325,35 @@ export class AiService {
     const settings = this.getSettings()
     const providerSettings = settings[model.provider] || { apiKey: '', endpoint: '' }
 
-    // Format chat messages including attachments if present
+    // Format chat messages including attachments and tool call results
     const formattedMessages = messages.map((m) => {
       let content = m.content
+
       if (m.attachment) {
-        const header = `\n\n\`\`\`${m.attachment.fileName.split('.').pop() || 'text'}\n// File: ${m.attachment.fileName}${
-          m.attachment.startLine ? ` (Lines ${m.attachment.startLine}-${m.attachment.endLine})` : ''
-        }\n${m.attachment.code}\n\`\`\`\n`
-        content = `${content}${header}`
+        if (m.attachment.type === 'selection' || m.attachment.type === 'file') {
+          const lang = m.attachment.fileName?.split('.').pop() || 'text'
+          const header = `\n\n\`\`\`${lang}\n// File: ${m.attachment.fileName || 'active_file'}${
+            m.attachment.startLine ? ` (Lines ${m.attachment.startLine}-${m.attachment.endLine})` : ''
+          }\n${m.attachment.code || ''}\n\`\`\`\n`
+          content = `${content}${header}`
+        } else if (m.attachment.type === 'problems') {
+          content = `${content}\n\n\`\`\`diagnostics\n// Active LSP / Compiler Problems:\n${m.attachment.code || 'No active problems.'}\n\`\`\`\n`
+        } else if (m.attachment.type === 'terminal') {
+          content = `${content}\n\n\`\`\`terminal-buffer\n// Recent Terminal Output:\n${m.attachment.code || ''}\n\`\`\`\n`
+        } else if (m.attachment.type === 'git') {
+          content = `${content}\n\n\`\`\`git-status\n// Git Repository Status & Diffs:\n${m.attachment.code || ''}\n\`\`\`\n`
+        } else if (m.attachment.type === 'workspace') {
+          content = `${content}\n\n\`\`\`workspace-tree\n// Workspace Directory Summary:\n${m.attachment.code || ''}\n\`\`\`\n`
+        }
       }
+
+      if (m.toolResults && m.toolResults.length > 0) {
+        const resultsText = m.toolResults
+          .map((tr) => `\n\`\`\`tool_result\nTool: ${tr.toolName}\nSuccess: ${tr.success}\nOutput:\n${tr.output}${tr.error ? `\nError: ${tr.error}` : ''}\n\`\`\``)
+          .join('\n')
+        content = `${content}\n${resultsText}`
+      }
+
       return {
         role: m.role,
         content,
