@@ -112,12 +112,23 @@ async function streamOpenAiCompatible(
 ): Promise<void> {
   const url = baseUrl.replace(/\/+$/, '') + (baseUrl.endsWith('/chat/completions') ? '' : '/chat/completions')
 
+  const authHeader = apiKey ? (apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`) : ''
+  const isAntigravity = baseUrl.includes('antigravity') || baseUrl.includes(':8080') || baseUrl.includes(':4040')
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (authHeader) {
+    headers['Authorization'] = authHeader
+  }
+  if (isAntigravity) {
+    headers['X-Antigravity-Subscription-Tier'] = 'personal'
+    headers['X-Antigravity-Client'] = 'IndoctrinatedEdit/4.2.0'
+  }
+
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages,

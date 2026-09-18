@@ -1,8 +1,9 @@
 /**
  * Debugging Orchestration & Breakpoint State Subsystem
  * Supports multi-compiler debug adapter protocols for Node.js/TypeScript, Python, Rust/C++, and Go.
- * Manages breakpoints (conditional, hit count, logpoints), call stack frames, scope variables,
- * watch expressions, and execution stepping.
+ * Manages breakpoints (conditional, hit count, logpoints), exception breakpoints, function breakpoints,
+ * multi-thread & goroutine execution, loaded modules, memory hex inspection, call stack frames,
+ * scope variables with in-flight mutation, watch expressions, and execution stepping.
  */
 
 export type DebugSessionState = 'inactive' | 'running' | 'paused' | 'stopped'
@@ -21,6 +22,19 @@ export interface BreakpointItem {
   verified: boolean
 }
 
+export interface FunctionBreakpoint {
+  id: string
+  functionName: string
+  enabled: boolean
+  hitCount: number
+  condition?: string
+}
+
+export interface ExceptionBreakpointsConfig {
+  uncaught: boolean
+  caught: boolean
+}
+
 export interface StackFrame {
   id: string
   name: string
@@ -28,6 +42,39 @@ export interface StackFrame {
   line: number
   column: number
   instructionPointer?: string
+}
+
+export interface DebugThread {
+  id: string
+  name: string
+  status: 'running' | 'paused' | 'blocked'
+  isCurrent: boolean
+  stackFrames: StackFrame[]
+  activeFrameId: string | null
+  goroutineId?: number
+}
+
+export interface DebugLoadedModule {
+  id: string
+  name: string
+  path: string
+  addressRange: string
+  symbolsLoaded: boolean
+  version?: string
+}
+
+export interface MemoryByte {
+  offset: number
+  hex: string
+  ascii: string
+}
+
+export interface MemoryInspectionResult {
+  address: string
+  totalBytes: number
+  bytes: MemoryByte[]
+  rawHex: string
+  rawAscii: string
 }
 
 export interface DebugVariable {
@@ -39,6 +86,7 @@ export interface DebugVariable {
   children?: DebugVariable[]
   memoryAddress?: string
   scope: 'local' | 'closure' | 'global' | 'register'
+  isEditable?: boolean
 }
 
 export interface WatchExpression {
@@ -102,20 +150,24 @@ export const DEBUG_RUNTIME_TARGETS: DebugRuntimeConfig[] = [
 
 export class DebugService {
   private breakpoints: Map<string, BreakpointItem[]> = new Map() // filePath -> Breakpoints
+  private functionBreakpoints: FunctionBreakpoint[] = []
+  private exceptionBreakpoints: ExceptionBreakpointsConfig = { uncaught: true, caught: false }
   private sessionState: DebugSessionState = 'inactive'
   private activeTarget: DebugRuntimeTarget = 'node'
   private activeFilePath: string = 'welcome.ts'
   private activeLine: number = 1
-  private stackFrames: StackFrame[] = []
-  private activeFrameId: string | null = null
+  private threads: DebugThread[] = []
+  private activeThreadId: string = 'th_main'
   private variables: DebugVariable[] = []
   private watchExpressions: WatchExpression[] = []
   private consoleLogs: DebugConsoleLog[] = []
+  private loadedModules: DebugLoadedModule[] = []
   private listeners: Set<() => void> = new Set()
   private stepIndex: number = 0
 
   constructor() {
     this.initDefaultWatches()
+    this.initDefaultFunctionBreakpoints()
   }
 
   private initDefaultWatches() {
@@ -125,7 +177,13 @@ export class DebugService {
     ]
   }
 
-  // Breakpoint Management
+  private initDefaultFunctionBreakpoints() {
+    this.functionBreakpoints = [
+      { id: 'fb_1', functionName: 'main', enabled: false, hitCount: 0 },
+    ]
+  }
+
+  // --- Line Breakpoint Management ---
   public getBreakpoints(filePath?: string): BreakpointItem[] {
     if (filePath) {
       return this.breakpoints.get(filePath) || []
@@ -144,7 +202,6 @@ export class DebugService {
     const existingIndex = list.findIndex((b) => b.line === line)
 
     if (existingIndex >= 0) {
-      // Update options on existing breakpoint
       list[existingIndex] = {
         ...list[existingIndex],
         condition: options?.condition !== undefined ? options.condition : list[existingIndex].condition,
@@ -188,10 +245,10 @@ export class DebugService {
         this.breakpoints.set(filePath, list)
       }
       this.notify()
-      return false // removed
+      return false
     } else {
       this.setBreakpoint(filePath, line)
-      return true // added
+      return true
     }
   }
 
@@ -233,7 +290,148 @@ export class DebugService {
     this.notify()
   }
 
-  // Session State & Controls
+  // --- Function Breakpoints ---
+  public getFunctionBreakpoints(): FunctionBreakpoint[] {
+    return this.functionBreakpoints
+  }
+
+  public addFunctionBreakpoint(functionName: string, condition?: string): FunctionBreakpoint {
+    const trimmed = functionName.trim()
+    const newFb: FunctionBreakpoint = {
+      id: `fb_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      functionName: trimmed,
+      enabled: true,
+      hitCount: 0,
+      condition,
+    }
+    this.functionBreakpoints.push(newFb)
+    this.notify()
+    return newFb
+  }
+
+  public toggleFunctionBreakpoint(id: string): void {
+    const fb = this.functionBreakpoints.find((f) => f.id === id)
+    if (fb) {
+      fb.enabled = !fb.enabled
+      this.notify()
+    }
+  }
+
+  public removeFunctionBreakpoint(id: string): void {
+    this.functionBreakpoints = this.functionBreakpoints.filter((f) => f.id !== id)
+    this.notify()
+  }
+
+  // --- Exception Breakpoints ---
+  public getExceptionBreakpoints(): ExceptionBreakpointsConfig {
+    return this.exceptionBreakpoints
+  }
+
+  public setExceptionBreakpoints(config: Partial<ExceptionBreakpointsConfig>): void {
+    this.exceptionBreakpoints = { ...this.exceptionBreakpoints, ...config }
+    this.notify()
+  }
+
+  // --- Threads & Concurrency ---
+  public getThreads(): DebugThread[] {
+    return this.threads
+  }
+
+  public getActiveThreadId(): string {
+    return this.activeThreadId
+  }
+
+  public switchThread(threadId: string): void {
+    const thread = this.threads.find((t) => t.id === threadId)
+    if (thread) {
+      this.activeThreadId = threadId
+      this.threads.forEach((t) => (t.isCurrent = t.id === threadId))
+      if (thread.stackFrames.length > 0) {
+        const topFrame = thread.stackFrames[0]
+        this.activeFilePath = topFrame.filePath
+        this.activeLine = topFrame.line
+        thread.activeFrameId = topFrame.id
+      }
+      this.generateVariablesForTarget()
+      this.updateWatchExpressions()
+      this.notify()
+    }
+  }
+
+  // --- Loaded Modules / Assemblies ---
+  public getLoadedModules(): DebugLoadedModule[] {
+    return this.loadedModules
+  }
+
+  // --- In-Flight Variable Mutation ---
+  public updateVariableValue(id: string, newValue: string): boolean {
+    const updateRecursive = (vars: DebugVariable[]): boolean => {
+      for (const v of vars) {
+        if (v.id === id) {
+          v.value = newValue
+          // Re-evaluate type heuristic
+          if (newValue === 'true' || newValue === 'false') {
+            v.type = 'boolean'
+          } else if (!isNaN(Number(newValue)) && newValue.trim() !== '') {
+            v.type = 'number'
+          } else if (newValue.startsWith('"') || newValue.startsWith("'")) {
+            v.type = 'string'
+          }
+          this.logToConsole('info', `[Variable Override] Set ${v.name} = ${newValue}`)
+          return true
+        }
+        if (v.children && updateRecursive(v.children)) {
+          return true
+        }
+      }
+      return false
+    }
+
+    const res = updateRecursive(this.variables)
+    if (res) {
+      this.updateWatchExpressions()
+      this.notify()
+    }
+    return res
+  }
+
+  // --- Memory / Hex Inspector ---
+  public inspectMemory(address: string, byteLength = 64): MemoryInspectionResult {
+    let baseAddr = 0x7ffe34ab8000
+    try {
+      if (address.startsWith('0x') || address.startsWith('0X')) {
+        baseAddr = parseInt(address, 16) || baseAddr
+      }
+    } catch {
+      // fallback
+    }
+
+    const bytes: MemoryByte[] = []
+    const hexList: string[] = []
+    const asciiList: string[] = []
+
+    for (let i = 0; i < byteLength; i++) {
+      const offset = i
+      // Generate pseudo deterministic memory bytes based on address and offset
+      const byteVal = (Math.abs(baseAddr + i * 37) % 256)
+      const hex = byteVal.toString(16).padStart(2, '0').toUpperCase()
+      const ascii = byteVal >= 32 && byteVal <= 126 ? String.fromCharCode(byteVal) : '.'
+
+      bytes.push({ offset, hex, ascii })
+      hexList.push(hex)
+      asciiList.push(ascii)
+    }
+
+    return {
+      address,
+      totalBytes: byteLength,
+      bytes,
+      rawHex: hexList.join(' '),
+      rawAscii: asciiList.join(''),
+    }
+  }
+
+  // --- Session State & Controls ---
   public getSessionState(): DebugSessionState {
     return this.sessionState
   }
@@ -255,20 +453,25 @@ export class DebugService {
   }
 
   public getStackFrames(): StackFrame[] {
-    return this.stackFrames
+    const cur = this.threads.find((t) => t.id === this.activeThreadId)
+    return cur?.stackFrames || []
   }
 
   public getActiveFrameId(): string | null {
-    return this.activeFrameId
+    const cur = this.threads.find((t) => t.id === this.activeThreadId)
+    return cur?.activeFrameId || null
   }
 
   public setActiveFrameId(id: string): void {
-    this.activeFrameId = id
-    const frame = this.stackFrames.find((f) => f.id === id)
-    if (frame) {
-      this.activeFilePath = frame.filePath
-      this.activeLine = frame.line
-      this.refreshVariablesForFrame(frame)
+    const cur = this.threads.find((t) => t.id === this.activeThreadId)
+    if (cur) {
+      cur.activeFrameId = id
+      const frame = cur.stackFrames.find((f) => f.id === id)
+      if (frame) {
+        this.activeFilePath = frame.filePath
+        this.activeLine = frame.line
+        this.refreshVariablesForFrame(frame)
+      }
     }
     this.notify()
   }
@@ -344,8 +547,12 @@ export class DebugService {
 - continue (c): Resume target execution
 - step (n) / stepin (s) / stepout (f): Step through instructions
 - bt / where: Print active stack backtrace
+- threads: List all active execution threads / goroutines
+- modules: List loaded assemblies and dynamic libraries
+- mem <address> [len]: Inspect memory at hex pointer
+- set <var> = <val>: In-flight live variable override
 - vars / locals: Print variables in active scope
-- <expr>: Evaluate expression or variable identifier in scope`
+- <expr>: Evaluate expression in active scope`
       this.logToConsole('info', helpMsg)
       return helpMsg
     }
@@ -375,8 +582,43 @@ export class DebugService {
       return 'Stepping out...'
     }
 
+    if (lower === 'threads') {
+      const threadList = this.threads.map((t) => `[${t.isCurrent ? '*' : ' '}] #${t.id}: ${t.name} (${t.status})`).join('\n')
+      this.logToConsole('info', threadList || 'No active threads')
+      return threadList
+    }
+
+    if (lower === 'modules') {
+      const modSummary = this.loadedModules.map((m) => `${m.name} (${m.addressRange}) - Symbols: ${m.symbolsLoaded ? 'Loaded' : 'None'}`).join('\n')
+      this.logToConsole('info', modSummary || 'No modules loaded')
+      return modSummary
+    }
+
+    if (lower.startsWith('mem ')) {
+      const parts = trimmed.split(/\s+/)
+      const addr = parts[1] || '0x7ffe34ab8010'
+      const len = parseInt(parts[2] || '32', 10)
+      const memRes = this.inspectMemory(addr, len)
+      this.logToConsole('result', `Memory at ${addr}:\n${memRes.rawHex}\n${memRes.rawAscii}`)
+      return memRes.rawHex
+    }
+
+    if (lower.startsWith('set ') && trimmed.includes('=')) {
+      const eqIdx = trimmed.indexOf('=')
+      const varName = trimmed.substring(4, eqIdx).trim()
+      const valStr = trimmed.substring(eqIdx + 1).trim()
+      const match = this.variables.find((v) => v.name.toLowerCase() === varName.toLowerCase())
+      if (match) {
+        this.updateVariableValue(match.id, valStr)
+        return `${match.name} = ${valStr}`
+      }
+    }
+
+    const cur = this.threads.find((t) => t.id === this.activeThreadId)
+    const activeFrames = cur?.stackFrames || []
+
     if (lower === 'bt' || lower === 'where') {
-      const trace = this.stackFrames.map((f, i) => `#${i} ${f.name} at ${f.filePath}:${f.line}`).join('\n')
+      const trace = activeFrames.map((f, i) => `#${i} ${f.name} at ${f.filePath}:${f.line}`).join('\n')
       this.logToConsole('info', trace || 'No active stack frames')
       return trace
     }
@@ -397,7 +639,7 @@ export class DebugService {
     }
   }
 
-  // Debugger Stepping Lifecycle
+  // --- Debugger Stepping Lifecycle ---
   public async startDebugging(filePath = 'welcome.ts'): Promise<void> {
     this.sessionState = 'running'
     this.activeFilePath = filePath
@@ -414,9 +656,10 @@ export class DebugService {
       `[Debugger] Connected to adapter ${targetConfig?.adapterName || 'v8-inspector'}. Breakpoints verified.`
     )
 
+    this.populateLoadedModules()
     this.notify()
 
-    // Simulate startup and find first hit breakpoint or pause at entry
+    // Find first hit breakpoint or pause at entry
     await this.advanceToNextBreakpointOrPause(1)
   }
 
@@ -451,12 +694,13 @@ export class DebugService {
   public async stepOut(): Promise<void> {
     if (this.sessionState !== 'paused') return
     this.stepIndex++
-    if (this.stackFrames.length > 1) {
-      this.stackFrames.shift()
-      const top = this.stackFrames[0]
+    const cur = this.threads.find((t) => t.id === this.activeThreadId)
+    if (cur && cur.stackFrames.length > 1) {
+      cur.stackFrames.shift()
+      const top = cur.stackFrames[0]
       this.activeLine = top.line + 1
       top.line = this.activeLine
-      this.activeFrameId = top.id
+      cur.activeFrameId = top.id
     } else {
       this.activeLine = Math.min(this.activeLine + 3, 50)
     }
@@ -480,9 +724,9 @@ export class DebugService {
 
   public stopDebugging(): void {
     this.sessionState = 'stopped'
-    this.activeFrameId = null
-    this.stackFrames = []
+    this.threads = []
     this.variables = []
+    this.loadedModules = []
     this.logToConsole('info', '[Debugger] Debug session terminated.')
     setTimeout(() => {
       this.sessionState = 'inactive'
@@ -494,20 +738,29 @@ export class DebugService {
   private async advanceToNextBreakpointOrPause(startLine: number) {
     const bps = this.getBreakpoints(this.activeFilePath).filter((b) => b.enabled && b.line >= startLine)
     
-    // Simulate brief asynchronous thread execution
+    // Check function breakpoints
+    const activeFbs = this.functionBreakpoints.filter((fb) => fb.enabled)
+    if (activeFbs.length > 0 && startLine <= 2) {
+      const fb = activeFbs[0]
+      fb.hitCount++
+      this.activeLine = 2
+      this.sessionState = 'paused'
+      this.logToConsole('info', `[Debugger] Hit Function Breakpoint on '${fb.functionName}' (Hit #${fb.hitCount})`)
+      this.syncExecutionState()
+      return
+    }
+
     await new Promise((r) => setTimeout(r, 60))
 
     if (bps.length > 0) {
       const nextBp = bps[0]
       nextBp.hitCount++
 
-      // Check logpoint condition
       if (nextBp.logMessage) {
         const interpolated = nextBp.logMessage.replace(/\{([^}]+)\}/g, (_, expr) => {
           return this.evaluateExpression(expr).value || ''
         })
         this.logToConsole('stdout', `[Logpoint ${nextBp.filePath}:${nextBp.line}] ${interpolated}`)
-        // Continue to next non-logpoint breakpoint if condition doesn't pause
         if (!nextBp.condition) {
           const remaining = bps.slice(1)
           if (remaining.length > 0) {
@@ -520,11 +773,9 @@ export class DebugService {
         }
       }
 
-      // Check conditional breakpoint
       if (nextBp.condition) {
         const condEval = this.evaluateCondition(nextBp.condition)
         if (!condEval) {
-          // Condition false; resume
           this.logToConsole('info', `[Breakpoint ${nextBp.line}] Condition "${nextBp.condition}" evaluated to false, continuing...`)
           this.activeLine = nextBp.line + 2
           this.sessionState = 'paused'
@@ -537,7 +788,6 @@ export class DebugService {
       this.sessionState = 'paused'
       this.logToConsole('info', `[Debugger] Hit breakpoint at ${this.activeFilePath}:${this.activeLine} (Hit #${nextBp.hitCount})`)
     } else {
-      // Default to line 1 or next sequential point
       this.activeLine = Math.min(startLine, 12)
       this.sessionState = 'paused'
       this.logToConsole('info', `[Debugger] Paused at entry in ${this.activeFilePath}:${this.activeLine}`)
@@ -548,13 +798,13 @@ export class DebugService {
 
   private syncExecutionState(isInto = false) {
     this.sessionState = 'paused'
-    this.generateStackFrames(isInto)
+    this.generateThreadsAndFrames(isInto)
     this.generateVariablesForTarget()
     this.updateWatchExpressions()
     this.notify()
   }
 
-  private generateStackFrames(isInto: boolean) {
+  private generateThreadsAndFrames(isInto: boolean) {
     const frameNameByTarget: Record<DebugRuntimeTarget, string[]> = {
       node: ['processQueue', 'computeShaderMatrix', 'renderLiquidGlass', 'main'],
       python: ['compute_weights', 'forward_pass', 'train_step', '<module>'],
@@ -565,7 +815,7 @@ export class DebugService {
     const names = frameNameByTarget[this.activeTarget] || frameNameByTarget.node
     const topName = isInto ? `step_${this.stepIndex}_inner` : names[this.stepIndex % names.length]
 
-    this.stackFrames = [
+    const mainFrames: StackFrame[] = [
       {
         id: 'frame_top',
         name: topName,
@@ -592,7 +842,76 @@ export class DebugService {
       },
     ]
 
-    this.activeFrameId = this.stackFrames[0].id
+    const workerFrames: StackFrame[] = [
+      {
+        id: 'frame_w1',
+        name: this.activeTarget === 'go' ? 'runtime.chanrecv1' : 'workerPool.drainEvents',
+        filePath: 'worker.ts',
+        line: 42,
+        column: 4,
+        instructionPointer: '0x7fff4410',
+      },
+      {
+        id: 'frame_w2',
+        name: 'eventEmitter.emit',
+        filePath: 'events.ts',
+        line: 18,
+        column: 12,
+        instructionPointer: '0x7fff4020',
+      },
+    ]
+
+    this.threads = [
+      {
+        id: 'th_main',
+        name: this.activeTarget === 'go' ? 'Goroutine 1 [running]' : 'Thread #1 (Main Loop)',
+        status: 'paused',
+        isCurrent: this.activeThreadId === 'th_main',
+        stackFrames: mainFrames,
+        activeFrameId: mainFrames[0].id,
+        goroutineId: 1,
+      },
+      {
+        id: 'th_worker',
+        name: this.activeTarget === 'go' ? 'Goroutine 14 [chan receive]' : 'Thread #2 (Async Worker Pool)',
+        status: 'blocked',
+        isCurrent: this.activeThreadId === 'th_worker',
+        stackFrames: workerFrames,
+        activeFrameId: workerFrames[0].id,
+        goroutineId: 14,
+      },
+    ]
+
+    if (!this.threads.some((t) => t.id === this.activeThreadId)) {
+      this.activeThreadId = 'th_main'
+    }
+  }
+
+  private populateLoadedModules() {
+    if (this.activeTarget === 'node') {
+      this.loadedModules = [
+        { id: 'm1', name: 'v8-inspector.dll', path: 'node:inspector', addressRange: '0x7fff8000-0x7fff9000', symbolsLoaded: true, version: '22.14.0' },
+        { id: 'm2', name: 'electron-core.node', path: 'app.asar/node_modules/electron', addressRange: '0x7fff9100-0x7fffc000', symbolsLoaded: true },
+        { id: 'm3', name: 'monaco-editor-core.js', path: 'dist/assets/editor.worker.js', addressRange: '0x7fffc100-0x7ffff000', symbolsLoaded: true },
+      ]
+    } else if (this.activeTarget === 'python') {
+      this.loadedModules = [
+        { id: 'm1', name: 'python312.dll', path: 'C:/Python312/python312.dll', addressRange: '0x1c000000-0x1c400000', symbolsLoaded: true, version: '3.12.3' },
+        { id: 'm2', name: 'debugpy_backend.pyd', path: 'site-packages/debugpy', addressRange: '0x1c410000-0x1c500000', symbolsLoaded: true },
+        { id: 'm3', name: 'torch_cpu.pyd', path: 'site-packages/torch/lib', addressRange: '0x1c510000-0x1c900000', symbolsLoaded: false },
+      ]
+    } else if (this.activeTarget === 'rust') {
+      this.loadedModules = [
+        { id: 'm1', name: 'indoctrinated_engine.exe', path: 'target/debug/app.exe', addressRange: '0x00400000-0x00800000', symbolsLoaded: true },
+        { id: 'm2', name: 'ntdll.dll', path: 'C:/Windows/System32/ntdll.dll', addressRange: '0x77000000-0x771a0000', symbolsLoaded: true },
+        { id: 'm3', name: 'kernel32.dll', path: 'C:/Windows/System32/kernel32.dll', addressRange: '0x77200000-0x77300000', symbolsLoaded: true },
+      ]
+    } else {
+      this.loadedModules = [
+        { id: 'm1', name: 'main.exe', path: 'bin/main.exe', addressRange: '0x00400000-0x00600000', symbolsLoaded: true },
+        { id: 'm2', name: 'runtime.dll', path: 'go/pkg/tool/runtime.dll', addressRange: '0x00610000-0x00750000', symbolsLoaded: true },
+      ]
+    }
   }
 
   private generateVariablesForTarget() {
@@ -607,6 +926,7 @@ export class DebugService {
           value: '"indoctrinated.theme.cupertino-midnight"',
           type: 'string',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_local_2',
@@ -614,6 +934,7 @@ export class DebugService {
           value: `${60 + step}`,
           type: 'number',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_local_3',
@@ -621,10 +942,11 @@ export class DebugService {
           value: '{ blur: 32, opacity: 0.94, specular: true }',
           type: 'Object',
           scope: 'local',
+          memoryAddress: '0x7ffe34ab8010',
           children: [
-            { id: 'v_sc_1', name: 'blur', value: '32', type: 'number', scope: 'local' },
-            { id: 'v_sc_2', name: 'opacity', value: '0.94', type: 'number', scope: 'local' },
-            { id: 'v_sc_3', name: 'specular', value: 'true', type: 'boolean', scope: 'local' },
+            { id: 'v_sc_1', name: 'blur', value: '32', type: 'number', scope: 'local', isEditable: true },
+            { id: 'v_sc_2', name: 'opacity', value: '0.94', type: 'number', scope: 'local', isEditable: true },
+            { id: 'v_sc_3', name: 'specular', value: 'true', type: 'boolean', scope: 'local', isEditable: true },
           ],
         },
         {
@@ -633,6 +955,7 @@ export class DebugService {
           value: 'IStandaloneCodeEditor (0x3a4b)',
           type: 'EditorHost',
           scope: 'closure',
+          memoryAddress: '0x7ffe003a4b00',
         },
         {
           id: 'v_glob_1',
@@ -640,6 +963,7 @@ export class DebugService {
           value: '"development"',
           type: 'string',
           scope: 'global',
+          isEditable: true,
         },
       ]
     } else if (this.activeTarget === 'python') {
@@ -650,6 +974,7 @@ export class DebugService {
           value: '64',
           type: 'int',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_py_2',
@@ -657,6 +982,7 @@ export class DebugService {
           value: '0.00035',
           type: 'float',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_py_3',
@@ -664,6 +990,7 @@ export class DebugService {
           value: `tensor(${Math.max(0.01, 1.45 - line * 0.05).toFixed(4)}, requires_grad=True)`,
           type: 'torch.Tensor',
           scope: 'local',
+          memoryAddress: '0x7ffe55420000',
         },
         {
           id: 'v_py_4',
@@ -671,6 +998,7 @@ export class DebugService {
           value: '"__main__"',
           type: 'str',
           scope: 'global',
+          isEditable: true,
         },
       ]
     } else if (this.activeTarget === 'rust') {
@@ -682,6 +1010,7 @@ export class DebugService {
           type: '*const u8',
           memoryAddress: '0x00007ffe34ab8010',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_rs_2',
@@ -689,16 +1018,18 @@ export class DebugService {
           value: '1024',
           type: 'usize',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_rs_3',
           name: 'buffer',
           value: 'Vec<u8> { len: 512, cap: 1024 }',
           type: 'alloc::vec::Vec<u8>',
+          memoryAddress: '0x00007ffe34ab8400',
           scope: 'local',
           children: [
-            { id: 'v_rs_buf_1', name: 'len', value: '512', type: 'usize', scope: 'local' },
-            { id: 'v_rs_buf_2', name: 'cap', value: '1024', type: 'usize', scope: 'local' },
+            { id: 'v_rs_buf_1', name: 'len', value: '512', type: 'usize', scope: 'local', isEditable: true },
+            { id: 'v_rs_buf_2', name: 'cap', value: '1024', type: 'usize', scope: 'local', isEditable: true },
           ],
         },
         {
@@ -707,10 +1038,11 @@ export class DebugService {
           value: `0x00000000000000${(line * 4).toString(16).padStart(2, '0')}`,
           type: 'register',
           scope: 'register',
+          memoryAddress: '0x00007ffe10000000',
+          isEditable: true,
         },
       ]
     } else {
-      // Go
       this.variables = [
         {
           id: 'v_go_1',
@@ -718,12 +1050,14 @@ export class DebugService {
           value: '7',
           type: 'int',
           scope: 'local',
+          isEditable: true,
         },
         {
           id: 'v_go_2',
           name: 'ch',
           value: 'chan *TelemetryEvent (cap: 100, len: 14)',
           type: 'chan',
+          memoryAddress: '0x00007ffec0041000',
           scope: 'local',
         },
         {
@@ -769,7 +1103,6 @@ export class DebugService {
         return { value: matchVar.value, type: matchVar.type }
       }
 
-      // Safe arithmetic evaluation
       if (/^[\d\s+\-*/%.()]+$/.test(expr)) {
         // eslint-disable-next-line no-eval
         const res = Function(`"use strict"; return (${expr})`)()

@@ -29,6 +29,7 @@ import {
   Database,
   Globe,
   Keyboard,
+  Sliders,
 } from 'lucide-react'
 
 export interface MenuActionHandlers {
@@ -58,6 +59,10 @@ export interface MenuActionHandlers {
   onOpenProblems?: () => void
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
+  // Run & Execution Handlers
+  onRunActiveFile?: () => void
+  onRunWithArgs?: () => void
+  onConfigureRun?: () => void
   // Debug Handlers
   onStartDebugging?: () => void
   onStopDebugging?: () => void
@@ -263,10 +268,32 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
       label: 'Run',
       items: [
         {
+          id: 'run.activeFile',
+          label: 'Run Active File',
+          shortcut: 'Ctrl+F5',
+          icon: <Play size={14} fill="#30D158" color="#30D158" />,
+          onClick: handlers.onRunActiveFile,
+        },
+        {
+          id: 'run.withArgs',
+          label: 'Run with Arguments...',
+          shortcut: 'Ctrl+Shift+F5',
+          icon: <Terminal size={14} />,
+          onClick: handlers.onRunWithArgs,
+        },
+        {
+          id: 'run.configure',
+          label: 'Configure Run Profiles...',
+          shortcut: 'Ctrl+Alt+R',
+          icon: <Sliders size={14} />,
+          onClick: handlers.onConfigureRun,
+        },
+        { id: 'run_sep0', label: '', isSeparator: true },
+        {
           id: 'run.start',
           label: 'Start Debugging',
           shortcut: 'F5',
-          icon: <Play size={14} />,
+          icon: <Bug size={14} />,
           onClick: handlers.onStartDebugging,
         },
         {
@@ -274,7 +301,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           label: 'Run Without Debugging',
           shortcut: 'Ctrl+F5',
           icon: <Play size={14} />,
-          onClick: handlers.onStartDebugging,
+          onClick: handlers.onRunActiveFile,
         },
         {
           id: 'run.stop',

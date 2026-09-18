@@ -217,3 +217,14 @@ export interface AiStreamChunk {
   done?: boolean
   error?: string
 }
+
+export interface AiAutoApproveSettings {
+  autoApproveRead: boolean
+  autoApproveWrite: boolean
+  autoApproveRun: boolean
+  autoApproveBrowser: boolean
+  autoApproveGit: boolean
+  maxAutoIterations?: number
+}
+
+export type AutoApprovePreset = 'paranoid' | 'balanced' | 'autonomous'

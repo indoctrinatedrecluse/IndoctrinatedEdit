@@ -31,6 +31,9 @@ interface ShortcutHandlers {
   onSymbols?: () => void
   onToggleTerminal?: () => void
   onOpenProblems?: () => void
+  onRunActiveFile?: () => void
+  onRunWithArgs?: () => void
+  onConfigureRun?: () => void
   onStartDebugging?: () => void
   onPauseDebugging?: () => void
   onStopDebugging?: () => void
@@ -92,6 +95,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
+      // Ctrl+F5 -> Run Active File (Without Debugging)
+      if (e.key === 'F5' && !e.shiftKey && ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onRunActiveFile?.()
+        return
+      }
+
       // Shift+F5 -> Stop Debugging
       if (e.key === 'F5' && e.shiftKey && !ctrlOrCmd) {
         e.preventDefault()
@@ -99,10 +109,10 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
-      // Ctrl+Shift+F5 -> Restart Debugging
+      // Ctrl+Shift+F5 -> Run with Arguments
       if (e.key === 'F5' && e.shiftKey && ctrlOrCmd) {
         e.preventDefault()
-        handlers.onRestartDebugging?.()
+        handlers.onRunWithArgs?.()
         return
       }
 

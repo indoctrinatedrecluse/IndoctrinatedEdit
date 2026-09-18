@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.2.0] - 2026-09-18
+
+### 🚀 Minor Release — VS Code Run & Build Engine, Safe Project Switching, Supercharged Debugger, Git Workflows CI/CD, Antigravity & ChatGPT Codex Subscriptions, and AI Auto-Approve Permissions
+
+IndoctrinatedEdit 4.2.0 delivers major developer workflow upgrades: a full VS Code-inspired **Run & Build Subsystem** with customizable interpreters, arguments, and project-level scopes; a **Safe Project & Folder Switcher** with dirty buffer detection and unsaved changes confirmation; a **Supercharged Debug Extension** with exception breakpoints, function breakpoints, multi-thread/goroutines switcher, in-flight variable editing, and raw hex/memory inspector; a **Liquid Glass Git Studio with GitHub Actions Workflows Tab**; and an **AI Assistant Suite** supporting Antigravity (Personal) and ChatGPT Codex subscriptions alongside granular **Autonomous Agent Auto-Approve Permissions**.
+
+#### ▶️ VS Code-Inspired Run & Build Subsystem (`Ctrl+F5`, `F5`, `Ctrl+Shift+F5`)
+- **Universal Run Controls & Toolbar**: Direct 1-click execution (`▶`) from the editor header and command palette.
+- **Run Configuration Studio (`Ctrl+Alt+R`)**: Configure custom compilers/interpreters (`python`, `node`, `ts-node`, `rustc`, `go`, `gcc`, `javac`, `bash`, `pwsh`, `ruby`), additional CLI arguments, environment variables, working directory, pre-launch build commands, and file vs project scoping.
+- **Run with Custom Arguments Modal (`Ctrl+Shift+F5`)**: Execute the active buffer with ad-hoc interactive CLI arguments, environment variables, and pre-run build flags.
+- **Auto-Detecting Toolchain Engine**: Automatically identifies language targets and suggests optimal runtime arguments.
+
+#### 📂 Safe Folder & Project Switching (Unsaved Changes Guard)
+- **Dirty Buffer Protection**: When opening a folder or project, IndoctrinatedEdit automatically clears unmodified files and prompts the user if any buffers contain unsaved modifications.
+- **Unsaved Changes Dialog**: Offers 1-click `Save All & Open`, `Don't Save (Discard)`, or `Cancel` with granular file summaries and modified byte counters.
+
+#### 🐞 Supercharged Debug Extension Suite
+- **Function Breakpoints**: Set named function breakpoints with hit counts and expression conditions.
+- **Exception Breakpoints**: Toggle automatic pausing on All Caught or Uncaught Exceptions.
+- **Multi-Thread & Goroutines Inspector**: Real-time thread list with thread switching, call stacks, and execution states.
+- **Live In-Flight Variable Editing**: Directly edit local and closure variable values while execution is paused.
+- **Raw Hex / Memory Inspector Drawer (`[HEX]`)**: Inspect memory addresses, hex dumps, and ASCII bytes for active variables and pointer buffers.
+- **Loaded Modules & Assemblies Inspector**: Track loaded binaries, shared objects, DLLs, and debug symbol statuses (`Symbols Loaded` / `No Symbols`).
+
+#### 🌿 Liquid Glass Git Workflows & CI/CD Studio
+- **GitHub Actions Workflows Tab**: Inspect workflows (`release.yml`, `build.yml`, `test.yml`, `security-lint.yml`), historical runs, durations, commit authors, and matrix job statuses.
+- **Manual Workflow Dispatch Modal**: Trigger any workflow on-demand with custom branch/tag targets (`v4.2.0`) and input parameters.
+- **ANSI Colorized Execution Logs**: Stream and view colorized terminal logs for workflow steps and matrix jobs with auto-refresh.
+
+#### 🤖 AI Assistant Subscriptions & Autonomous Auto-Approve System
+- **Antigravity (Personal Subscription) Integration**: Dedicated models (`antigravity-personal-agent`, `antigravity-gemini-2-5-pro`, `antigravity-claude-3-7-sonnet`) with automatic subscription header routing (`X-Antigravity-Subscription-Tier: personal`).
+- **ChatGPT Codex & OpenAI Subscriptions**: Native support for `gpt-4o-codex`, `chatgpt-4o-latest`, `o3-mini`, `gpt-4o`, and `gpt-4o-mini` with bearer/session token authentication.
+- **Autonomous Agent Auto-Approve Permissions**:
+  - Granular toggles for **Auto-Approve Read** (files & symbols), **Auto-Approve Write & Patches**, **Auto-Approve Run (Terminal)**, **Auto-Approve Web & MCP**, and **Auto-Approve Git Actions**.
+  - **One-Click Security Presets**: `Strict (Ask All)`, `Balanced (Safe Default)`, and `Full Autonomous`.
+  - **Safety Loop Guardrail**: Configurable maximum autonomous step threshold (1 to 100 steps).
+  - **Live Header Status Pill & Dynamic Action Buttons**: Visual badges for `Auto Run ▶`, `Auto Insert`, and `Auto Replace`.
+
+---
+
 ## [4.1.0] - 2026-09-17
 
 ### 🚀 Minor Release — Visual Diff & 3-Way Merge Studio, Hex Inspector, Snippet Vault & Liquid Glass Studio

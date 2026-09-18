@@ -13,6 +13,13 @@ import {
   Cpu,
   RefreshCw,
   Send,
+  Edit2,
+  Check,
+  X,
+  Binary,
+  Workflow,
+  Radio,
+  SlidersHorizontal,
 } from 'lucide-react'
 import {
   debugService,
@@ -21,6 +28,11 @@ import {
   DebugSessionState,
   DebugVariable,
   BreakpointItem,
+  FunctionBreakpoint,
+  ExceptionBreakpointsConfig,
+  DebugThread,
+  DebugLoadedModule,
+  MemoryInspectionResult,
 } from '../../services/debugService'
 
 interface DebugViewProps {
@@ -31,27 +43,46 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
   const [sessionState, setSessionState] = useState<DebugSessionState>(() => debugService.getSessionState())
   const [activeTarget, setActiveTarget] = useState<DebugRuntimeTarget>(() => debugService.getActiveTarget())
   const [breakpoints, setBreakpoints] = useState<BreakpointItem[]>(() => debugService.getBreakpoints())
+  const [functionBreakpoints, setFunctionBreakpoints] = useState<FunctionBreakpoint[]>(() => debugService.getFunctionBreakpoints())
+  const [exceptionBreakpoints, setExceptionBreakpoints] = useState<ExceptionBreakpointsConfig>(() => debugService.getExceptionBreakpoints())
+  const [threads, setThreads] = useState<DebugThread[]>(() => debugService.getThreads())
   const [stackFrames, setStackFrames] = useState(() => debugService.getStackFrames())
   const [activeFrameId, setActiveFrameId] = useState(() => debugService.getActiveFrameId())
   const [variables, setVariables] = useState<DebugVariable[]>(() => debugService.getVariables())
   const [watchExpressions, setWatchExpressions] = useState(() => debugService.getWatchExpressions())
   const [consoleLogs, setConsoleLogs] = useState(() => debugService.getConsoleLogs())
+  const [loadedModules, setLoadedModules] = useState<DebugLoadedModule[]>(() => debugService.getLoadedModules())
 
   // Accordion Section States
   const [expandedSections, setExpandedSections] = useState({
+    threads: true,
     variables: true,
     watch: true,
     stack: true,
     breakpoints: true,
+    functionBreakpoints: true,
+    exceptionBreakpoints: true,
+    modules: false,
     console: true,
   })
 
   // Collapsible nested variables state
   const [expandedVars, setExpandedVars] = useState<Record<string, boolean>>({})
 
+  // In-flight variable editing state
+  const [editingVarId, setEditingVarId] = useState<string | null>(null)
+  const [editingVarValue, setEditingVarValue] = useState<string>('')
+
+  // Memory Hex Inspector Modal/Drawer state
+  const [inspectingMemory, setInspectingMemory] = useState<MemoryInspectionResult | null>(null)
+
   // Watch input state
   const [newWatchInput, setNewWatchInput] = useState('')
   const [isAddingWatch, setIsAddingWatch] = useState(false)
+
+  // Function Breakpoint input state
+  const [newFunctionBpInput, setNewFunctionBpInput] = useState('')
+  const [isAddingFunctionBp, setIsAddingFunctionBp] = useState(false)
 
   // Console input state
   const [consoleInput, setConsoleInput] = useState('')
@@ -61,11 +92,15 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
       setSessionState(debugService.getSessionState())
       setActiveTarget(debugService.getActiveTarget())
       setBreakpoints(debugService.getBreakpoints())
+      setFunctionBreakpoints(debugService.getFunctionBreakpoints())
+      setExceptionBreakpoints(debugService.getExceptionBreakpoints())
+      setThreads(debugService.getThreads())
       setStackFrames(debugService.getStackFrames())
       setActiveFrameId(debugService.getActiveFrameId())
       setVariables(debugService.getVariables())
       setWatchExpressions(debugService.getWatchExpressions())
       setConsoleLogs(debugService.getConsoleLogs())
+      setLoadedModules(debugService.getLoadedModules())
     })
   }, [])
 
@@ -77,12 +112,40 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
     setExpandedVars((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
+  const startEditVariable = (v: DebugVariable) => {
+    setEditingVarId(v.id)
+    setEditingVarValue(v.value)
+  }
+
+  const saveEditVariable = (id: string) => {
+    debugService.updateVariableValue(id, editingVarValue)
+    setEditingVarId(null)
+  }
+
+  const cancelEditVariable = () => {
+    setEditingVarId(null)
+  }
+
+  const handleInspectMemory = (address: string) => {
+    const result = debugService.inspectMemory(address, 64)
+    setInspectingMemory(result)
+  }
+
   const handleAddWatch = (e: React.FormEvent) => {
     e.preventDefault()
     if (newWatchInput.trim()) {
       debugService.addWatchExpression(newWatchInput.trim())
       setNewWatchInput('')
       setIsAddingWatch(false)
+    }
+  }
+
+  const handleAddFunctionBp = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (newFunctionBpInput.trim()) {
+      debugService.addFunctionBreakpoint(newFunctionBpInput.trim())
+      setNewFunctionBpInput('')
+      setIsAddingFunctionBp(false)
     }
   }
 
@@ -112,7 +175,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
 
         {/* Runtime Target Picker */}
         <div className="target-select-container">
-          <label className="target-label">Target Compiler / Engine:</label>
+          <label className="target-label">Debug Engine / Target Protocol:</label>
           <select
             className="target-select glass-interactive"
             value={activeTarget}
@@ -143,7 +206,38 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
         )}
       </div>
 
-      {/* 1. Variables Section */}
+      {/* 1. Threads & Goroutines Section (When Active) */}
+      {threads.length > 0 && (
+        <div className="debug-section">
+          <div className="section-header glass-interactive" onClick={() => toggleSection('threads')}>
+            <div className="header-title-row">
+              {expandedSections.threads ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <Radio size={13} className="sec-icon thread-icon" />
+              <span className="section-title">Threads & Goroutines ({threads.length})</span>
+            </div>
+          </div>
+
+          {expandedSections.threads && (
+            <div className="section-content">
+              <div className="threads-list">
+                {threads.map((th) => (
+                  <div
+                    key={th.id}
+                    className={`thread-row glass-interactive ${th.isCurrent ? 'active' : ''}`}
+                    onClick={() => debugService.switchThread(th.id)}
+                  >
+                    <span className={`thread-status-dot ${th.status}`} />
+                    <span className="thread-name">{th.name}</span>
+                    <span className="thread-badge">{th.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Variables Section with Live In-Flight Editing */}
       <div className="debug-section">
         <div className="section-header glass-interactive" onClick={() => toggleSection('variables')}>
           <div className="header-title-row">
@@ -162,22 +256,89 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
                 {variables.map((v) => {
                   const isExpanded = !!expandedVars[v.id]
                   const hasChildren = v.children && v.children.length > 0
+                  const isEditing = editingVarId === v.id
 
                   return (
                     <div key={v.id} className="var-item-group">
-                      <div
-                        className={`var-row ${hasChildren ? 'expandable' : ''}`}
-                        onClick={() => hasChildren && toggleVarExpand(v.id)}
-                      >
+                      <div className={`var-row ${hasChildren ? 'expandable' : ''}`}>
                         <span className="var-scope-badge">{v.scope[0].toUpperCase()}</span>
                         {hasChildren && (
-                          <span className="var-expand-icon">
+                          <span
+                            className="var-expand-icon"
+                            onClick={() => toggleVarExpand(v.id)}
+                          >
                             {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                           </span>
                         )}
-                        <span className="var-name">{v.name}:</span>
-                        <span className={`var-value ${v.type}`}>{v.value}</span>
+                        <span
+                          className="var-name"
+                          onClick={() => hasChildren && toggleVarExpand(v.id)}
+                        >
+                          {v.name}:
+                        </span>
+
+                        {/* In-Flight Value Editor */}
+                        {isEditing ? (
+                          <div className="var-edit-box">
+                            <input
+                              type="text"
+                              className="var-edit-input"
+                              value={editingVarValue}
+                              onChange={(e) => setEditingVarValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEditVariable(v.id)
+                                if (e.key === 'Escape') cancelEditVariable()
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              className="var-btn save"
+                              onClick={() => saveEditVariable(v.id)}
+                              title="Save Value"
+                            >
+                              <Check size={11} />
+                            </button>
+                            <button
+                              className="var-btn cancel"
+                              onClick={cancelEditVariable}
+                              title="Cancel"
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span
+                            className={`var-value ${v.type}`}
+                            onDoubleClick={() => v.isEditable && startEditVariable(v)}
+                            title={v.isEditable ? 'Double-click to modify value in flight' : undefined}
+                          >
+                            {v.value}
+                          </span>
+                        )}
+
                         <span className="var-type">{v.type}</span>
+
+                        {/* Action buttons (Edit / Hex Memory) */}
+                        <div className="var-actions">
+                          {v.isEditable && !isEditing && (
+                            <button
+                              className="var-icon-btn"
+                              onClick={() => startEditVariable(v)}
+                              title="Override Variable Value in Runtime"
+                            >
+                              <Edit2 size={10} />
+                            </button>
+                          )}
+                          {v.memoryAddress && (
+                            <button
+                              className="var-icon-btn hex"
+                              onClick={() => handleInspectMemory(v.memoryAddress!)}
+                              title={`Inspect Memory at ${v.memoryAddress}`}
+                            >
+                              <Binary size={11} />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Nested Children */}
@@ -187,6 +348,15 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
                             <div key={child.id} className="var-row nested">
                               <span className="var-name">{child.name}:</span>
                               <span className={`var-value ${child.type}`}>{child.value}</span>
+                              {child.isEditable && (
+                                <button
+                                  className="var-icon-btn"
+                                  onClick={() => startEditVariable(child)}
+                                  title="Edit Value"
+                                >
+                                  <Edit2 size={9} />
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -200,7 +370,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
         )}
       </div>
 
-      {/* 2. Watch Expressions Section */}
+      {/* 3. Watch Expressions Section */}
       <div className="debug-section">
         <div className="section-header glass-interactive" onClick={() => toggleSection('watch')}>
           <div className="header-title-row">
@@ -269,7 +439,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
         )}
       </div>
 
-      {/* 3. Call Stack Section */}
+      {/* 4. Call Stack Section */}
       <div className="debug-section">
         <div className="section-header glass-interactive" onClick={() => toggleSection('stack')}>
           <div className="header-title-row">
@@ -298,7 +468,12 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
                         }
                       }}
                     >
-                      <span className="frame-name">{f.name}</span>
+                      <div className="frame-left">
+                        <span className="frame-name">{f.name}</span>
+                        {f.instructionPointer && (
+                          <span className="frame-ip">{f.instructionPointer}</span>
+                        )}
+                      </div>
                       <span className="frame-loc">
                         {f.filePath.split('/').pop()}:{f.line}
                       </span>
@@ -311,7 +486,105 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
         )}
       </div>
 
-      {/* 4. Breakpoints Section */}
+      {/* 5. Function Breakpoints Section */}
+      <div className="debug-section">
+        <div className="section-header glass-interactive" onClick={() => toggleSection('functionBreakpoints')}>
+          <div className="header-title-row">
+            {expandedSections.functionBreakpoints ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <SlidersHorizontal size={13} className="sec-icon fb-icon" />
+            <span className="section-title">Function Breakpoints ({functionBreakpoints.length})</span>
+          </div>
+          <div className="section-actions" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="sec-action-btn glass-interactive"
+              onClick={() => setIsAddingFunctionBp(true)}
+              title="Add Function Breakpoint"
+            >
+              <Plus size={13} />
+            </button>
+          </div>
+        </div>
+
+        {expandedSections.functionBreakpoints && (
+          <div className="section-content">
+            {isAddingFunctionBp && (
+              <form onSubmit={handleAddFunctionBp} className="add-watch-form">
+                <input
+                  type="text"
+                  className="watch-input"
+                  placeholder="Function symbol name (e.g. main, renderLiquidGlass)..."
+                  value={newFunctionBpInput}
+                  onChange={(e) => setNewFunctionBpInput(e.target.value)}
+                  autoFocus
+                  onBlur={() => !newFunctionBpInput && setIsAddingFunctionBp(false)}
+                />
+              </form>
+            )}
+
+            {functionBreakpoints.length === 0 ? (
+              <div className="empty-hint">No function breakpoints configured.</div>
+            ) : (
+              <div className="breakpoints-list">
+                {functionBreakpoints.map((fb) => (
+                  <div key={fb.id} className="bp-row">
+                    <input
+                      type="checkbox"
+                      checked={fb.enabled}
+                      onChange={() => debugService.toggleFunctionBreakpoint(fb.id)}
+                      className="bp-checkbox"
+                    />
+                    <span className="fb-name">{fb.functionName}</span>
+                    {fb.hitCount > 0 && <span className="bp-tag cond">Hits: {fb.hitCount}</span>}
+                    <button
+                      className="bp-remove-btn"
+                      onClick={() => debugService.removeFunctionBreakpoint(fb.id)}
+                      title="Remove Function Breakpoint"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 6. Exception Breakpoints Section */}
+      <div className="debug-section">
+        <div className="section-header glass-interactive" onClick={() => toggleSection('exceptionBreakpoints')}>
+          <div className="header-title-row">
+            {expandedSections.exceptionBreakpoints ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <Circle size={13} color="#FF9F0A" className="sec-icon" />
+            <span className="section-title">Exception Breakpoints</span>
+          </div>
+        </div>
+
+        {expandedSections.exceptionBreakpoints && (
+          <div className="section-content">
+            <div className="exception-bp-list">
+              <label className="exception-bp-row">
+                <input
+                  type="checkbox"
+                  checked={exceptionBreakpoints.uncaught}
+                  onChange={(e) => debugService.setExceptionBreakpoints({ uncaught: e.target.checked })}
+                />
+                <span className="exception-label">Uncaught Exceptions</span>
+              </label>
+              <label className="exception-bp-row">
+                <input
+                  type="checkbox"
+                  checked={exceptionBreakpoints.caught}
+                  onChange={(e) => debugService.setExceptionBreakpoints({ caught: e.target.checked })}
+                />
+                <span className="exception-label">Caught Exceptions (All)</span>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 7. Line Breakpoints Section */}
       <div className="debug-section">
         <div className="section-header glass-interactive" onClick={() => toggleSection('breakpoints')}>
           <div className="header-title-row">
@@ -371,7 +644,41 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
         )}
       </div>
 
-      {/* 5. Debug Console / REPL Section */}
+      {/* 8. Loaded Modules & Assemblies */}
+      {loadedModules.length > 0 && (
+        <div className="debug-section">
+          <div className="section-header glass-interactive" onClick={() => toggleSection('modules')}>
+            <div className="header-title-row">
+              {expandedSections.modules ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <Workflow size={13} className="sec-icon" />
+              <span className="section-title">Loaded Modules ({loadedModules.length})</span>
+            </div>
+          </div>
+
+          {expandedSections.modules && (
+            <div className="section-content">
+              <div className="modules-list">
+                {loadedModules.map((m) => (
+                  <div key={m.id} className="module-row">
+                    <div className="module-top">
+                      <span className="module-name">{m.name}</span>
+                      <span className={`module-symbols ${m.symbolsLoaded ? 'loaded' : 'none'}`}>
+                        {m.symbolsLoaded ? 'Symbols Loaded' : 'No Symbols'}
+                      </span>
+                    </div>
+                    <div className="module-bottom">
+                      <span className="module-range">{m.addressRange}</span>
+                      <span className="module-path">{m.path}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 9. Debug Console / REPL Section */}
       <div className="debug-section console-section">
         <div className="section-header glass-interactive" onClick={() => toggleSection('console')}>
           <div className="header-title-row">
@@ -405,7 +712,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
               <input
                 type="text"
                 className="console-input"
-                placeholder="Evaluate expression (e.g. 2 + 2, activeTheme)..."
+                placeholder="Evaluate expression or command (e.g. set x = 42, mem 0x7ffe)..."
                 value={consoleInput}
                 onChange={(e) => setConsoleInput(e.target.value)}
               />
@@ -416,6 +723,25 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           </div>
         )}
       </div>
+
+      {/* Memory / Hex Inspection Drawer */}
+      {inspectingMemory && (
+        <div className="memory-inspector-drawer glass-panel">
+          <div className="mem-drawer-header">
+            <div className="mem-drawer-title">
+              <Binary size={13} className="mem-icon" />
+              <span>Memory Inspector: {inspectingMemory.address} ({inspectingMemory.totalBytes} bytes)</span>
+            </div>
+            <button className="mem-close-btn" onClick={() => setInspectingMemory(null)}>
+              <X size={12} />
+            </button>
+          </div>
+          <div className="mem-grid custom-scrollbar">
+            <div className="mem-hex-block">{inspectingMemory.rawHex}</div>
+            <div className="mem-ascii-block">{inspectingMemory.rawAscii}</div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .debug-view {
@@ -567,6 +893,14 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           color: rgba(235, 235, 245, 0.6);
         }
 
+        .thread-icon {
+          color: #30D158;
+        }
+
+        .fb-icon {
+          color: #BF5AF2;
+        }
+
         .section-title {
           font-weight: 600;
           font-size: 0.73rem;
@@ -608,6 +942,52 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           font-size: 0.72rem;
           font-style: italic;
           padding: 4px 0;
+        }
+
+        /* Threads List */
+        .threads-list {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .thread-row {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 4px 6px;
+          border-radius: 4px;
+          font-size: 0.72rem;
+          cursor: pointer;
+        }
+
+        .thread-row.active {
+          background: rgba(48, 209, 88, 0.15);
+          border: 1px solid rgba(48, 209, 88, 0.3);
+          color: #FFFFFF;
+        }
+
+        .thread-status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+        }
+
+        .thread-status-dot.paused { background: #FF9F0A; }
+        .thread-status-dot.running { background: #30D158; }
+        .thread-status-dot.blocked { background: #FF453A; }
+
+        .thread-name {
+          flex: 1;
+          font-family: var(--font-mono, monospace);
+        }
+
+        .thread-badge {
+          font-size: 9px;
+          color: rgba(235, 235, 245, 0.5);
+          background: rgba(255, 255, 255, 0.06);
+          padding: 1px 4px;
+          border-radius: 3px;
         }
 
         /* Variables */
@@ -662,18 +1042,68 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           max-width: 140px;
         }
 
-        .var-value.string {
-          color: #FF9F0A;
+        .var-value.string { color: #FF9F0A; }
+        .var-value.number { color: #30D158; }
+        .var-value.boolean { color: #BF5AF2; }
+
+        .var-edit-box {
+          display: flex;
+          align-items: center;
+          gap: 3px;
         }
 
-        .var-value.number {
-          color: #30D158;
+        .var-edit-input {
+          background: rgba(0, 0, 0, 0.5);
+          border: 1px solid #0A84FF;
+          color: #FFFFFF;
+          font-size: 11px;
+          padding: 1px 4px;
+          border-radius: 3px;
+          outline: none;
+          width: 110px;
         }
+
+        .var-btn {
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        .var-btn.save:hover { color: #30D158; }
+        .var-btn.cancel:hover { color: #FF453A; }
 
         .var-type {
           font-size: 0.65rem;
           color: rgba(235, 235, 245, 0.35);
           margin-left: auto;
+        }
+
+        .var-actions {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: 4px;
+        }
+
+        .var-icon-btn {
+          border: none;
+          background: transparent;
+          color: rgba(255, 255, 255, 0.3);
+          cursor: pointer;
+          padding: 1px 2px;
+          border-radius: 2px;
+        }
+
+        .var-icon-btn:hover {
+          color: #0A84FF;
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .var-icon-btn.hex:hover {
+          color: #FF9F0A;
         }
 
         .var-nested-children {
@@ -683,6 +1113,22 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           gap: 2px;
           border-left: 1px solid rgba(255, 255, 255, 0.06);
           margin-left: 8px;
+        }
+
+        /* Exception Breakpoints */
+        .exception-bp-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .exception-bp-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.72rem;
+          color: rgba(235, 235, 245, 0.8);
+          cursor: pointer;
         }
 
         /* Watch */
@@ -774,8 +1220,19 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           color: #FFFFFF;
         }
 
+        .frame-left {
+          display: flex;
+          flex-direction: column;
+        }
+
         .frame-name {
           font-weight: 500;
+          font-family: var(--font-mono, monospace);
+        }
+
+        .frame-ip {
+          font-size: 9px;
+          color: rgba(235, 235, 245, 0.35);
           font-family: var(--font-mono, monospace);
         }
 
@@ -806,49 +1263,50 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
 
         .bp-checkbox {
           accent-color: #FF453A;
-          cursor: pointer;
         }
 
         .bp-details {
           flex: 1;
           display: flex;
           align-items: center;
-          gap: 3px;
+          gap: 4px;
           cursor: pointer;
           overflow: hidden;
         }
 
         .bp-file {
           color: #FFFFFF;
-          font-weight: 500;
         }
 
         .bp-line {
-          color: #FF453A;
-          font-weight: 700;
+          color: #FF9F0A;
+        }
+
+        .fb-name {
+          font-family: var(--font-mono, monospace);
+          color: #BF5AF2;
+          flex: 1;
         }
 
         .bp-tag {
-          font-size: 0.62rem;
+          font-size: 9px;
           padding: 1px 4px;
           border-radius: 3px;
-          margin-left: 4px;
+          background: rgba(255, 255, 255, 0.08);
         }
 
         .bp-tag.cond {
-          background: rgba(255, 214, 10, 0.18);
-          color: #FFD60A;
+          color: #5AC8FA;
         }
 
         .bp-tag.log {
-          background: rgba(10, 132, 255, 0.18);
-          color: #5AC8FA;
+          color: #30D158;
         }
 
         .bp-remove-btn {
           background: transparent;
           border: none;
-          color: rgba(255, 255, 255, 0.4);
+          color: rgba(255, 255, 255, 0.35);
           cursor: pointer;
         }
 
@@ -856,61 +1314,92 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           color: #FF453A;
         }
 
+        /* Modules */
+        .modules-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .module-row {
+          padding: 4px 6px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.02);
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          font-size: 10px;
+        }
+
+        .module-top {
+          display: flex;
+          justify-content: space-between;
+        }
+
+        .module-name {
+          font-weight: 600;
+          color: #FFFFFF;
+        }
+
+        .module-symbols.loaded { color: #30D158; }
+        .module-symbols.none { color: rgba(235, 235, 245, 0.4); }
+
+        .module-bottom {
+          display: flex;
+          justify-content: space-between;
+          color: rgba(235, 235, 245, 0.4);
+          font-family: var(--font-mono, monospace);
+        }
+
         /* Console */
+        .console-section {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 180px;
+        }
+
         .console-content {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          flex: 1;
+          padding: 4px;
         }
 
         .console-log-feed {
-          max-height: 140px;
+          flex: 1;
+          max-height: 150px;
           overflow-y: auto;
           display: flex;
           flex-direction: column;
           gap: 2px;
-          background: rgba(0, 0, 0, 0.25);
-          padding: 6px;
-          border-radius: 4px;
           font-family: var(--font-mono, monospace);
-          font-size: 0.7rem;
+          font-size: 0.68rem;
+          padding: 4px;
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: 4px;
+          margin-bottom: 4px;
         }
 
         .console-log-item {
           display: flex;
-          align-items: flex-start;
           gap: 6px;
         }
 
+        .console-log-item.input { color: #5AC8FA; }
+        .console-log-item.result { color: #30D158; }
+        .console-log-item.info { color: rgba(235, 235, 245, 0.7); }
+        .console-log-item.error { color: #FF453A; }
+        .console-log-item.stdout { color: #E5E5EA; }
+
         .log-time {
           color: rgba(235, 235, 245, 0.3);
-          font-size: 0.62rem;
           flex-shrink: 0;
         }
 
         .log-text {
-          flex: 1;
+          white-space: pre-wrap;
           word-break: break-all;
-        }
-
-        .console-log-item.info .log-text {
-          color: #5AC8FA;
-        }
-
-        .console-log-item.stdout .log-text {
-          color: #FFFFFF;
-        }
-
-        .console-log-item.input .log-text {
-          color: #BF5AF2;
-        }
-
-        .console-log-item.result .log-text {
-          color: #30D158;
-        }
-
-        .console-log-item.error .log-text {
-          color: #FF453A;
         }
 
         .console-input-bar {
@@ -931,26 +1420,81 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
           outline: none;
         }
 
-        .console-input:focus {
-          border-color: #0A84FF;
-        }
-
         .console-send-btn {
           width: 24px;
           height: 24px;
-          border-radius: 4px;
-          background: rgba(10, 132, 255, 0.2);
-          border: 1px solid rgba(10, 132, 255, 0.35);
-          color: #0A84FF;
           display: flex;
           align-items: center;
           justify-content: center;
+          background: rgba(10, 132, 255, 0.2);
+          border: 1px solid rgba(10, 132, 255, 0.4);
+          color: #FFFFFF;
+          border-radius: 4px;
           cursor: pointer;
         }
 
-        .console-send-btn:hover {
-          background: #0A84FF;
-          color: #FFFFFF;
+        /* Memory Inspector Drawer */
+        .memory-inspector-drawer {
+          position: sticky;
+          bottom: 0;
+          background: rgba(14, 18, 30, 0.95);
+          backdrop-filter: blur(20px);
+          border-top: 1px solid rgba(10, 132, 255, 0.3);
+          padding: 8px 10px;
+          z-index: 50;
+        }
+
+        .mem-drawer-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 6px;
+        }
+
+        .mem-drawer-title {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-weight: 600;
+          font-size: 11px;
+          color: #5AC8FA;
+        }
+
+        .mem-icon {
+          color: #FF9F0A;
+        }
+
+        .mem-close-btn {
+          background: transparent;
+          border: none;
+          color: rgba(255, 255, 255, 0.4);
+          cursor: pointer;
+        }
+
+        .mem-close-btn:hover { color: #FFF; }
+
+        .mem-grid {
+          display: flex;
+          gap: 12px;
+          font-family: var(--font-mono, monospace);
+          font-size: 10px;
+          max-height: 80px;
+          overflow-y: auto;
+          background: rgba(0, 0, 0, 0.4);
+          padding: 6px;
+          border-radius: 4px;
+        }
+
+        .mem-hex-block {
+          color: #30D158;
+          line-height: 1.4;
+          flex: 2;
+        }
+
+        .mem-ascii-block {
+          color: #FF9F0A;
+          line-height: 1.4;
+          flex: 1;
         }
       `}</style>
     </div>

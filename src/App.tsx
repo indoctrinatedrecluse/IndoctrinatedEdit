@@ -12,6 +12,9 @@ import { AboutModal } from './components/Modals/AboutModal'
 import { LicenseModal } from './components/Modals/LicenseModal'
 import { ShortcutsModal } from './components/Modals/ShortcutsModal'
 import { TerminalConfigModal } from './components/Modals/TerminalConfigModal'
+import { RunConfigModal } from './components/Modals/RunConfigModal'
+import { RunWithArgsModal } from './components/Modals/RunWithArgsModal'
+import { UnsavedChangesModal } from './components/Modals/UnsavedChangesModal'
 import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
 import { DebugToolbar } from './components/Debug/DebugToolbar'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
@@ -24,6 +27,7 @@ import { sessionService } from './services/sessionService'
 import { diagnosticsService } from './services/diagnosticsService'
 import { databaseService } from './services/databaseService'
 import { debugService } from './services/debugService'
+import { runService, RunProfile } from './services/runService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -678,22 +682,88 @@ export const App: React.FC = () => {
     setActiveTabId(res.path)
   }
 
+  const [pendingNewFolder, setPendingNewFolder] = useState<{
+    folderName: string
+    folderPath: string
+    files: WorkspaceFileItem[]
+  } | null>(null)
+  const [isUnsavedChangesModalOpen, setIsUnsavedChangesModalOpen] = useState<boolean>(false)
+
+  const applyNewFolderAndClear = useCallback(
+    (folderPayload: { folderName: string; folderPath: string; files: WorkspaceFileItem[] }) => {
+      setWorkspaceName(folderPayload.folderName)
+      setWorkspacePath(folderPayload.folderPath)
+      setWorkspaceFiles(folderPayload.files)
+      setTabs([])
+      setActiveTabId('')
+      setActiveView('files')
+      setPendingNewFolder(null)
+      setIsUnsavedChangesModalOpen(false)
+      notificationService.notifyInfo(
+        'Workspace Opened',
+        `Opened workspace "${folderPayload.folderName}" with ${folderPayload.files.length} items.`
+      )
+    },
+    []
+  )
+
   const handleOpenFolderNative = async () => {
     if (!window.electronAPI?.openFolderDialog) return
     const res = await window.electronAPI.openFolderDialog()
     if (!res) return
 
-    setWorkspaceName(res.folderName)
-    setWorkspacePath(res.folderPath)
-    const mapped: WorkspaceFileItem[] = res.files.map((f) => ({
+    const mappedFiles: WorkspaceFileItem[] = res.files.map((f) => ({
       name: f.name,
       path: f.path,
       isDirectory: f.isDirectory,
       lang: f.isDirectory ? undefined : getLanguageFromFilename(f.name),
     }))
-    setWorkspaceFiles(mapped)
-    setActiveView('files')
+
+    const folderPayload = {
+      folderName: res.folderName,
+      folderPath: res.folderPath,
+      files: mappedFiles,
+    }
+
+    // Check for unsaved / dirty tabs
+    const dirty = tabs.filter((t) => t.isDirty)
+
+    if (dirty.length > 0) {
+      // Clear all non-dirty tabs immediately, leaving only the unsaved ones open
+      setTabs(dirty)
+      setActiveTabId(dirty[0].id)
+      setPendingNewFolder(folderPayload)
+      setIsUnsavedChangesModalOpen(true)
+    } else {
+      // No unsaved files: clear all previous tabs and open new folder
+      applyNewFolderAndClear(folderPayload)
+    }
   }
+
+  const handleSaveAllDirtyAndProceed = useCallback(async () => {
+    const dirty = tabs.filter((t) => t.isDirty)
+    for (const tab of dirty) {
+      const content = fileContents[tab.id] ?? ''
+      if (tab.id.includes('/') || tab.id.includes('\\')) {
+        if (window.electronAPI?.saveFile) {
+          await window.electronAPI.saveFile(tab.id, content)
+        }
+      } else {
+        if (window.electronAPI?.saveFileAs) {
+          await window.electronAPI.saveFileAs(tab.name, content)
+        }
+      }
+    }
+    if (pendingNewFolder) {
+      applyNewFolderAndClear(pendingNewFolder)
+    }
+  }, [tabs, fileContents, pendingNewFolder, applyNewFolderAndClear])
+
+  const handleDiscardDirtyAndProceed = useCallback(() => {
+    if (pendingNewFolder) {
+      applyNewFolderAndClear(pendingNewFolder)
+    }
+  }, [pendingNewFolder, applyNewFolderAndClear])
 
   const handleSaveFile = async () => {
     const activeTab = tabs.find((t) => t.id === activeTabId)
@@ -744,7 +814,73 @@ export const App: React.FC = () => {
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState<boolean>(false)
   const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal')
   const [isTerminalConfigOpen, setIsTerminalConfigOpen] = useState<boolean>(false)
+  const [isRunConfigOpen, setIsRunConfigOpen] = useState<boolean>(false)
+  const [isRunWithArgsOpen, setIsRunWithArgsOpen] = useState<boolean>(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => notificationService.getNotifications())
+
+  const handleRunActiveFile = useCallback(
+    async (customArgs?: string, _customEnv?: Record<string, string>) => {
+      const active = tabs.find((t) => t.id === activeTabId)
+      if (!active) {
+        notificationService.notifyWarning('Run Warning', 'No active file open to execute.')
+        return
+      }
+
+      setIsBottomPanelOpen(true)
+      setBottomPanelTab('terminal')
+
+      const success = await runService.runActiveFile(
+        active.id,
+        active.language,
+        customArgs,
+        workspacePath,
+        {
+          onOpenTerminal: () => {
+            setIsBottomPanelOpen(true)
+            setBottomPanelTab('terminal')
+          },
+        }
+      )
+
+      if (success) {
+        notificationService.notifyInfo('Run Started', `Executing ${active.name} in Terminal`)
+      }
+    },
+    [tabs, activeTabId, workspacePath]
+  )
+
+  const handleRunWithArgs = useCallback(() => {
+    setIsRunWithArgsOpen(true)
+  }, [])
+
+  const handleOpenRunConfig = useCallback(() => {
+    setIsRunConfigOpen(true)
+  }, [])
+
+  const handleExecuteProfileWithArgs = useCallback(
+    async (profile: RunProfile, customArgs: string, customEnv?: Record<string, string>) => {
+      const active = tabs.find((t) => t.id === activeTabId)
+      setIsBottomPanelOpen(true)
+      setBottomPanelTab('terminal')
+
+      await runService.execute(
+        profile,
+        {
+          filePath: active?.id,
+          workspacePath,
+          customArgs,
+          customEnv,
+        },
+        {
+          onOpenTerminal: () => {
+            setIsBottomPanelOpen(true)
+            setBottomPanelTab('terminal')
+          },
+        }
+      )
+    },
+    [tabs, activeTabId, workspacePath]
+  )
 
   useEffect(() => {
     const handleScroll = () => {
@@ -828,7 +964,11 @@ export const App: React.FC = () => {
       onToggleTerminal: handleToggleTerminal,
       onOpenTerminalConfig: handleOpenTerminalConfig,
       onOpenProblems: handleOpenProblems,
-      // Run & Debug Handlers
+      // Run & Execution Handlers
+      onRunActiveFile: () => handleRunActiveFile(),
+      onRunWithArgs: handleRunWithArgs,
+      onConfigureRun: handleOpenRunConfig,
+      // Debug Handlers
       onShowDebug: () => setActiveView('debug'),
       onStartDebugging: () => {
         const active = tabs.find((t) => t.id === activeTabId)
@@ -943,7 +1083,12 @@ export const App: React.FC = () => {
       { id: 'terminal.config', title: 'Preferences: Open Terminal Configuration (JSON)', category: 'Preferences', description: 'Edit shell profiles, fonts, and defaults in terminal.json', handler: handleOpenTerminalConfig },
       { id: 'view.problems', title: 'View: Toggle Problems Panel', category: 'View', shortcut: 'Ctrl+Shift+M', description: 'Open diagnostic error and warning inspector', handler: handleOpenProblems },
 
-      // Run & Debug Subsystem
+      // Run & Execution Subsystem
+      { id: 'run.activeFile', title: 'Run: Run Active File in Terminal', category: 'Run', shortcut: 'Ctrl+F5', description: 'Execute active buffer with default runner', handler: () => handleRunActiveFile() },
+      { id: 'run.withArgs', title: 'Run: Run with Custom Arguments...', category: 'Run', shortcut: 'Ctrl+Shift+F5', description: 'Prompt for CLI arguments and environment flags', handler: handleRunWithArgs },
+      { id: 'run.configure', title: 'Run: Configure Run Profiles & Compilers...', category: 'Run', shortcut: 'Ctrl+Alt+R', description: 'Open Run Configuration Studio', handler: handleOpenRunConfig },
+
+      // Debug Subsystem
       { id: 'debug.start', title: 'Debug: Start / Continue Debugging', category: 'Run', shortcut: 'F5', description: 'Launch compiler debugger or continue execution', handler: () => { const active = tabs.find((t) => t.id === activeTabId); debugService.startDebugging(active?.id || 'main.ts') } },
       { id: 'debug.pause', title: 'Debug: Pause Execution', category: 'Run', shortcut: 'F6', description: 'Pause running target process', handler: () => debugService.pause() },
       { id: 'debug.stop', title: 'Debug: Stop Debugging', category: 'Run', shortcut: 'Shift+F5', description: 'Terminate active debug session', handler: () => debugService.stopDebugging() },
@@ -1047,6 +1192,9 @@ export const App: React.FC = () => {
     onSymbols: () => openPalette('@'),
     onToggleTerminal: handleToggleTerminal,
     onOpenProblems: handleOpenProblems,
+    onRunActiveFile: () => handleRunActiveFile(),
+    onRunWithArgs: handleRunWithArgs,
+    onConfigureRun: handleOpenRunConfig,
     onStartDebugging: () => {
       const active = tabs.find((t) => t.id === activeTabId)
       debugService.startDebugging(active?.id || 'main.ts')
@@ -1218,6 +1366,13 @@ export const App: React.FC = () => {
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
             onNewTab={handleNewFile}
+            onRunActiveFile={() => handleRunActiveFile()}
+            onRunWithArgs={handleRunWithArgs}
+            onConfigureRun={handleOpenRunConfig}
+            onStartDebugging={() => {
+              const active = tabs.find((t) => t.id === activeTabId)
+              debugService.startDebugging(active?.id || 'main.ts')
+            }}
           />
           {/* Floating Liquid Glass Execution Control Toolbar */}
           <DebugToolbar
@@ -1316,6 +1471,91 @@ export const App: React.FC = () => {
         onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
         onTerminalClick={handleToggleTerminal}
         onProblemsClick={handleOpenProblems}
+      />
+
+      {/* Command Palette Overlay */}
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        initialQuery={paletteInitialQuery}
+        onClose={() => setIsPaletteOpen(false)}
+        workspaceFiles={workspaceFiles}
+        tabs={tabs}
+        onOpenFile={(file) => handleOpenFileItem({ name: file.name, path: file.path, isDirectory: false })}
+        activeTabName={activeTab?.name}
+        onGoToLine={(line, col) => {
+          editorHostRef.current?.goToLine(line, col)
+          setIsPaletteOpen(false)
+        }}
+      />
+
+      {/* Notification Center */}
+      <NotificationCenter
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setIsNotificationCenterOpen(false)}
+        notifications={notifications}
+        onDismiss={(id) => notificationService.removeNotification(id)}
+        onDismissAll={() => notificationService.dismissAll()}
+        onMarkAllAsRead={() => notificationService.markAllAsRead()}
+      />
+
+      {/* Run & Build Configuration Studio Modal */}
+      <RunConfigModal
+        isOpen={isRunConfigOpen}
+        onClose={() => setIsRunConfigOpen(false)}
+        activeLanguage={activeTab?.language}
+        onRunProfile={(profile) => {
+          handleExecuteProfileWithArgs(profile, '')
+        }}
+      />
+
+      {/* Run with Custom Arguments Prompt Modal */}
+      <RunWithArgsModal
+        isOpen={isRunWithArgsOpen}
+        onClose={() => setIsRunWithArgsOpen(false)}
+        activeFilePath={activeTabId}
+        activeLanguage={activeTab?.language}
+        workspacePath={workspacePath}
+        onExecute={(profile, customArgs, customEnv) => {
+          handleExecuteProfileWithArgs(profile, customArgs, customEnv)
+        }}
+        onOpenSettings={handleOpenRunConfig}
+      />
+
+      {/* Terminal Configuration Modal */}
+      <TerminalConfigModal
+        isOpen={isTerminalConfigOpen}
+        onClose={() => setIsTerminalConfigOpen(false)}
+      />
+
+      {/* About Modal */}
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+      />
+
+      {/* License & Subscription Modal */}
+      <LicenseModal
+        isOpen={isLicenseOpen}
+        onClose={() => setIsLicenseOpen(false)}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* Unsaved Changes Prompt Modal on Folder Open */}
+      <UnsavedChangesModal
+        isOpen={isUnsavedChangesModalOpen}
+        onClose={() => {
+          setIsUnsavedChangesModalOpen(false)
+          setPendingNewFolder(null)
+        }}
+        targetFolderName={pendingNewFolder?.folderName}
+        dirtyTabs={tabs.filter((t) => t.isDirty)}
+        onSaveAllAndProceed={handleSaveAllDirtyAndProceed}
+        onDiscardAndProceed={handleDiscardDirtyAndProceed}
       />
 
       <style>{`

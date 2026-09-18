@@ -1,4 +1,11 @@
-import { AiModelOption, AiProvider, AiStreamChunk, AiChatMessage } from '@sdk/types'
+import {
+  AiModelOption,
+  AiProvider,
+  AiStreamChunk,
+  AiChatMessage,
+  AiAutoApproveSettings,
+  AutoApprovePreset,
+} from '@sdk/types'
 
 export interface ProviderSetting {
   apiKey: string
@@ -16,8 +23,100 @@ const DEFAULT_SETTINGS: AiSettingsMap = {
   antigravity: { apiKey: '', endpoint: 'http://localhost:8080/v1' },
 }
 
+export const DEFAULT_AUTO_APPROVE_SETTINGS: AiAutoApproveSettings = {
+  autoApproveRead: true,
+  autoApproveWrite: false,
+  autoApproveRun: false,
+  autoApproveBrowser: true,
+  autoApproveGit: false,
+  maxAutoIterations: 10,
+}
+
+export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettings> = {
+  paranoid: {
+    autoApproveRead: false,
+    autoApproveWrite: false,
+    autoApproveRun: false,
+    autoApproveBrowser: false,
+    autoApproveGit: false,
+    maxAutoIterations: 5,
+  },
+  balanced: {
+    autoApproveRead: true,
+    autoApproveWrite: false,
+    autoApproveRun: false,
+    autoApproveBrowser: true,
+    autoApproveGit: false,
+    maxAutoIterations: 10,
+  },
+  autonomous: {
+    autoApproveRead: true,
+    autoApproveWrite: true,
+    autoApproveRun: true,
+    autoApproveBrowser: true,
+    autoApproveGit: true,
+    maxAutoIterations: 25,
+  },
+}
+
 export const PRESET_MODELS: AiModelOption[] = [
-  // DeepSeek
+  // Antigravity (Personal Subscription)
+  {
+    id: 'antigravity-personal-agent',
+    name: 'Antigravity 2.0 Agent (Personal)',
+    provider: 'antigravity',
+    description: 'Autonomous multi-turn agent with full workspace grounding, terminal execution, and deep reasoning',
+    supportsReasoning: true,
+  },
+  {
+    id: 'antigravity-gemini-2-5-pro',
+    name: 'Gemini 2.5 Pro (Antigravity Tier)',
+    provider: 'antigravity',
+    description: 'Deep architectural coding and 1M context analysis via Antigravity Personal Subscription',
+    supportsReasoning: true,
+  },
+  {
+    id: 'antigravity-claude-3-7-sonnet',
+    name: 'Claude 3.7 Sonnet (Antigravity Tier)',
+    provider: 'antigravity',
+    description: 'Hybrid reasoning and benchmark-leading code intelligence via Antigravity Personal Tier',
+    supportsReasoning: true,
+  },
+
+  // ChatGPT & OpenAI Codex (Subscription / BYOK)
+  {
+    id: 'gpt-4o-codex',
+    name: 'ChatGPT Codex (OpenAI Subscription)',
+    provider: 'openai',
+    description: 'Specialized Codex engine for autonomous code completion, synthesis and refactoring',
+  },
+  {
+    id: 'chatgpt-4o-latest',
+    name: 'ChatGPT Plus / Pro (chatgpt-4o-latest)',
+    provider: 'openai',
+    description: 'Direct ChatGPT subscription model with latest dynamic instruction tuning',
+  },
+  {
+    id: 'o3-mini',
+    name: 'OpenAI o3-mini (Reasoning)',
+    provider: 'openai',
+    description: 'High-speed STEM, algorithmic logic, and coding CoT reasoning model',
+    supportsReasoning: true,
+  },
+  {
+    id: 'gpt-4o',
+    name: 'OpenAI GPT-4o',
+    provider: 'openai',
+    description: 'Omni flagship model for complex coding, synthesis and refactoring',
+  },
+  {
+    id: 'gpt-4o-mini',
+    name: 'OpenAI GPT-4o Mini',
+    provider: 'openai',
+    description: 'Ultra-fast and cost-efficient coding assistant',
+  },
+
+  // DeepSeek (BYOK)
   {
     id: 'deepseek-chat',
     name: 'DeepSeek-V3',
@@ -31,27 +130,8 @@ export const PRESET_MODELS: AiModelOption[] = [
     description: 'Reinforcement learning CoT model displaying step-by-step thinking process',
     supportsReasoning: true,
   },
-  // OpenAI
-  {
-    id: 'gpt-4o',
-    name: 'OpenAI GPT-4o',
-    provider: 'openai',
-    description: 'Omni flagship model for complex coding, synthesis and refactoring',
-  },
-  {
-    id: 'o3-mini',
-    name: 'OpenAI o3-mini',
-    provider: 'openai',
-    description: 'Fast, high-reasoning STEM and coding model',
-    supportsReasoning: true,
-  },
-  {
-    id: 'gpt-4o-mini',
-    name: 'OpenAI GPT-4o Mini',
-    provider: 'openai',
-    description: 'Ultra-fast and cost-efficient coding assistant',
-  },
-  // Gemini
+
+  // Gemini (BYOK)
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
@@ -64,7 +144,8 @@ export const PRESET_MODELS: AiModelOption[] = [
     provider: 'gemini',
     description: 'Top-tier code generation and complex multi-file reasoning',
   },
-  // Claude
+
+  // Claude (BYOK)
   {
     id: 'claude-3-7-sonnet',
     name: 'Claude 3.7 Sonnet',
@@ -78,27 +159,27 @@ export const PRESET_MODELS: AiModelOption[] = [
     provider: 'claude',
     description: 'State-of-the-art coding and nuanced code reviews',
   },
-  // Antigravity / Custom Proxy
-  {
-    id: 'antigravity-hybrid',
-    name: 'Antigravity ADC / Session',
-    provider: 'antigravity',
-    description: 'Cloud subscription or local multi-agent proxy endpoint',
-  },
 ]
 
 const SETTINGS_STORAGE_KEY = 'indoctrinated_ai_settings'
 const ACTIVE_MODEL_STORAGE_KEY = 'indoctrinated_ai_active_model'
+const AUTO_APPROVE_STORAGE_KEY = 'indoctrinated_ai_auto_approve'
 
 export class AiService {
   private static settings: AiSettingsMap | null = null
+  private static autoApproveSettings: AiAutoApproveSettings | null = null
+  private static autoApproveListeners: Set<(settings: AiAutoApproveSettings) => void> = new Set()
 
   static getSettings(): AiSettingsMap {
     if (!this.settings) {
       try {
-        const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
-        if (raw) {
-          this.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+        if (typeof localStorage !== 'undefined') {
+          const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+          if (raw) {
+            this.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+          } else {
+            this.settings = { ...DEFAULT_SETTINGS }
+          }
         } else {
           this.settings = { ...DEFAULT_SETTINGS }
         }
@@ -112,18 +193,94 @@ export class AiService {
   static saveSettings(newSettings: AiSettingsMap): void {
     this.settings = newSettings
     try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings))
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings))
+      }
     } catch (err) {
       console.error('Failed to persist AI settings to localStorage', err)
     }
   }
 
+  static getAutoApproveSettings(): AiAutoApproveSettings {
+    if (!this.autoApproveSettings) {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const raw = localStorage.getItem(AUTO_APPROVE_STORAGE_KEY)
+          if (raw) {
+            this.autoApproveSettings = { ...DEFAULT_AUTO_APPROVE_SETTINGS, ...JSON.parse(raw) }
+          } else {
+            this.autoApproveSettings = { ...DEFAULT_AUTO_APPROVE_SETTINGS }
+          }
+        } else {
+          this.autoApproveSettings = { ...DEFAULT_AUTO_APPROVE_SETTINGS }
+        }
+      } catch {
+        this.autoApproveSettings = { ...DEFAULT_AUTO_APPROVE_SETTINGS }
+      }
+    }
+    return this.autoApproveSettings!
+  }
+
+  static saveAutoApproveSettings(newSettings: AiAutoApproveSettings): void {
+    this.autoApproveSettings = newSettings
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AUTO_APPROVE_STORAGE_KEY, JSON.stringify(newSettings))
+      }
+    } catch (err) {
+      console.error('Failed to persist auto-approve settings to localStorage', err)
+    }
+    this.autoApproveListeners.forEach((listener) => {
+      try {
+        listener(newSettings)
+      } catch (err) {
+        console.error('Error executing auto-approve change listener', err)
+      }
+    })
+  }
+
+  static applyAutoApprovePreset(preset: AutoApprovePreset): AiAutoApproveSettings {
+    const target = AUTO_APPROVE_PRESETS[preset] || DEFAULT_AUTO_APPROVE_SETTINGS
+    this.saveAutoApproveSettings({ ...target })
+    return { ...target }
+  }
+
+  static onAutoApproveChanged(listener: (settings: AiAutoApproveSettings) => void): () => void {
+    this.autoApproveListeners.add(listener)
+    return () => {
+      this.autoApproveListeners.delete(listener)
+    }
+  }
+
+  static canAutoApprove(action: 'read' | 'write' | 'run' | 'browser' | 'git'): boolean {
+    const current = this.getAutoApproveSettings()
+    switch (action) {
+      case 'read':
+        return !!current.autoApproveRead
+      case 'write':
+        return !!current.autoApproveWrite
+      case 'run':
+        return !!current.autoApproveRun
+      case 'browser':
+        return !!current.autoApproveBrowser
+      case 'git':
+        return !!current.autoApproveGit
+      default:
+        return false
+    }
+  }
+
   static getActiveModelId(): string {
-    return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'deepseek-chat'
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'deepseek-chat'
+    }
+    return 'deepseek-chat'
   }
 
   static setActiveModelId(modelId: string): void {
-    localStorage.setItem(ACTIVE_MODEL_STORAGE_KEY, modelId)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(ACTIVE_MODEL_STORAGE_KEY, modelId)
+    }
   }
 
   static async fetchOllamaModels(host = 'http://localhost:11434'): Promise<AiModelOption[]> {

@@ -24,6 +24,7 @@ import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { GitGraphView } from '../GitGraph/GitGraphView'
 import { DebugView } from '../Debug/DebugView'
+import { AiService } from '../../services/aiService'
 
 export interface WorkspaceFileItem {
   name: string
@@ -265,7 +266,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {activeView === 'settings' && (
         <div className="sidebar-section">
           <div className="sidebar-header">
-            <span className="sidebar-title">PREFERENCES</span>
+            <span className="sidebar-title">EDITOR PREFERENCES</span>
           </div>
           <div className="settings-list">
             <label className="settings-row">
@@ -283,6 +284,72 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <label className="settings-row">
               <span>Minimap Code Preview</span>
               <input type="checkbox" defaultChecked className="glass-checkbox" />
+            </label>
+          </div>
+
+          <div className="sidebar-header" style={{ marginTop: '20px' }}>
+            <span className="sidebar-title">AI & AUTONOMOUS AUTO-APPROVE</span>
+          </div>
+          <div className="settings-list">
+            <label className="settings-row" title="Auto-approve file reading and workspace symbol search">
+              <span>Auto-Approve Read</span>
+              <input
+                type="checkbox"
+                checked={AiService.getAutoApproveSettings().autoApproveRead}
+                onChange={(e) => {
+                  const current = AiService.getAutoApproveSettings()
+                  AiService.saveAutoApproveSettings({ ...current, autoApproveRead: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <label className="settings-row" title="Auto-approve file edits, replacements and writing patches">
+              <span>Auto-Approve Write</span>
+              <input
+                type="checkbox"
+                checked={AiService.getAutoApproveSettings().autoApproveWrite}
+                onChange={(e) => {
+                  const current = AiService.getAutoApproveSettings()
+                  AiService.saveAutoApproveSettings({ ...current, autoApproveWrite: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <label className="settings-row" title="Auto-approve terminal command execution and test runs">
+              <span>Auto-Approve Run (Terminal)</span>
+              <input
+                type="checkbox"
+                checked={AiService.getAutoApproveSettings().autoApproveRun}
+                onChange={(e) => {
+                  const current = AiService.getAutoApproveSettings()
+                  AiService.saveAutoApproveSettings({ ...current, autoApproveRun: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <label className="settings-row" title="Auto-approve external MCP tools and web doc fetches">
+              <span>Auto-Approve Web & MCP</span>
+              <input
+                type="checkbox"
+                checked={AiService.getAutoApproveSettings().autoApproveBrowser}
+                onChange={(e) => {
+                  const current = AiService.getAutoApproveSettings()
+                  AiService.saveAutoApproveSettings({ ...current, autoApproveBrowser: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <label className="settings-row" title="Auto-approve git stage, commit and branch actions">
+              <span>Auto-Approve Git</span>
+              <input
+                type="checkbox"
+                checked={AiService.getAutoApproveSettings().autoApproveGit}
+                onChange={(e) => {
+                  const current = AiService.getAutoApproveSettings()
+                  AiService.saveAutoApproveSettings({ ...current, autoApproveGit: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
             </label>
           </div>
         </div>
