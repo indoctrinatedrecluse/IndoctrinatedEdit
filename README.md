@@ -6,7 +6,7 @@
 
 ### 🔗 Sister Project
 
-> **Looking for our ultra-lightweight Windows counterpart?**  
+> **Looking for our ultra-lightweight Windows Web Development counterpart?**  
 > Check out **[RecluseEdit](https://github.com/indoctrinatedrecluse/RecluseEdit)** — a lightning-fast, ultra-lean web application code editor crafted with WPF, C#, and .NET 10 for Windows.
 
 ---
