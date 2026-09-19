@@ -18,13 +18,13 @@ export const angularExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'typescript',
-      extensions: ['.component.ts', '.service.ts', '.directive.ts', '.pipe.ts', '.guard.ts'],
+      extensions: ['.ts', '.component.ts', '.service.ts', '.directive.ts', '.pipe.ts', '.guard.ts'],
       aliases: ['Angular TypeScript', 'ng-ts'],
       snippets: angularSnippets,
     },
     {
       id: 'html',
-      extensions: ['.component.html'],
+      extensions: ['.html', '.component.html'],
       aliases: ['Angular Template', 'ng-html'],
       snippets: angularSnippets,
     },

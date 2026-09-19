@@ -438,20 +438,31 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
         .grid-row {
           display: flex;
           flex-direction: row;
-          flex: 1;
+          flex: 1 1 0;
+          min-height: 0;
+          min-width: 0;
           gap: 2px;
           height: 50%;
+          width: 100%;
         }
 
         .grid-cell {
-          flex: 1;
+          flex: 1 1 0;
+          min-height: 0;
+          min-width: 0;
           height: 100%;
+          width: 50%;
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
 
         .editor-pane-wrapper {
           display: flex;
           flex-direction: column;
+          flex: 1 1 0;
+          min-height: 0;
+          min-width: 0;
           width: 100%;
           height: 100%;
           position: relative;
@@ -549,7 +560,11 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
         }
 
         .pane-editor-viewport {
-          flex: 1;
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 0;
+          min-height: 0;
+          min-width: 0;
           width: 100%;
           height: 100%;
           position: relative;

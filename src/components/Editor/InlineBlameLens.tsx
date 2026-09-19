@@ -20,34 +20,67 @@ export const InlineBlameLens: React.FC<InlineBlameLensProps> = ({
 
   return (
     <div
-      className="inline-blame-lens flex items-center gap-2 px-2.5 py-0.5 text-[11px] select-none pointer-events-none opacity-40 hover:opacity-100 transition-opacity"
+      className="inline-blame-lens"
       style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '2px 10px',
+        fontSize: '11px',
+        lineHeight: '16px',
+        height: '20px',
+        maxHeight: '20px',
+        minHeight: '20px',
+        boxSizing: 'border-box',
+        userSelect: 'none',
+        pointerEvents: 'none',
+        opacity: 0.5,
         color: 'var(--color-text-muted, #8b949e)',
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        flexShrink: 0,
+        background: 'rgba(0, 0, 0, 0.1)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
       }}
     >
-      <div className="flex items-center gap-1">
-        <User className="w-3 h-3 text-purple-400" />
-        <span className="font-medium text-white/80">{currentBlame.author}</span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+        <User size={11} color="#c084fc" />
+        <span style={{ fontWeight: 500, color: 'rgba(255, 255, 255, 0.85)' }}>{currentBlame.author}</span>
       </div>
 
-      <span className="opacity-40">•</span>
+      <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
 
-      <div className="flex items-center gap-1">
-        <Clock className="w-3 h-3 text-blue-400" />
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+        <Clock size={11} color="#60a5fa" />
         <span>{currentBlame.relativeDate}</span>
       </div>
 
-      <span className="opacity-40">•</span>
+      <span style={{ opacity: 0.35, flexShrink: 0 }}>•</span>
 
-      <div className="flex items-center gap-1 truncate max-w-sm">
-        <GitCommit className="w-3 h-3 text-emerald-400 shrink-0" />
-        <span className="truncate italic text-white/70">{currentBlame.commitMessage}</span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '360px' }}>
+        <GitCommit size={11} color="#34d399" style={{ flexShrink: 0 }} />
+        <span style={{ fontStyle: 'italic', color: 'rgba(255, 255, 255, 0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {currentBlame.commitMessage}
+        </span>
       </div>
 
-      <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/[0.08] font-mono text-purple-300">
+      <span
+        style={{
+          fontSize: '10px',
+          padding: '1px 5px',
+          borderRadius: '3px',
+          background: 'rgba(255, 255, 255, 0.08)',
+          fontFamily: 'monospace',
+          color: '#d8b4fe',
+          flexShrink: 0,
+          marginLeft: 'auto',
+        }}
+      >
         {currentBlame.shortHash}
       </span>
     </div>
   )
 }
+

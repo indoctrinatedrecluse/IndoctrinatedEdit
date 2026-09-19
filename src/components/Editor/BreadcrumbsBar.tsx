@@ -30,32 +30,55 @@ export const BreadcrumbsBar: React.FC<BreadcrumbsBarProps> = ({
 
   return (
     <div
-      className="breadcrumbs-bar flex items-center px-3 py-1 text-xs border-b border-white/[0.06] bg-black/20 backdrop-blur-md select-none gap-1 overflow-x-auto"
+      className="breadcrumbs-bar"
       style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 8px',
+        fontSize: '11px',
+        lineHeight: '16px',
+        height: '24px',
+        minHeight: '24px',
+        maxHeight: '24px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+        background: 'rgba(0, 0, 0, 0.2)',
+        backdropFilter: 'blur(8px)',
+        userSelect: 'none',
+        gap: '4px',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        boxSizing: 'border-box',
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
         color: 'var(--color-text-muted, #8b949e)',
-        minHeight: '26px',
-        maxHeight: '26px',
       }}
     >
       {folder && (
-        <span className="opacity-60 hover:opacity-100 transition-opacity truncate max-w-[120px]">
+        <span style={{ opacity: 0.6, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {folder}
         </span>
       )}
 
       {folder && (
-        <ChevronRight className="w-3 h-3 text-white/30 shrink-0 mx-0.5" />
+        <ChevronRight size={11} color="rgba(255,255,255,0.3)" style={{ flexShrink: 0 }} />
       )}
 
       {breadcrumbs.map((item, idx) => (
         <React.Fragment key={idx}>
           {idx > 0 && (
-            <ChevronRight className="w-3 h-3 text-white/30 shrink-0 mx-0.5" />
+            <ChevronRight size={11} color="rgba(255,255,255,0.3)" style={{ flexShrink: 0 }} />
           )}
 
           <div
-            className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-white/[0.08] hover:text-white transition-all cursor-pointer group"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '1px 5px',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
             onClick={() => {
               if (item.kind === 'file') {
                 setIsDropdownOpen(!isDropdownOpen)
@@ -65,13 +88,13 @@ export const BreadcrumbsBar: React.FC<BreadcrumbsBarProps> = ({
             }}
           >
             {item.kind === 'file' ? (
-              <FileCode className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
+              <FileCode size={12} color="#818cf8" style={{ flexShrink: 0 }} />
             ) : item.kind === 'class' ? (
-              <Box className="w-3.5 h-3.5 text-amber-400 group-hover:text-amber-300 transition-colors" />
+              <Box size={12} color="#fbbf24" style={{ flexShrink: 0 }} />
             ) : (
-              <Code2 className="w-3.5 h-3.5 text-purple-400 group-hover:text-purple-300 transition-colors" />
+              <Code2 size={12} color="#c084fc" style={{ flexShrink: 0 }} />
             )}
-            <span className="font-medium text-white/80 group-hover:text-white">
+            <span style={{ fontWeight: 500, color: 'rgba(255, 255, 255, 0.85)' }}>
               {item.name}
             </span>
           </div>

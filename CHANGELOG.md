@@ -5,11 +5,23 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.7.0] - 2026-09-19
+## [4.7.1] - 2026-09-19
 
-### 🚀 Minor Release — Developer-Desired IDE GUI Extensions Suite, Multi-Pane Grid & Advanced IDE Subsystems
+### 🚀 Release — Multi-Pane Grid Layout Fix, 5-Tier Project Context Conflict Arbiter, & Developer GUI Extensions Suite
 
-IndoctrinatedEdit 4.7.0 transforms the application into an ultra-modern, full-fledged IDE with 7 new Developer-Desired GUI Extensions, flexible multi-pane workspace grid, universal code formatting, LSP refactoring, test runner, and advanced source control:
+IndoctrinatedEdit 4.7.1 delivers a critical hotfix for multi-pane split grid viewport rendering, an intelligent 5-Tier Project-Context-Aware Extension Conflict Resolution Engine, and the complete Developer-Desired GUI Extensions suite:
+
+#### 🩹 Core Hotfixes & Multi-Pane Grid Viewport Restoration
+- **Editor Height & Viewport Fix**: Resolved an issue where split paning compressed the code editor into a collapsed horizontal band by strictly establishing flexbox column layouts on `.editor-host-container`, `.monaco-host-wrapper`, and `.pane-editor-viewport` with `flex: 1 1 0; min-height: 0; min-width: 0`.
+- **Automatic Multi-Pane Resize Observer**: Integrated a responsive `ResizeObserver` inside `EditorHost` that triggers immediate Monaco `editor.layout()` calls on pane split creation, ratio sash dragging, and window resizing.
+- **Compact Git Blame & Breadcrumbs Bar**: Enforced explicit `size={11}` constraints and inline-flex sizing on `InlineBlameLens` and `BreadcrumbsBar` icons, preventing vertical layout blowout in split editor panes.
+
+#### 🧠 5-Tier Project-Context-Aware Extension Conflict Resolution Engine
+- **Tier 1 — Workspace Project & Build Context**: Dynamically inspects project configuration markers (`angular.json`, `next.config.*`, `nuxt.config.*`, `svelte.config.*`, `nest-cli.json`, `Cargo.toml`, `go.mod`, `pubspec.yaml`, `requirements.txt`, `pom.xml`, etc.) and `package.json` dependencies. If an Angular project is detected, Angular Enterprise Suite claims `.ts`/`.html`/`.css`/`.json`; for React/Next.js projects, React 19 Suite claims `.tsx`/`.ts`/`.jsx`/`.js`.
+- **Tier 2 — File Location & Directory Path Heuristics**: Directs files residing in `/components/`, `/hooks/`, `/views/` to React, `/controllers/` and `/routes/` to Backend Mega-Pack, and `*.component.ts`/`*.service.ts` to Angular.
+- **Tier 3 — In-File Content & AST/Decorator Signatures**: Instant regex token analysis detecting framework patterns (`@Component`, `@Injectable`, `useState`, `JSX`, `@Controller`, `<template>`, Objective-C `#import` vs MATLAB `meshgrid`, Prolog `:-` vs Perl `use strict;`).
+- **Tier 4 — Extension Specialization Tier Priority**: Dedicated language and framework suites are given higher priority affinity over generic runtimes, and auxiliary tools (Prettier formatters, linters) never steal primary language syntax highlighting IDs.
+- **Tier 5 — Deterministic Fallback & Cycle-Safe Aliasing**: Monaco default language mappings with recursion-safe cycle breakers, completely eliminating noisy duplicate notifications.
 
 #### 🧰 Developer-Desired IDE GUI Extensions Suite
 - **Regex Studio & ReDoS Analyzer**:

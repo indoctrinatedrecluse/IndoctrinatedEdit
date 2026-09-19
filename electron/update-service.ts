@@ -238,7 +238,7 @@ export class UpdateService {
    */
   public async checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult> {
     const activeChannel = channel || this.config.channel || 'stable'
-    const currentVersion = app.getVersion ? app.getVersion() : '4.7.0'
+    const currentVersion = app.getVersion ? app.getVersion() : '4.7.1'
 
     this.saveConfig({ lastCheckedTimestamp: Date.now() })
 
@@ -336,7 +336,7 @@ export class UpdateService {
           currentUrl,
           {
             headers: {
-              'User-Agent': 'IndoctrinatedEdit-AutoUpdater/4.7.0',
+              'User-Agent': 'IndoctrinatedEdit-AutoUpdater/4.7.1',
             },
           },
           (res) => {
@@ -530,7 +530,7 @@ export class UpdateService {
           url,
           {
             headers: {
-              'User-Agent': 'IndoctrinatedEdit-AutoUpdater/4.7.0',
+              'User-Agent': 'IndoctrinatedEdit-AutoUpdater/4.7.1',
               Accept: 'application/vnd.github.v3+json',
             },
           },

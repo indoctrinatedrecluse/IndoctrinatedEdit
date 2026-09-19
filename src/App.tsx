@@ -230,6 +230,7 @@ featuring an authentic iOS Liquid Glass aesthetic, Monaco core, and microservice
 }
 
 import { extensionRegistry } from './extensions/extensionRegistry'
+import { conflictResolutionService } from './services/conflictResolutionService'
 
 function getLanguageFromFilename(filename: string, content?: string): string {
   try {
@@ -258,6 +259,15 @@ export const App: React.FC = () => {
   const [isMcpStudioOpen, setIsMcpStudioOpen] = useState<boolean>(false)
   const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false)
   const [latestUpdateVersion, setLatestUpdateVersion] = useState<string>('')
+
+  // Dynamically synchronize workspace framework context with conflict resolution engine
+  useEffect(() => {
+    conflictResolutionService.setWorkspaceContext({
+      workspacePath,
+      files: workspaceFiles,
+      packageJsonContent: fileContents['package.json'],
+    })
+  }, [workspacePath, workspaceFiles, fileContents])
 
   // Left Sidebar Drag-to-Resize
   const isResizingSidebar = useRef(false)

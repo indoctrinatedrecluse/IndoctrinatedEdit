@@ -91,9 +91,21 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   const monacoRef = useRef<typeof monaco | null>(null)
   const decorationsRef = useRef<string[]>([])
   const searchDecorationsRef = useRef<string[]>([])
+  const hostContainerRef = useRef<HTMLDivElement>(null)
 
   // Cursor Line for Breadcrumbs
   const [currentCursorLine, setCurrentCursorLine] = useState(1)
+
+  // Auto-relayout on container resize / split pane drag
+  useEffect(() => {
+    const el = hostContainerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      editorRef.current?.layout()
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // LSP References & Rename Modals
   const [isRenameOpen, setIsRenameOpen] = useState(false)
@@ -796,7 +808,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   }, [theme])
 
   return (
-    <div className="editor-host-container flex flex-col h-full w-full relative">
+    <div className="editor-host-container" ref={hostContainerRef}>
       {/* Document Breadcrumbs Bar */}
       {showBreadcrumbs && (
         <BreadcrumbsBar
@@ -920,9 +932,10 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         }}
       />
 
-      <div className="flex-1 min-h-0 relative">
+      <div className="monaco-host-wrapper">
         <Editor
           height="100%"
+          width="100%"
           language={language}
           value={content}
           onChange={onChange}
@@ -969,10 +982,27 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
       <style>{`
         .editor-host-container {
-          flex: 1;
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 0;
+          min-height: 0;
+          min-width: 0;
+          width: 100%;
           height: 100%;
           position: relative;
           background: transparent;
+          overflow: hidden;
+        }
+
+        .monaco-host-wrapper {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 0;
+          min-height: 0;
+          min-width: 0;
+          width: 100%;
+          height: 100%;
+          position: relative;
           overflow: hidden;
         }
 

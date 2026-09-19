@@ -130,13 +130,13 @@ export class GitWorkflowService {
         commit: {
           hash: 'a1b2c3d4e5f67a8b9c0d1e2f3a4b5c6d7e8f9a0b',
           shortHash: 'a1b2c3d',
-          message: 'release: v4.7.0 IDE GUI Extensions Suite, Multi-Pane Grid, Universal Formatter & Advanced IDE Subsystems',
+          message: 'release: v4.7.1 Split Pane Layout Fix, 5-Tier Project Context Conflict Resolution & IDE Polish',
         },
         startedAt: new Date().toISOString(),
         durationFormatted: '1m 28s',
         jobs: [
           {
-            id: 'job_win_470',
+            id: 'job_win_471',
             name: 'Build Windows (x64 NSIS / Portable)',
             runner: 'windows-latest',
             status: 'in_progress',
@@ -145,13 +145,13 @@ export class GitWorkflowService {
             steps: [
               { number: 1, name: 'Set up Node.js 22.x', status: 'completed', conclusion: 'success', durationSeconds: 6 },
               { number: 2, name: 'Install dependencies (npm ci)', status: 'completed', conclusion: 'success', durationSeconds: 22 },
-              { number: 3, name: 'Build TypeScript & Vite bundle (4.7.0)', status: 'completed', conclusion: 'success', durationSeconds: 36 },
+              { number: 3, name: 'Build TypeScript & Vite bundle (4.7.1)', status: 'completed', conclusion: 'success', durationSeconds: 36 },
               { number: 4, name: 'Package Electron binary & NSIS installer', status: 'in_progress', conclusion: null, durationSeconds: 14 },
-              { number: 5, name: 'Upload Release Asset (IndoctrinatedEdit-Setup-4.7.0.exe)', status: 'queued', conclusion: null, durationSeconds: 0 },
+              { number: 5, name: 'Upload Release Asset (IndoctrinatedEdit-Setup-4.7.1.exe)', status: 'queued', conclusion: null, durationSeconds: 0 },
             ],
           },
           {
-            id: 'job_linux_470',
+            id: 'job_linux_471',
             name: 'Build Linux AppImage & Tarball',
             runner: 'ubuntu-22.04',
             status: 'in_progress',
@@ -160,9 +160,9 @@ export class GitWorkflowService {
             steps: [
               { number: 1, name: 'Set up Node.js 22.x', status: 'completed', conclusion: 'success', durationSeconds: 5 },
               { number: 2, name: 'Install libfuse2 & build tools', status: 'completed', conclusion: 'success', durationSeconds: 18 },
-              { number: 3, name: 'Compile Web & Main Processes (v4.7.0)', status: 'completed', conclusion: 'success', durationSeconds: 35 },
+              { number: 3, name: 'Compile Web & Main Processes (v4.7.1)', status: 'completed', conclusion: 'success', durationSeconds: 35 },
               { number: 4, name: 'Generate AppImage & Tarball binaries', status: 'in_progress', conclusion: null, durationSeconds: 12 },
-              { number: 5, name: 'Upload release assets (IndoctrinatedEdit-4.7.0.AppImage)', status: 'queued', conclusion: null, durationSeconds: 0 },
+              { number: 5, name: 'Upload release assets (IndoctrinatedEdit-4.7.1.AppImage)', status: 'queued', conclusion: null, durationSeconds: 0 },
             ],
           },
         ],
