@@ -5,6 +5,83 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.0] - 2026-09-19
+
+### 🚀 Minor Release — Developer-Desired IDE GUI Extensions Suite, Multi-Pane Grid & Advanced IDE Subsystems
+
+IndoctrinatedEdit 4.7.0 transforms the application into an ultra-modern, full-fledged IDE with 7 new Developer-Desired GUI Extensions, flexible multi-pane workspace grid, universal code formatting, LSP refactoring, test runner, and advanced source control:
+
+#### 🧰 Developer-Desired IDE GUI Extensions Suite
+- **Regex Studio & ReDoS Analyzer**:
+  - Live interactive regex testing with group match breakdowns and capture tokenization.
+  - Substitution live diff engine showing side-by-side before/after transforms.
+  - Safe catastrophic backtracking benchmark radar (ReDoS detection) with execution timer.
+  - Built-in library of common developer regex presets (SemVer, Email, IPv4/v6, UUID, ISO dates) and AI pattern builder.
+- **Architecture & Workspace Dependency Flow Map**:
+  - Interactive visual dependency graph showing module imports, caller/callee relationships, and cluster topologies.
+  - Cycle Radar: Automatically detects circular dependency chains across TypeScript/JavaScript modules.
+  - Orphan Module Detector: Discovers isolated files and unused components.
+  - 1-click export to Mermaid diagram syntax, SVG visual, or JSON graph.
+- **Multi-Environment Vault & Secret Leak Scanner**:
+  - Side-by-side multi-environment matrix comparison (`.env.local`, `.env.development`, `.env.staging`, `.env.production`).
+  - Active workspace Secret Leak Scanner detecting exposed API keys (AWS, OpenAI, Gemini, GitHub tokens, JWTs, DB connection URIs).
+  - Secure AES-256-GCM encrypted vault backups with passphrase protection and 1-click `.env` export.
+- **Live WebSocket & SSE Streaming Hub**:
+  - Dual-protocol client supporting both bi-directional WebSockets and Server-Sent Events (SSE) streaming.
+  - Real-time rolling ping/pong latency telemetry chart with minimum, average, and jitter metrics.
+  - Full message forge with JSON linting, message history filtering, and auto-reconnect logic.
+- **Liquid Glass Shader Lab & WCAG 2.2 Auditor**:
+  - Live CSS backdrop-filter and glassmorphic shader designer with blur, saturation, specular sheen, and surface opacity sliders.
+  - WCAG 2.2 & APCA contrast ratio auditor verifying accessibility compliance across AA and AAA levels.
+  - Color vision deficiency simulations (Protanopia, Deuteranopia, Tritanopia, Achromatopsia).
+  - Harmony generator for complementary, triadic, and analogous color palettes with CSS code export.
+- **JSON, JQ, Schema & Data Structure Studio**:
+  - Real-time JQ and JMESPath expression sandbox with syntax tree filtering.
+  - Interactive collapsible tree explorer with node search, type badges, and key copying.
+  - Live JSON Schema validation with precise error path indicators.
+  - Instant multi-format conversion between JSON, YAML, TOML, CSV, and XML.
+- **Live Markdown, LaTeX & Mermaid Preview**:
+  - Side-by-side synchronized rendering with KaTeX LaTeX math support (`$...$`, `$$...$$`).
+  - Interactive document outline with clickable heading anchors.
+  - Glassmorphic styled GitHub alerts (Note, Tip, Important, Warning, Caution).
+  - Dynamic Mermaid diagram generation and rendering.
+
+#### 🪟 Multi-Pane Editor Grid & Workspace Layout
+- **Dynamic Split Grid Layouts**: Split active editor tabs horizontally, vertically, or in 2x2 grid configurations.
+- **Independent Pane State**: Each split pane maintains independent scroll positions, active document focus, cursor states, and tab bars.
+- **Seamless Pane Navigation**: Keyboard shortcuts and menu commands for splitting, closing, and cycling focus between panes.
+
+#### ⚡ Universal Code Formatter Engine
+- **Multi-Language Prettier-Compatible Engine**: Instant code formatting for JavaScript, TypeScript, TSX/JSX, JSON, CSS, HTML, and Markdown.
+- **Format on Save**: Optional automatic formatting triggered on file save with configurable tab width and quote styles.
+- **Format Selection & Document**: Context menu and Command Palette triggers (`Shift+Alt+F`).
+
+#### 🔍 Workspace Global Search & Replace
+- **High-Performance Global Search**: Fast regex and case-sensitive text search across entire workspace directory trees.
+- **Include / Exclude Filters**: Glob pattern matching to target or ignore specific directories (e.g. `node_modules`, `dist`, `*.test.ts`).
+- **Interactive Match Replace**: Batch workspace replace with live diff confirmation and file-grouped preview.
+
+#### 🧪 Integrated Test Explorer & Runner
+- **Visual Test Tree Discovery**: Automatic scanning and discovery of unit test suites and test cases.
+- **1-Click Test Execution**: Run individual tests, test suites, or all tests with live pass/fail indicators and execution time metrics.
+- **Failure Stack Trace Inspector**: Instant inspection of assertion failures with direct jump to source code.
+
+#### 🛠️ Language Server Protocol (LSP) Refactoring Subsystem
+- **Find All References Modal**: Search and display all symbol references across the workspace with line previews.
+- **Atomic Rename Refactoring**: Rename symbols across multiple files simultaneously with conflict prevention.
+- **Inline Git Blame Lens**: Live inline author, timestamp, and commit hash annotations on active editor lines.
+- **Breadcrumbs Navigation Bar**: Interactive file path and symbol hierarchy breadcrumbs above the editor.
+
+#### 🔀 Advanced SCM & 3-Way Merge Studio
+- **3-Way Visual Conflict Resolver**: Side-by-side Current vs Incoming vs Result merge studio with 1-click resolution buttons.
+- **Commit Graph Visualizer**: Interactive commit history DAG tree with branch heads, tags, and commit inspection.
+
+#### 🚀 Task Runner & Debug Launch Configurations
+- **`.indoctrinated/launch.json` & `tasks.json` Support**: Define build, test, and debug configurations.
+- **Integrated Task Console**: Real-time stdout/stderr streaming with status tracking and exit code monitoring.
+
+---
+
 ## [4.6.0] - 2026-09-18
 
 ### 🚀 Minor Release — Model Context Protocol (MCP) Host Studio, AI Agent Tools Bridge, & Settings Reactivity

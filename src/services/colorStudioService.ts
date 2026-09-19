@@ -1,5 +1,7 @@
 /**
- * IndoctrinatedEdit - Color Palette & Liquid Glass Design Studio Service
+ * IndoctrinatedEdit - Color Palette, Liquid Glass Shader & A11y Studio Service
+ * Multi-format color parser, WCAG 2.2 accessibility contrast auditor,
+ * Liquid Glass shader tuner, and gradient/token exporter.
  */
 
 export interface ColorDetails {
@@ -22,6 +24,26 @@ export interface GlassPalette {
   accentGlow: string
   textPrimary: string
   textMuted: string
+}
+
+export interface ContrastAuditResult {
+  ratio: number
+  ratioFormatted: string
+  wcagAaNormal: boolean
+  wcagAaaNormal: boolean
+  wcagAaLarge: boolean
+  wcagAaaLarge: boolean
+  wcagUiComponents: boolean
+  rating: 'AAA' | 'AA' | 'AA Large' | 'Fail'
+}
+
+export interface GlassShaderParams {
+  blurRadiusPx: number
+  backgroundOpacity: number
+  specularBorderOpacity: number
+  accentGlowSpread: number
+  tintHex: string
+  darkDepth: number
 }
 
 class ColorStudioService {
@@ -128,6 +150,53 @@ class ColorStudioService {
   }
 
   /**
+   * WCAG 2.2 Relative Luminance and Contrast Ratio calculation
+   */
+  public calculateContrastRatio(fgHex: string, bgHex: string): ContrastAuditResult {
+    const fg = this.parseColor(fgHex)
+    const bg = this.parseColor(bgHex)
+
+    const l1 = this.getRelativeLuminance(fg.rgb.r, fg.rgb.g, fg.rgb.b)
+    const l2 = this.getRelativeLuminance(bg.rgb.r, bg.rgb.g, bg.rgb.b)
+
+    const lighter = Math.max(l1, l2)
+    const darker = Math.min(l1, l2)
+
+    const ratio = Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100
+    const ratioFormatted = `${ratio}:1`
+
+    const wcagAaNormal = ratio >= 4.5
+    const wcagAaaNormal = ratio >= 7.0
+    const wcagAaLarge = ratio >= 3.0
+    const wcagAaaLarge = ratio >= 4.5
+    const wcagUiComponents = ratio >= 3.0
+
+    let rating: ContrastAuditResult['rating'] = 'Fail'
+    if (wcagAaaNormal) rating = 'AAA'
+    else if (wcagAaNormal) rating = 'AA'
+    else if (wcagAaLarge) rating = 'AA Large'
+
+    return {
+      ratio,
+      ratioFormatted,
+      wcagAaNormal,
+      wcagAaaNormal,
+      wcagAaLarge,
+      wcagAaaLarge,
+      wcagUiComponents,
+      rating,
+    }
+  }
+
+  private getRelativeLuminance(r: number, g: number, b: number): number {
+    const sRGB = [r, g, b].map((val) => {
+      const v = val / 255
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+    })
+    return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2]
+  }
+
+  /**
    * Generate harmonious color scheme (Complementary, Triadic, Analogous)
    */
   public generateHarmonies(hex: string): { complementary: string; analogous: string[]; triadic: string[] } {
@@ -184,6 +253,27 @@ class ColorStudioService {
       textPrimary: '#F8FAFC',
       textMuted: 'rgba(226, 232, 240, 0.60)',
     }
+  }
+
+  /**
+   * Generates CSS code for tuned Liquid Glass parameters
+   */
+  public exportGlassCss(params: GlassShaderParams): string {
+    const tint = this.parseColor(params.tintHex)
+    const { r, g, b } = tint.rgb
+
+    return `/* Indoctrinated iOS Liquid Glass Token Definition */
+.liquid-glass-tuned {
+  background: rgba(${Math.round(14 * (1 - params.darkDepth))}, ${Math.round(18 * (1 - params.darkDepth))}, ${Math.round(30 * (1 - params.darkDepth))}, ${params.backgroundOpacity});
+  backdrop-filter: blur(${params.blurRadiusPx}px) saturate(190%);
+  -webkit-backdrop-filter: blur(${params.blurRadiusPx}px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, ${params.specularBorderOpacity});
+  box-shadow: 
+    0 8px 32px 0 rgba(0, 0, 0, 0.37),
+    0 0 ${params.accentGlowSpread}px rgba(${r}, ${g}, ${b}, 0.35);
+  border-radius: 12px;
+}
+`
   }
 }
 

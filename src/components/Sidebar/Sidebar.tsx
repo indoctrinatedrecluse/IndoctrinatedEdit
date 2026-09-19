@@ -30,6 +30,9 @@ import { AiService } from '../../services/aiService'
 import { AiAutoApproveSettings, AutoApprovePreset } from '@sdk/types'
 import { McpService, McpServerConfig } from '../../services/mcpService'
 import { rendererUpdateService, UpdateStatus, UpdateInfo } from '../../services/updateService'
+import { GlobalSearchPanel } from './GlobalSearchPanel'
+import { TestExplorerPanel } from './TestExplorerPanel'
+import { formatterService, FormatterOptions } from '../../services/formatterService'
 
 export interface WorkspaceFileItem {
   name: string
@@ -43,6 +46,7 @@ interface SidebarProps {
   currentThemeId: string
   onSelectTheme: (id: string) => void
   onOpenFile: (file: WorkspaceFileItem) => void
+  onOpenFileAndNavigate?: (filePath: string, lineNumber: number, column?: number) => void
   activeFilePath?: string
   workspaceName: string
   workspacePath?: string
@@ -58,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentThemeId,
   onSelectTheme,
   onOpenFile,
+  onOpenFileAndNavigate,
   activeFilePath,
   workspaceName,
   workspacePath,
@@ -71,6 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>(() => McpService.getServers())
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => rendererUpdateService.getStatus())
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(() => rendererUpdateService.getUpdateInfo())
+  const [formatOptions, setFormatOptions] = useState<FormatterOptions>(() => formatterService.getOptions())
 
   useEffect(() => {
     const unsubAi = AiService.onAutoApproveChanged((newSettings) => {
@@ -292,18 +298,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {activeView === 'search' && (
-        <div className="sidebar-section">
-          <div className="sidebar-header">
-            <span className="sidebar-title">SEARCH</span>
-          </div>
-          <div className="search-input-box">
-            <input
-              type="text"
-              placeholder="Search across files..."
-              className="glass-input"
-            />
-          </div>
-        </div>
+        <GlobalSearchPanel onOpenFileAndNavigate={onOpenFileAndNavigate} />
+      )}
+
+      {activeView === 'testing' && (
+        <TestExplorerPanel onOpenFileAndNavigate={onOpenFileAndNavigate} />
       )}
 
       {activeView === 'settings' && (
@@ -330,6 +329,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </label>
           </div>
 
+          {/* CODE FORMATTING & PRETTIER ENGINE */}
+          <div className="sidebar-header" style={{ marginTop: '20px' }}>
+            <span className="sidebar-title">CODE FORMATTER & PRETTIER</span>
+          </div>
+          <div className="settings-list">
+            <label className="settings-row">
+              <div>
+                <span style={{ display: 'block', fontWeight: 500 }}>Format on Save</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Auto-format code upon saving</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={formatOptions.formatOnSave}
+                onChange={(e) => {
+                  const updated = { ...formatOptions, formatOnSave: e.target.checked }
+                  setFormatOptions(updated)
+                  formatterService.updateOptions({ formatOnSave: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <label className="settings-row">
+              <div>
+                <span style={{ display: 'block', fontWeight: 500 }}>Single Quotes</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Use single quotes instead of double</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={formatOptions.singleQuote}
+                onChange={(e) => {
+                  const updated = { ...formatOptions, singleQuote: e.target.checked }
+                  setFormatOptions(updated)
+                  formatterService.updateOptions({ singleQuote: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <label className="settings-row">
+              <div>
+                <span style={{ display: 'block', fontWeight: 500 }}>Semicolons</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Print semicolons at statement ends</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={formatOptions.semi}
+                onChange={(e) => {
+                  const updated = { ...formatOptions, semi: e.target.checked }
+                  setFormatOptions(updated)
+                  formatterService.updateOptions({ semi: e.target.checked })
+                }}
+                className="glass-checkbox"
+              />
+            </label>
+            <div className="settings-row">
+              <span>Tab Size</span>
+              <select
+                value={formatOptions.tabWidth}
+                onChange={(e) => {
+                  const val = Number(e.target.value)
+                  const updated = { ...formatOptions, tabWidth: val }
+                  setFormatOptions(updated)
+                  formatterService.updateOptions({ tabWidth: val })
+                }}
+                className="glass-input"
+                style={{ width: '70px', padding: '2px 6px', fontSize: '11px' }}
+              >
+                <option value={2}>2 spaces</option>
+                <option value={4}>4 spaces</option>
+                <option value={8}>8 spaces</option>
+              </select>
+            </div>
+          </div>
+
           {/* APPLICATION & SOFTWARE UPDATES */}
           <div className="sidebar-header" style={{ marginTop: '20px' }}>
             <span className="sidebar-title">APPLICATION & UPDATES</span>
@@ -337,7 +409,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="settings-list">
             <div className="settings-row">
               <span>Version</span>
-              <span className="font-mono text-violet-400 font-semibold">v4.6.0</span>
+              <span className="font-mono text-violet-400 font-semibold">v4.7.0</span>
             </div>
             <div className="settings-row">
               <span>Release Channel</span>

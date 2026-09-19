@@ -22,6 +22,7 @@ import {
   Share2,
   Layers,
   Shapes,
+  FileCode2,
 } from 'lucide-react'
 import { AiChatPanel } from '../AiChat/AiChatPanel'
 import { DatabaseStudio } from '../Database/DatabaseStudio'
@@ -45,6 +46,7 @@ import { GraphQLStudioView } from '../GraphQLStudio/GraphQLStudioView'
 import { DiagramStudioView } from '../DiagramStudio/DiagramStudioView'
 import { BundleAnalyzerView } from '../BundleAnalyzer/BundleAnalyzerView'
 import { SvgStudioView } from '../SvgStudio/SvgStudioView'
+import { JsonStudioView } from '../JsonStudio/JsonStudioView'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab =
@@ -52,6 +54,7 @@ export type RightDockTab =
   | 'database'
   | 'rest'
   | 'crypto'
+  | 'json'
   | 'preview'
   | 'docker'
   | 'socket'
@@ -186,6 +189,15 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <ShieldCheck size={13} className="tab-icon crypto" />
             <span>Crypto Lab</span>
+          </button>
+
+          <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'json' ? 'active' : ''}`}
+            onClick={() => onSelectTab('json')}
+            title="JSON & JQ Structure Studio (Ctrl+Alt+J)"
+          >
+            <FileCode2 size={13} className="tab-icon json" />
+            <span>JSON & JQ</span>
           </button>
 
           <button
@@ -330,6 +342,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
         {activeTab === 'svg' && <SvgStudioView />}
 
         {activeTab === 'crypto' && <CryptoDevToolsView isDocked={true} />}
+        {activeTab === 'json' && <JsonStudioView />}
 
         {activeTab === 'preview' && (
           <LivePreviewView

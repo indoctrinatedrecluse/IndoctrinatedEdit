@@ -25,8 +25,10 @@ const x: number = 42;
 \`\`\`
 `
     const res = previewService.renderMarkdown(md)
-    expect(res.html).toContain('<h1 class="preview-h1">Main Header</h1>')
-    expect(res.html).toContain('<h2 class="preview-h2">Sub Header</h2>')
+    expect(res.html).toContain('class="preview-h1 preview-heading"')
+    expect(res.html).toContain('Main Header</h1>')
+    expect(res.html).toContain('class="preview-h2 preview-heading"')
+    expect(res.html).toContain('Sub Header</h2>')
     expect(res.html).toContain('alert-NOTE')
     expect(res.html).toContain('preview-task-item done')
     expect(res.html).toContain('code-block-wrapper')

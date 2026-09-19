@@ -23,9 +23,10 @@ import {
   Share2,
   Layers,
   Shapes,
+  FlaskConical,
 } from 'lucide-react'
 
-export type ActivityView = 'files' | 'git' | 'search' | 'debug' | 'extensions' | 'themes' | 'settings'
+export type ActivityView = 'files' | 'git' | 'search' | 'testing' | 'debug' | 'extensions' | 'themes' | 'settings'
 
 interface ActivityBarProps {
   activeView: ActivityView | null
@@ -114,6 +115,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
     { id: 'files', label: 'Explorer (Ctrl+Shift+E)', icon: <Files size={18} /> },
     { id: 'git', label: 'Source Control & Git Graph (Ctrl+Shift+G)', icon: <GitBranch size={18} />, badge: gitChangesCount },
     { id: 'search', label: 'Search in Files (Ctrl+Shift+F)', icon: <Search size={18} /> },
+    { id: 'testing', label: 'Testing & Test Explorer (Ctrl+Shift+T)', icon: <FlaskConical size={18} /> },
     { id: 'debug', label: 'Run & Debug (Ctrl+Shift+D)', icon: <Bug size={18} /> },
     { id: 'extensions', label: 'Extensions & Microservices', icon: <Blocks size={18} /> },
     { id: 'themes', label: 'Liquid Glass Themes', icon: <Palette size={18} /> },

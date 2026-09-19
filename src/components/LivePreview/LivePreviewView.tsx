@@ -425,6 +425,38 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
         .preview-table th, .preview-table td { border: 1px solid rgba(255, 255, 255, 0.1); padding: 6px 10px; text-align: left; }
         .preview-table th { background: rgba(255, 255, 255, 0.05); color: #64D2FF; font-weight: 700; }
 
+        .latex-math-block {
+          padding: 10px 14px;
+          margin: 12px 0;
+          background: rgba(0, 0, 0, 0.4);
+          border: 1px solid rgba(191, 90, 242, 0.35);
+          border-radius: 6px;
+          display: flex;
+          justify-content: center;
+          font-family: 'Cambria Math', 'KaTeX_Math', 'Times New Roman', serif;
+          font-size: 15px;
+          color: #BF5AF2;
+          box-shadow: 0 0 12px rgba(191, 90, 242, 0.15);
+        }
+
+        .latex-math-inline {
+          font-family: 'Cambria Math', 'KaTeX_Math', 'Times New Roman', serif;
+          color: #BF5AF2;
+          background: rgba(191, 90, 242, 0.12);
+          padding: 1px 5px;
+          border-radius: 3px;
+          font-size: 12.5px;
+        }
+
+        .preview-heading {
+          cursor: pointer;
+          transition: color 0.15s ease;
+        }
+
+        .preview-heading:hover {
+          color: #64D2FF;
+        }
+
         .preview-paragraph-spacing { height: 10px; }
       `}</style>
     </div>

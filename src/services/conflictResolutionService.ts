@@ -103,16 +103,18 @@ export class ConflictResolutionService {
 
       for (const lang of manifest.languages) {
         // Register file extensions
-        for (const rawExt of lang.extensions) {
-          const extKey = rawExt.startsWith('.') ? rawExt.slice(1).toLowerCase() : rawExt.toLowerCase()
-          if (!this.fileExtensionMap.has(extKey)) {
-            this.fileExtensionMap.set(extKey, [])
+        if (lang.extensions && Array.isArray(lang.extensions)) {
+          for (const rawExt of lang.extensions) {
+            const extKey = rawExt.startsWith('.') ? rawExt.slice(1).toLowerCase() : rawExt.toLowerCase()
+            if (!this.fileExtensionMap.has(extKey)) {
+              this.fileExtensionMap.set(extKey, [])
+            }
+            this.fileExtensionMap.get(extKey)!.push({
+              extensionId: manifest.id,
+              extensionName: manifest.name,
+              language: lang,
+            })
           }
-          this.fileExtensionMap.get(extKey)!.push({
-            extensionId: manifest.id,
-            extensionName: manifest.name,
-            language: lang,
-          })
         }
 
         // Register language aliases for cycle checking

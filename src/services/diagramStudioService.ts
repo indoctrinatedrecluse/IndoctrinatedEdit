@@ -126,7 +126,7 @@ class DiagramStudioService {
     commit id: "redis-studio"
     checkout main
     merge feature/gui-dock id: "merge-pr-92"
-    commit id: "release-v4.6.0" tag: "v4.6.0"`,
+    commit id: "release-v4.7.0" tag: "v4.7.0"`,
     },
     {
       id: 'state_ai_agent',

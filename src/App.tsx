@@ -4,7 +4,8 @@ import { WindowFrame } from './components/WindowFrame/WindowFrame'
 import { ActivityBar, ActivityView } from './components/ActivityBar/ActivityBar'
 import { Sidebar, WorkspaceFileItem } from './components/Sidebar/Sidebar'
 import { TabBar, TabItem } from './components/TabBar/TabBar'
-import { EditorHost, EditorHostHandle, SelectionInfo } from './components/Editor/EditorHost'
+import { EditorHostHandle, SelectionInfo } from './components/Editor/EditorHost'
+import { EditorGrid, EditorGridHandle } from './components/Editor/EditorGrid'
 import { StatusBar } from './components/StatusBar/StatusBar'
 import { CommandPalette } from './components/CommandPalette/CommandPalette'
 import { RightAuxiliaryPane, RightDockTab } from './components/RightDock/RightAuxiliaryPane'
@@ -31,6 +32,10 @@ import { diagnosticsService } from './services/diagnosticsService'
 import { databaseService } from './services/databaseService'
 import { debugService } from './services/debugService'
 import { runService, RunProfile } from './services/runService'
+import { globalSearchService } from './services/globalSearchService'
+import { formatterService } from './services/formatterService'
+import { testExplorerService } from './services/testExplorerService'
+import { lspService, LspRenameResult } from './services/lspService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -323,6 +328,10 @@ export const App: React.FC = () => {
 
   // AI Multi-Model Chat Panel & Editor Integration State
   const editorHostRef = useRef<EditorHostHandle>(null)
+  const editorGridRef = useRef<EditorGridHandle>(null)
+  const getActiveEditor = useCallback((): EditorHostHandle | null => {
+    return editorGridRef.current?.getActiveEditorHandle() || editorHostRef.current || null
+  }, [])
   const [currentSelection, setCurrentSelection] = useState<SelectionInfo | null>(null)
 
   const handleToggleAi = useCallback(() => {
@@ -634,12 +643,12 @@ export const App: React.FC = () => {
   }, [rightPaneTab])
 
   const handleInsertAtCursor = useCallback((code: string) => {
-    editorHostRef.current?.insertAtCursor(code)
-  }, [])
+    getActiveEditor()?.insertAtCursor(code)
+  }, [getActiveEditor])
 
   const handleReplaceSelection = useCallback((code: string) => {
-    editorHostRef.current?.replaceSelection(code)
-  }, [])
+    getActiveEditor()?.replaceSelection(code)
+  }, [getActiveEditor])
 
   // Initialize and apply theme CSS tokens
   useEffect(() => {
@@ -708,6 +717,41 @@ export const App: React.FC = () => {
       activeTabId,
     })
   }, [workspacePath, workspaceName, tabs, activeTabId])
+
+  // Register active file contents with Global Search, Test Explorer, and LSP Intelligence engines
+  useEffect(() => {
+    globalSearchService.registerWorkspace(() => fileContents)
+    testExplorerService.registerWorkspace(() => fileContents)
+    lspService.registerWorkspace(() => fileContents)
+  }, [fileContents])
+
+  const handleApplyRename = useCallback((renameResult: LspRenameResult) => {
+    setFileContents((prev) => {
+      const updated = lspService.applyRename(renameResult, prev)
+      return updated
+    })
+    setTabs((prevTabs) =>
+      prevTabs.map((t) =>
+        renameResult.changes.has(t.id) ? { ...t, isDirty: true } : t
+      )
+    )
+    notificationService.notifyInfo(
+      'Symbol Refactored',
+      `Renamed "${renameResult.symbolName}" to "${renameResult.newName}" across ${renameResult.affectedFiles} file(s) (${renameResult.totalOccurrences} occurrences).`
+    )
+  }, [])
+
+  const handleOpenFileWithPosition = useCallback((filePath: string, line: number, column = 1) => {
+    if (!tabs.some((t) => t.id === filePath)) {
+      const fileName = filePath.split(/[/\\]/).pop() || filePath
+      const lang = getLanguageFromFilename(fileName)
+      setTabs((prev) => [...prev, { id: filePath, name: fileName, language: lang }])
+    }
+    setActiveTabId(filePath)
+    setTimeout(() => {
+      getActiveEditor()?.goToLine(line, column)
+    }, 50)
+  }, [tabs, getActiveEditor])
 
   // Diagnostic & Linter Problem Tracking
   const [diagnosticCounts, setDiagnosticCounts] = useState<{ errors: number; warnings: number }>({ errors: 0, warnings: 0 })
@@ -830,6 +874,56 @@ export const App: React.FC = () => {
     setActiveTabId(res.path)
   }
 
+  // Jump and navigate to file and line from Global Search results
+  const handleOpenFileAndNavigate = useCallback(
+    async (filePath: string, lineNumber: number, column: number = 1) => {
+      const fileName = filePath.split(/[/\\]/).pop() || filePath
+      let targetTabId = filePath
+
+      if (fileContents[filePath] !== undefined) {
+        targetTabId = filePath
+      } else if (fileContents[fileName] !== undefined) {
+        targetTabId = fileName
+      } else if (window.electronAPI?.readFile && filePath) {
+        try {
+          const content = await window.electronAPI.readFile(filePath)
+          setFileContents((prev) => ({ ...prev, [filePath]: content }))
+          targetTabId = filePath
+        } catch (err) {
+          console.error('Failed to read file for search navigation:', err)
+        }
+      }
+
+      if (!tabs.some((t) => t.id === targetTabId)) {
+        setTabs((prev) => [
+          ...prev,
+          { id: targetTabId, name: fileName, language: getLanguageFromFilename(fileName) },
+        ])
+      }
+      setActiveTabId(targetTabId)
+
+      // Reveal line and cursor position
+      setTimeout(() => {
+        getActiveEditor()?.goToLine(lineNumber, column)
+      }, 60)
+    },
+    [fileContents, tabs, getActiveEditor]
+  )
+
+  // Synchronize workspace file contents with Global Search & Batch Replace service
+  useEffect(() => {
+    globalSearchService.registerWorkspace(
+      () => fileContents,
+      (filePath, newContent) => {
+        setFileContents((prev) => ({ ...prev, [filePath]: newContent }))
+        setTabs((prev) =>
+          prev.map((t) => (t.id === filePath || t.name === filePath ? { ...t, isDirty: true } : t))
+        )
+      }
+    )
+    testExplorerService.registerWorkspace(() => fileContents)
+  }, [fileContents])
+
   const [pendingNewFolder, setPendingNewFolder] = useState<{
     folderName: string
     folderPath: string
@@ -917,7 +1011,20 @@ export const App: React.FC = () => {
     const activeTab = tabs.find((t) => t.id === activeTabId)
     if (!activeTab) return
 
-    const content = fileContents[activeTabId] ?? ''
+    let content = fileContents[activeTabId] ?? ''
+
+    // Auto-format on save if configured
+    if (formatterService.getOptions().formatOnSave) {
+      try {
+        const formatRes = await formatterService.formatDocument(content, activeTab.language)
+        if (formatRes.hasChanges) {
+          content = formatRes.formatted
+          setFileContents((prev) => ({ ...prev, [activeTabId]: content }))
+        }
+      } catch (err) {
+        console.warn('Format on save skipped due to error:', err)
+      }
+    }
 
     // If file has an absolute path on disk
     if (activeTabId.includes('/') || activeTabId.includes('\\')) {
@@ -1142,6 +1249,9 @@ export const App: React.FC = () => {
         }
       },
       onClearAllBreakpoints: () => debugService.clearAllBreakpoints(),
+      onGoToDefinition: () => getActiveEditor()?.findDefinition(),
+      onFindReferences: () => getActiveEditor()?.findReferences(),
+      onRenameSymbol: () => getActiveEditor()?.openRename(),
       onWelcomeGuide: () => {
         const welcomeTab = tabs.find((t) => t.id === 'welcome.ts')
         if (welcomeTab) {
@@ -1176,6 +1286,7 @@ export const App: React.FC = () => {
       handleOpenTerminalConfig,
       handleOpenProblems,
       tabs,
+      getActiveEditor,
     ]
   )
 
@@ -1206,35 +1317,55 @@ export const App: React.FC = () => {
       { id: 'edit.symbols', title: 'Go to Symbol in Active Buffer...', category: 'Editor', shortcut: 'Ctrl+Shift+O', description: 'Outline symbols in file (@)', handler: () => openPalette('@') },
       { id: 'edit.workspaceSymbols', title: 'Go to Symbol in Workspace...', category: 'Editor', shortcut: 'Ctrl+T', description: 'Search symbols and features across project (#)', handler: () => openPalette('#') },
 
+      // LSP Code Intelligence & Refactoring
+      { id: 'editor.goToDefinition', title: 'Go to Definition', category: 'Editor', shortcut: 'F12', description: 'Jump to symbol declaration', handler: () => getActiveEditor()?.findDefinition() },
+      { id: 'editor.findReferences', title: 'Find All References', category: 'Editor', shortcut: 'Shift+F12', description: 'Find all symbol occurrences across workspace', handler: () => getActiveEditor()?.findReferences() },
+      { id: 'editor.renameSymbol', title: 'Rename Symbol', category: 'Editor', shortcut: 'F2', description: 'Refactor identifier across all workspace files', handler: () => getActiveEditor()?.openRename() },
+      { id: 'git.resolveConflicts', title: 'Git: Open 3-Way Merge Conflict Studio', category: 'Git', description: 'Resolve merge conflicts with visual comparison and one-click actions', handler: () => getActiveEditor()?.openMergeStudio() },
+      { id: 'ai.inlineCopilot', title: 'AI: Inline Code Copilot', category: 'AI', shortcut: 'Ctrl+K', description: 'Generate, refactor, and transform selected code with inline AI prompt', handler: () => getActiveEditor()?.openCopilot() },
+
       // Editing & Multi-Cursor Actions
-      { id: 'edit.format', title: 'Format Document', category: 'Editor', shortcut: 'Shift+Alt+F', description: 'Auto-format active code buffer', handler: () => editorHostRef.current?.formatDocument() },
-      { id: 'edit.find', title: 'Find in Active Buffer', category: 'Editor', shortcut: 'Ctrl+F', description: 'Open in-editor Find overlay', handler: () => editorHostRef.current?.openFind() },
-      { id: 'edit.replace', title: 'Replace in Active Buffer', category: 'Editor', shortcut: 'Ctrl+H', description: 'Open in-editor Find & Replace overlay', handler: () => editorHostRef.current?.openReplace() },
-      { id: 'edit.findAll', title: 'Find All (Select All Occurrences)', category: 'Editor', shortcut: 'Alt+Enter', description: 'Spawn multi-cursors on all search matches', handler: () => editorHostRef.current?.selectAllOccurrences() },
-      { id: 'edit.replaceAll', title: 'Replace All Matches in Buffer', category: 'Editor', shortcut: 'Ctrl+Alt+Enter', description: 'Batch replace all search occurrences', handler: () => editorHostRef.current?.openReplace() },
-      { id: 'edit.nextMatch', title: 'Add Next Occurrence to Multi-Cursor', category: 'Editor', shortcut: 'Ctrl+D', description: 'Select next matching word occurrence', handler: () => editorHostRef.current?.addSelectionToNextFindMatch() },
-      { id: 'edit.selectAllMatches', title: 'Select All Occurrences (Multi-Cursor)', category: 'Editor', shortcut: 'Ctrl+Shift+L', description: 'Multi-cursor selection across all matches', handler: () => editorHostRef.current?.selectAllOccurrences() },
-      { id: 'edit.cursorAbove', title: 'Insert Cursor Above', category: 'Editor', shortcut: 'Ctrl+Alt+Up', description: 'Add editing cursor on previous line', handler: () => editorHostRef.current?.insertCursorAbove() },
-      { id: 'edit.cursorBelow', title: 'Insert Cursor Below', category: 'Editor', shortcut: 'Ctrl+Alt+Down', description: 'Add editing cursor on next line', handler: () => editorHostRef.current?.insertCursorBelow() },
-      { id: 'edit.commentLine', title: 'Toggle Line Comment', category: 'Editor', shortcut: 'Ctrl+/', description: 'Add/remove line comments on active selection', handler: () => editorHostRef.current?.triggerAction('editor.action.commentLine') },
-      { id: 'edit.duplicateLine', title: 'Duplicate Line Down', category: 'Editor', shortcut: 'Shift+Alt+Down', description: 'Duplicate cursor line downwards', handler: () => editorHostRef.current?.triggerAction('editor.action.copyLinesDownAction') },
-      { id: 'edit.deleteLine', title: 'Delete Line', category: 'Editor', shortcut: 'Ctrl+Shift+K', description: 'Delete current line immediately', handler: () => editorHostRef.current?.triggerAction('editor.action.deleteLines') },
-      { id: 'edit.uppercase', title: 'Transform: Convert to UPPERCASE', category: 'Editor', description: 'Capitalize selected text or entire buffer', handler: () => editorHostRef.current?.transformSelection('uppercase') },
-      { id: 'edit.lowercase', title: 'Transform: Convert to lowercase', category: 'Editor', description: 'Lower-case selected text or entire buffer', handler: () => editorHostRef.current?.transformSelection('lowercase') },
-      { id: 'edit.titlecase', title: 'Transform: Convert to Title Case', category: 'Editor', description: 'Capitalize each word in selection', handler: () => editorHostRef.current?.transformSelection('titlecase') },
-      { id: 'edit.trim', title: 'Transform: Trim Trailing Whitespace', category: 'Editor', description: 'Clean up trailing spaces on all lines', handler: () => editorHostRef.current?.transformSelection('trim') },
-      { id: 'edit.sort', title: 'Transform: Sort Lines Alphabetically', category: 'Editor', description: 'Sort lines in alphabetical order', handler: () => editorHostRef.current?.transformSelection('sort') },
+      { id: 'edit.format', title: 'Format Document', category: 'Editor', shortcut: 'Shift+Alt+F', description: 'Auto-format active code buffer', handler: () => getActiveEditor()?.formatDocument() },
+      { id: 'edit.find', title: 'Find in Active Buffer', category: 'Editor', shortcut: 'Ctrl+F', description: 'Open in-editor Find overlay', handler: () => getActiveEditor()?.openFind() },
+      { id: 'edit.replace', title: 'Replace in Active Buffer', category: 'Editor', shortcut: 'Ctrl+H', description: 'Open in-editor Find & Replace overlay', handler: () => getActiveEditor()?.openReplace() },
+      { id: 'edit.findAll', title: 'Find All (Select All Occurrences)', category: 'Editor', shortcut: 'Alt+Enter', description: 'Spawn multi-cursors on all search matches', handler: () => getActiveEditor()?.selectAllOccurrences() },
+      { id: 'edit.replaceAll', title: 'Replace All Matches in Buffer', category: 'Editor', shortcut: 'Ctrl+Alt+Enter', description: 'Batch replace all search occurrences', handler: () => getActiveEditor()?.openReplace() },
+      { id: 'edit.nextMatch', title: 'Add Next Occurrence to Multi-Cursor', category: 'Editor', shortcut: 'Ctrl+D', description: 'Select next matching word occurrence', handler: () => getActiveEditor()?.addSelectionToNextFindMatch() },
+      { id: 'edit.selectAllMatches', title: 'Select All Occurrences (Multi-Cursor)', category: 'Editor', shortcut: 'Ctrl+Shift+L', description: 'Multi-cursor selection across all matches', handler: () => getActiveEditor()?.selectAllOccurrences() },
+      { id: 'edit.cursorAbove', title: 'Insert Cursor Above', category: 'Editor', shortcut: 'Ctrl+Alt+Up', description: 'Add editing cursor on previous line', handler: () => getActiveEditor()?.insertCursorAbove() },
+      { id: 'edit.cursorBelow', title: 'Insert Cursor Below', category: 'Editor', shortcut: 'Ctrl+Alt+Down', description: 'Add editing cursor on next line', handler: () => getActiveEditor()?.insertCursorBelow() },
+      { id: 'edit.commentLine', title: 'Toggle Line Comment', category: 'Editor', shortcut: 'Ctrl+/', description: 'Add/remove line comments on active selection', handler: () => getActiveEditor()?.triggerAction('editor.action.commentLine') },
+      { id: 'edit.duplicateLine', title: 'Duplicate Line Down', category: 'Editor', shortcut: 'Shift+Alt+Down', description: 'Duplicate cursor line downwards', handler: () => getActiveEditor()?.triggerAction('editor.action.copyLinesDownAction') },
+      { id: 'edit.deleteLine', title: 'Delete Line', category: 'Editor', shortcut: 'Ctrl+Shift+K', description: 'Delete current line immediately', handler: () => getActiveEditor()?.triggerAction('editor.action.deleteLines') },
+      { id: 'edit.uppercase', title: 'Transform: Convert to UPPERCASE', category: 'Editor', description: 'Capitalize selected text or entire buffer', handler: () => getActiveEditor()?.transformSelection('uppercase') },
+      { id: 'edit.lowercase', title: 'Transform: Convert to lowercase', category: 'Editor', description: 'Lower-case selected text or entire buffer', handler: () => getActiveEditor()?.transformSelection('lowercase') },
+      { id: 'edit.titlecase', title: 'Transform: Convert to Title Case', category: 'Editor', description: 'Capitalize each word in selection', handler: () => getActiveEditor()?.transformSelection('titlecase') },
+      { id: 'edit.trim', title: 'Transform: Trim Trailing Whitespace', category: 'Editor', description: 'Clean up trailing spaces on all lines', handler: () => getActiveEditor()?.transformSelection('trim') },
+      { id: 'edit.sort', title: 'Transform: Sort Lines Alphabetically', category: 'Editor', description: 'Sort lines in alphabetical order', handler: () => getActiveEditor()?.transformSelection('sort') },
+
+      // Split Editor Panes & Layouts
+      { id: 'view.splitVertical', title: 'View: Split Editor Right (Side-by-Side)', category: 'View', shortcut: 'Ctrl+\\', description: 'Split current editor into dual vertical columns', handler: () => editorGridRef.current?.splitVertical() },
+      { id: 'view.splitHorizontal', title: 'View: Split Editor Down (Top-to-Bottom)', category: 'View', shortcut: 'Ctrl+K Ctrl+\\', description: 'Split current editor into dual horizontal rows', handler: () => editorGridRef.current?.splitHorizontal() },
+      { id: 'view.splitGrid2x2', title: 'View: Split Editor into 2x2 Grid', category: 'View', description: 'Split active editor into 4 quadrant panes', handler: () => editorGridRef.current?.splitGrid2x2() },
+      { id: 'view.singleEditor', title: 'View: Single Editor Pane', category: 'View', description: 'Collapse split panes to standard single view', handler: () => editorGridRef.current?.setSingleLayout() },
+      { id: 'view.focusPane1', title: 'View: Focus First Editor Group', category: 'View', shortcut: 'Ctrl+1', description: 'Switch active keyboard focus to Pane 1', handler: () => editorGridRef.current?.focusPane('pane-1') },
+      { id: 'view.focusPane2', title: 'View: Focus Second Editor Group', category: 'View', shortcut: 'Ctrl+2', description: 'Switch active keyboard focus to Pane 2', handler: () => editorGridRef.current?.focusPane('pane-2') },
+      { id: 'view.focusPane3', title: 'View: Focus Third Editor Group', category: 'View', shortcut: 'Ctrl+3', description: 'Switch active keyboard focus to Pane 3', handler: () => editorGridRef.current?.focusPane('pane-3') },
+      { id: 'view.focusPane4', title: 'View: Focus Fourth Editor Group', category: 'View', shortcut: 'Ctrl+4', description: 'Switch active keyboard focus to Pane 4', handler: () => editorGridRef.current?.focusPane('pane-4') },
 
       // View & Layout
       { id: 'view.toggleSidebar', title: 'Toggle Primary Sidebar', category: 'View', shortcut: 'Ctrl+B', description: 'Show/hide primary activity sidebar', handler: handleToggleSidebar },
       { id: 'view.explorer', title: 'Show Explorer', category: 'View', shortcut: 'Ctrl+Shift+E', description: 'Reveal workspace directory navigator', handler: () => setActiveView('files') },
       { id: 'view.git', title: 'Show Source Control & Git Graph', category: 'View', shortcut: 'Ctrl+Shift+G', description: 'Open Git visual commit tree', handler: () => setActiveView('git') },
       { id: 'view.search', title: 'Search in Workspace', category: 'View', shortcut: 'Ctrl+Shift+F', description: 'Global workspace pattern search', handler: () => setActiveView('search') },
+      { id: 'view.testing', title: 'Show Testing & Test Explorer', category: 'View', shortcut: 'Ctrl+Shift+T', description: 'Open test suite explorer and test runner', handler: () => setActiveView('testing') },
+      { id: 'test.runAll', title: 'Testing: Run All Tests in Workspace', category: 'Run', description: 'Execute full test suite', handler: () => { setActiveView('testing'); testExplorerService.runAllTests(); } },
+      { id: 'test.runFailed', title: 'Testing: Rerun Failed Tests', category: 'Run', description: 'Rerun only previously failing test cases', handler: () => { setActiveView('testing'); testExplorerService.runFailedTests(); } },
       { id: 'view.debug', title: 'Show Run & Debug Panel', category: 'View', shortcut: 'Ctrl+Shift+D', description: 'Open debug inspection dock', handler: () => setActiveView('debug') },
       { id: 'view.notifications', title: 'Show Notifications & System Alerts', category: 'View', shortcut: 'Ctrl+Shift+N', description: 'Open notification drawer', handler: handleToggleNotifications },
-      { id: 'view.wordWrap', title: 'Toggle Word Wrap', category: 'View', shortcut: 'Alt+Z', description: 'Wrap code lines to editor viewport', handler: () => editorHostRef.current?.triggerAction('editor.action.toggleWordWrap') },
-      { id: 'view.foldAll', title: 'Fold All Code Blocks', category: 'View', description: 'Collapse all functions and classes', handler: () => editorHostRef.current?.triggerAction('editor.foldAll') },
-      { id: 'view.unfoldAll', title: 'Unfold All Code Blocks', category: 'View', description: 'Expand all functions and classes', handler: () => editorHostRef.current?.triggerAction('editor.unfoldAll') },
+      { id: 'view.wordWrap', title: 'Toggle Word Wrap', category: 'View', shortcut: 'Alt+Z', description: 'Wrap code lines to editor viewport', handler: () => getActiveEditor()?.triggerAction('editor.action.toggleWordWrap') },
+      { id: 'view.foldAll', title: 'Fold All Code Blocks', category: 'View', description: 'Collapse all functions and classes', handler: () => getActiveEditor()?.triggerAction('editor.foldAll') },
+      { id: 'view.unfoldAll', title: 'Unfold All Code Blocks', category: 'View', description: 'Expand all functions and classes', handler: () => getActiveEditor()?.triggerAction('editor.unfoldAll') },
       { id: 'view.themes', title: 'Open Liquid Glass Themes Drawer', category: 'View', description: 'Browse and switch themes', handler: () => setActiveView('themes') },
       { id: 'view.settings', title: 'Open Preferences / Settings', category: 'Preferences', shortcut: 'Ctrl+,', description: 'Configure editor options', handler: () => setActiveView('settings') },
 
@@ -1407,22 +1538,16 @@ export const App: React.FC = () => {
         debugService.toggleBreakpoint(active.id, cursorPos.line)
       }
     },
-    onFind: () => editorHostRef.current?.openFind(),
-    onReplace: () => editorHostRef.current?.openReplace(),
-    onFindAll: () => editorHostRef.current?.selectAllOccurrences(),
-    onReplaceAll: () => editorHostRef.current?.openReplace(),
-    onAddSelectionToNextMatch: () => editorHostRef.current?.addSelectionToNextFindMatch(),
-    onSelectAllOccurrences: () => editorHostRef.current?.selectAllOccurrences(),
-    onCursorAbove: () => editorHostRef.current?.insertCursorAbove(),
-    onCursorBelow: () => editorHostRef.current?.insertCursorBelow(),
+    onFind: () => getActiveEditor()?.openFind(),
+    onReplace: () => getActiveEditor()?.openReplace(),
+    onFindAll: () => getActiveEditor()?.selectAllOccurrences(),
+    onReplaceAll: () => getActiveEditor()?.openReplace(),
+    onAddSelectionToNextMatch: () => getActiveEditor()?.addSelectionToNextFindMatch(),
+    onSelectAllOccurrences: () => getActiveEditor()?.selectAllOccurrences(),
+    onCursorAbove: () => getActiveEditor()?.insertCursorAbove(),
+    onCursorBelow: () => getActiveEditor()?.insertCursorBelow(),
+    onFormatDocument: () => getActiveEditor()?.formatDocument(),
   })
-
-  const handleEditorChange = (value: string | undefined) => {
-    if (value !== undefined) {
-      setFileContents((prev) => ({ ...prev, [activeTabId]: value }))
-      setTabs(tabs.map((t) => (t.id === activeTabId ? { ...t, isDirty: true } : t)))
-    }
-  }
 
   const activeTab = tabs.find((t) => t.id === activeTabId)
   const currentContent = activeTab ? fileContents[activeTab.id] ?? '' : ''
@@ -1550,6 +1675,7 @@ export const App: React.FC = () => {
                 currentThemeId={currentTheme.id}
                 onSelectTheme={handleSelectTheme}
                 onOpenFile={handleOpenFileItem}
+                onOpenFileAndNavigate={handleOpenFileAndNavigate}
                 activeFilePath={activeTabId}
                 workspaceName={workspaceName}
                 workspacePath={workspacePath}
@@ -1590,6 +1716,9 @@ export const App: React.FC = () => {
               const active = tabs.find((t) => t.id === activeTabId)
               debugService.startDebugging(active?.id || 'main.ts')
             }}
+            onSplitVertical={() => editorGridRef.current?.splitVertical()}
+            onSplitHorizontal={() => editorGridRef.current?.splitHorizontal()}
+            onSplitGrid2x2={() => editorGridRef.current?.splitGrid2x2()}
           />
           {/* Floating Liquid Glass Execution Control Toolbar */}
           <DebugToolbar
@@ -1598,22 +1727,35 @@ export const App: React.FC = () => {
                 setActiveTabId(filePath)
               }
               setTimeout(() => {
-                editorHostRef.current?.goToLine(line)
+                getActiveEditor()?.goToLine(line)
               }, 50)
             }}
           />
 
-          {activeTab ? (
-            <EditorHost
-              ref={editorHostRef}
-              activeFilePath={activeTabId}
-              content={currentContent}
-              language={currentLanguage}
-              theme={currentTheme}
-              onChange={handleEditorChange}
+          {tabs.length > 0 ? (
+            <EditorGrid
+              ref={editorGridRef}
+              tabs={tabs}
+              fileContents={fileContents}
+              currentTheme={currentTheme}
+              activeTabId={activeTabId}
+              onSelectTab={handleSelectTab}
+              onCloseTab={handleCloseTab}
+              onNewTab={handleNewFile}
+              onEditorChange={(tabId, val) => {
+                if (val !== undefined) {
+                  setFileContents((prev) => ({ ...prev, [tabId]: val }))
+                  setTabs((prevTabs) =>
+                    prevTabs.map((t) => (t.id === tabId ? { ...t, isDirty: true } : t))
+                  )
+                }
+              }}
               onCursorChange={(line, col) => setCursorPos({ line, col })}
               onSelectionChange={setCurrentSelection}
               onEditorReady={handleEditorReady}
+              getLanguageForFilename={getLanguageFromFilename}
+              onNavigateFile={handleOpenFileWithPosition}
+              onApplyWorkspaceRename={handleApplyRename}
             />
           ) : (
             <div className="empty-workspace">

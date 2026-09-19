@@ -4,7 +4,15 @@ import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { debugService } from '../../services/debugService'
+import { formatterService } from '../../services/formatterService'
+import { lspService, LspLocation, LspRenameResult } from '../../services/lspService'
 import { FindReplaceWidget, FindOptions } from './FindReplaceWidget'
+import { BreadcrumbsBar } from './BreadcrumbsBar'
+import { RenameModal } from './RenameModal'
+import { LspReferencesModal } from './LspReferencesModal'
+import { MergeStudioModal } from '../Git/MergeStudioModal'
+import { InlineBlameLens } from './InlineBlameLens'
+import { InlineCopilotWidget } from '../AI/InlineCopilotWidget'
 
 // Force @monaco-editor/react to use local monaco bundle, bypassing cdn.jsdelivr.net completely
 loader.config({ monaco })
@@ -45,6 +53,11 @@ export interface EditorHostHandle {
   addSelectionToNextFindMatch: () => void
   insertCursorAbove: () => void
   insertCursorBelow: () => void
+  findDefinition: () => void
+  findReferences: () => void
+  openRename: () => void
+  openMergeStudio: () => void
+  openCopilot: () => void
 }
 
 interface EditorHostProps {
@@ -52,10 +65,13 @@ interface EditorHostProps {
   language: string
   theme: ThemeDefinition
   activeFilePath?: string
+  showBreadcrumbs?: boolean
   onChange?: (value: string | undefined) => void
   onCursorChange?: (line: number, column: number) => void
   onSelectionChange?: (selection: SelectionInfo | null) => void
   onEditorReady?: () => void
+  onNavigateFile?: (filePath: string, line: number, column?: number) => void
+  onApplyWorkspaceRename?: (result: LspRenameResult) => void
 }
 
 export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
@@ -63,15 +79,31 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   language,
   theme,
   activeFilePath = 'welcome.ts',
+  showBreadcrumbs = true,
   onChange,
   onCursorChange,
   onSelectionChange,
   onEditorReady,
+  onNavigateFile,
+  onApplyWorkspaceRename,
 }, ref) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
   const decorationsRef = useRef<string[]>([])
   const searchDecorationsRef = useRef<string[]>([])
+
+  // Cursor Line for Breadcrumbs
+  const [currentCursorLine, setCurrentCursorLine] = useState(1)
+
+  // LSP References & Rename Modals
+  const [isRenameOpen, setIsRenameOpen] = useState(false)
+  const [renameInitialSymbol, setRenameInitialSymbol] = useState('')
+  const [isReferencesOpen, setIsReferencesOpen] = useState(false)
+  const [referencesModalTitle, setReferencesModalTitle] = useState('')
+  const [referencesModalSymbol, setReferencesModalSymbol] = useState('')
+  const [referencesLocations, setReferencesLocations] = useState<LspLocation[]>([])
+  const [isMergeStudioOpen, setIsMergeStudioOpen] = useState(false)
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false)
 
   // Find & Replace Suite State
   const [isFindOpen, setIsFindOpen] = useState(false)
@@ -296,10 +328,23 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         editor.focus()
       }
     },
-    formatDocument: () => {
+    formatDocument: async () => {
       const editor = editorRef.current
-      if (editor) {
-        editor.getAction('editor.action.formatDocument')?.run()
+      if (!editor) return
+      const formatAction = editor.getAction('editor.action.formatDocument')
+      if (formatAction) {
+        await formatAction.run()
+      } else {
+        const model = editor.getModel()
+        if (model) {
+          const res = await formatterService.formatDocument(model.getValue(), language)
+          if (res.hasChanges) {
+            editor.executeEdits('format-document', [{
+              range: model.getFullModelRange(),
+              text: res.formatted,
+            }])
+          }
+        }
       }
     },
     triggerAction: (actionId: string) => {
@@ -482,6 +527,55 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         editor.getAction('editor.action.insertCursorBelow')?.run()
       }
     },
+    findDefinition: () => {
+      const editor = editorRef.current
+      if (!editor) return
+      const model = editor.getModel()
+      const pos = editor.getPosition()
+      if (!model || !pos) return
+      const word = model.getWordAtPosition(pos)
+      if (!word) return
+      const def = lspService.findDefinition(word.word, activeFilePath, pos.lineNumber)
+      if (def) {
+        if (onNavigateFile && def.filePath !== activeFilePath) {
+          onNavigateFile(def.filePath, def.lineNumber, def.column)
+        } else {
+          editor.setPosition({ lineNumber: def.lineNumber, column: def.column })
+          editor.revealLineInCenter(def.lineNumber)
+        }
+      }
+    },
+    findReferences: () => {
+      const editor = editorRef.current
+      if (!editor) return
+      const model = editor.getModel()
+      const pos = editor.getPosition()
+      if (!model || !pos) return
+      const word = model.getWordAtPosition(pos)
+      if (!word) return
+      const refs = lspService.findReferences(word.word)
+      setReferencesModalTitle('References')
+      setReferencesModalSymbol(word.word)
+      setReferencesLocations(refs)
+      setIsReferencesOpen(true)
+    },
+    openRename: () => {
+      const editor = editorRef.current
+      if (!editor) return
+      const model = editor.getModel()
+      const pos = editor.getPosition()
+      if (!model || !pos) return
+      const word = model.getWordAtPosition(pos)
+      if (!word) return
+      setRenameInitialSymbol(word.word)
+      setIsRenameOpen(true)
+    },
+    openMergeStudio: () => {
+      setIsMergeStudioOpen(true)
+    },
+    openCopilot: () => {
+      setIsCopilotOpen(true)
+    },
   }))
 
   const registerAndApplyTheme = (monacoInstance: typeof monaco, targetTheme: ThemeDefinition) => {
@@ -593,8 +687,9 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
     registerAndApplyTheme(monacoInstance, theme)
 
-    // Track cursor position for reactive status bar updates
+    // Track cursor position for reactive status bar updates and breadcrumbs
     editor.onDidChangeCursorPosition((e) => {
+      setCurrentCursorLine(e.position.lineNumber)
       onCursorChange?.(e.position.lineNumber, e.position.column)
     })
 
@@ -622,6 +717,54 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           debugService.toggleBreakpoint(activeFilePath, line)
         }
       }
+    })
+
+    // Register F12 (Go to Definition)
+    editor.addCommand(monacoInstance.KeyCode.F12, () => {
+      const model = editor.getModel()
+      const pos = editor.getPosition()
+      if (!model || !pos) return
+      const word = model.getWordAtPosition(pos)
+      if (!word) return
+      const def = lspService.findDefinition(word.word, activeFilePath, pos.lineNumber)
+      if (def) {
+        if (onNavigateFile && def.filePath !== activeFilePath) {
+          onNavigateFile(def.filePath, def.lineNumber, def.column)
+        } else {
+          editor.setPosition({ lineNumber: def.lineNumber, column: def.column })
+          editor.revealLineInCenter(def.lineNumber)
+        }
+      }
+    })
+
+    // Register Shift+F12 (Find References)
+    editor.addCommand(monacoInstance.KeyMod.Shift | monacoInstance.KeyCode.F12, () => {
+      const model = editor.getModel()
+      const pos = editor.getPosition()
+      if (!model || !pos) return
+      const word = model.getWordAtPosition(pos)
+      if (!word) return
+      const refs = lspService.findReferences(word.word)
+      setReferencesModalTitle('References')
+      setReferencesModalSymbol(word.word)
+      setReferencesLocations(refs)
+      setIsReferencesOpen(true)
+    })
+
+    // Register F2 (Rename Symbol)
+    editor.addCommand(monacoInstance.KeyCode.F2, () => {
+      const model = editor.getModel()
+      const pos = editor.getPosition()
+      if (!model || !pos) return
+      const word = model.getWordAtPosition(pos)
+      if (!word) return
+      setRenameInitialSymbol(word.word)
+      setIsRenameOpen(true)
+    })
+
+    // Register Ctrl+K (Inline AI Copilot)
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyK, () => {
+      setIsCopilotOpen(true)
     })
 
     // Initial decorations update
@@ -653,7 +796,31 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   }, [theme])
 
   return (
-    <div className="editor-host-container">
+    <div className="editor-host-container flex flex-col h-full w-full relative">
+      {/* Document Breadcrumbs Bar */}
+      {showBreadcrumbs && (
+        <BreadcrumbsBar
+          filePath={activeFilePath}
+          fileContent={content}
+          cursorLine={currentCursorLine}
+          onNavigateLine={(line) => {
+            const editor = editorRef.current
+            if (editor) {
+              editor.setPosition({ lineNumber: line, column: 1 })
+              editor.revealLineInCenter(line)
+              editor.focus()
+            }
+          }}
+        />
+      )}
+
+      {/* Inline Git Blame Lens */}
+      <InlineBlameLens
+        filePath={activeFilePath}
+        fileContent={content}
+        cursorLine={currentCursorLine}
+      />
+
       {/* Floating Liquid Glass Find & Replace Suite Overlay */}
       <FindReplaceWidget
         isOpen={isFindOpen}
@@ -673,50 +840,132 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         onSelectAllMatches={handleSelectAllMatches}
       />
 
-      <Editor
-        height="100%"
-        language={language}
-        value={content}
-        onChange={onChange}
-        onMount={handleEditorDidMount}
-        options={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 13.5,
-          lineHeight: 22,
-          fontLigatures: true,
-          cursorBlinking: 'smooth',
-          cursorSmoothCaretAnimation: 'on',
-          smoothScrolling: true,
-          glyphMargin: true, // Enable Gutter Glyph Margin for Breakpoints & Execution Arrow
-          multiCursorModifier: 'alt', // Alt+Click inserts multiple cursors
-          multiCursorPaste: 'spread',
-          multiCursorLimit: 10000,
-          // FIX: Disable sticky scroll so symbols are not persistently pinned on scroll
-          stickyScroll: {
-            enabled: false,
-          },
-          // Polish the code preview (minimap) on the right
-          minimap: {
-            enabled: true,
-            renderCharacters: true,
-            maxColumn: 90,
-            scale: 1,
-            showSlider: 'always',
-            autohide: false,
-            side: 'right',
-          },
-          padding: { top: 16, bottom: 16 },
-          roundedSelection: true,
-          bracketPairColorization: { enabled: true },
-          guides: {
-            bracketPairs: true,
-            indentation: true,
-          },
-          renderLineHighlight: 'all',
-          scrollBeyondLastLine: false,
-          overviewRulerBorder: false,
+      {/* LSP Rename Symbol Modal */}
+      <RenameModal
+        isOpen={isRenameOpen}
+        initialSymbolName={renameInitialSymbol}
+        currentFilePath={activeFilePath}
+        onClose={() => setIsRenameOpen(false)}
+        onApplyRename={(result) => {
+          onApplyWorkspaceRename?.(result)
         }}
       />
+
+      {/* LSP Definitions / References Modal */}
+      <LspReferencesModal
+        isOpen={isReferencesOpen}
+        title={referencesModalTitle}
+        symbolName={referencesModalSymbol}
+        locations={referencesLocations}
+        onClose={() => setIsReferencesOpen(false)}
+        onSelectLocation={(loc) => {
+          if (onNavigateFile && loc.filePath !== activeFilePath) {
+            onNavigateFile(loc.filePath, loc.lineNumber, loc.column)
+          } else if (editorRef.current) {
+            editorRef.current.setPosition({ lineNumber: loc.lineNumber, column: loc.column })
+            editorRef.current.revealLineInCenter(loc.lineNumber)
+            editorRef.current.focus()
+          }
+        }}
+      />
+
+      {/* 3-Way Merge Conflict Studio Modal */}
+      <MergeStudioModal
+        isOpen={isMergeStudioOpen}
+        filePath={activeFilePath}
+        fileContent={content}
+        onClose={() => setIsMergeStudioOpen(false)}
+        onSaveResolvedContent={(resolved) => {
+          onChange?.(resolved)
+        }}
+      />
+
+      {/* Floating In-Editor AI Copilot Widget */}
+      <InlineCopilotWidget
+        isOpen={isCopilotOpen}
+        selectedText={
+          editorRef.current?.getModel()?.getValueInRange(
+            editorRef.current.getSelection() || {
+              startLineNumber: currentCursorLine,
+              startColumn: 1,
+              endLineNumber: currentCursorLine,
+              endColumn: 100,
+            }
+          ) || ''
+        }
+        language={language}
+        onClose={() => setIsCopilotOpen(false)}
+        onAccept={(transformed) => {
+          const editor = editorRef.current
+          if (editor) {
+            const selection = editor.getSelection()
+            if (selection && !selection.isEmpty()) {
+              editor.executeEdits('ai-copilot', [{
+                range: selection,
+                text: transformed,
+                forceMoveMarkers: true,
+              }])
+            } else {
+              const pos = editor.getPosition()
+              if (pos) {
+                editor.executeEdits('ai-copilot', [{
+                  range: new monacoRef.current!.Range(pos.lineNumber, 1, pos.lineNumber, 1),
+                  text: transformed + '\n',
+                  forceMoveMarkers: true,
+                }])
+              }
+            }
+            editor.focus()
+          }
+        }}
+      />
+
+      <div className="flex-1 min-h-0 relative">
+        <Editor
+          height="100%"
+          language={language}
+          value={content}
+          onChange={onChange}
+          onMount={handleEditorDidMount}
+          options={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 13.5,
+            lineHeight: 22,
+            fontLigatures: true,
+            cursorBlinking: 'smooth',
+            cursorSmoothCaretAnimation: 'on',
+            smoothScrolling: true,
+            glyphMargin: true, // Enable Gutter Glyph Margin for Breakpoints & Execution Arrow
+            multiCursorModifier: 'alt', // Alt+Click inserts multiple cursors
+            multiCursorPaste: 'spread',
+            multiCursorLimit: 10000,
+            // FIX: Disable sticky scroll so symbols are not persistently pinned on scroll
+            stickyScroll: {
+              enabled: false,
+            },
+            // Polish the code preview (minimap) on the right
+            minimap: {
+              enabled: true,
+              renderCharacters: true,
+              maxColumn: 90,
+              scale: 1,
+              showSlider: 'always',
+              autohide: false,
+              side: 'right',
+            },
+            padding: { top: 12, bottom: 16 },
+            roundedSelection: true,
+            bracketPairColorization: { enabled: true },
+            guides: {
+              bracketPairs: true,
+              indentation: true,
+            },
+            renderLineHighlight: 'all',
+            scrollBeyondLastLine: false,
+            overviewRulerBorder: false,
+          }}
+        />
+      </div>
 
       <style>{`
         .editor-host-container {

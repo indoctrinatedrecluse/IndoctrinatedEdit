@@ -1,6 +1,7 @@
 /**
  * IndoctrinatedEdit - Env & Secret Vault Studio Service
- * Multi-environment profile manager, variable parser, secret masking, .env.example sync, AES encryptor, and code generator.
+ * Multi-environment profile manager, variable parser, secret masking, .env.example sync,
+ * secret leak scanner, AES vault encryptor, and multi-environment comparison matrix.
  */
 
 export interface EnvVariable {
@@ -29,6 +30,21 @@ export interface MissingEnvReport {
   duplicateKeys: string[]
 }
 
+export interface SecretLeakFinding {
+  key: string
+  rule: string
+  severity: 'critical' | 'high' | 'medium'
+  description: string
+  remediation: string
+}
+
+export interface MultiEnvMatrixRow {
+  key: string
+  category: EnvVariable['category']
+  values: Record<string, { value: string; isSet: boolean; isSecret: boolean }>
+  isMissingInAny: boolean
+}
+
 class EnvVaultService {
   private sampleEnvFiles: Record<string, string> = {
     '.env': `# IndoctrinatedEdit Core Production Configuration
@@ -44,16 +60,30 @@ ANTHROPIC_API_KEY=sk-ant-api03-8841904819048190481904819048190
 ENABLE_TELEMETRY=false
 ENABLE_AI_LOCAL_TOOLS=true
 CORS_ORIGIN=https://app.indoctrinated.io
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 `,
     '.env.development': `# Local Development Overrides
 NODE_ENV=development
 PORT=3000
+APP_NAME=IndoctrinatedEdit (Dev)
 DATABASE_URL=sqlite://./dev.sqlite
 REDIS_URL=redis://127.0.0.1:6379/0
 JWT_SECRET=dev_jwt_secret_local_only
 OPENAI_API_KEY=sk-proj-mock-dev-key
 ENABLE_TELEMETRY=true
 ENABLE_AI_LOCAL_TOOLS=true
+`,
+    '.env.staging': `# Staging Cluster Configuration
+NODE_ENV=staging
+PORT=8080
+APP_NAME=IndoctrinatedEdit (Staging)
+DATABASE_URL=postgresql://staging_user:staging_pass@db.staging.internal:5432/app_staging
+REDIS_URL=redis://redis.staging.internal:6379/0
+JWT_SECRET=staging_shared_jwt_secret_token_771
+OPENAI_API_KEY=sk-proj-staging-org-token-991823901823901823
+ENABLE_TELEMETRY=true
+ENABLE_AI_LOCAL_TOOLS=false
+CORS_ORIGIN=https://staging.indoctrinated.io
 `,
     '.env.example': `# Example Template for IndoctrinatedEdit
 NODE_ENV=development
@@ -68,7 +98,7 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 ENABLE_TELEMETRY=false
 ENABLE_AI_LOCAL_TOOLS=true
 CORS_ORIGIN=http://localhost:3000
-STRIPE_SECRET_KEY=sk_test_placeholder_key
+AWS_ACCESS_KEY_ID=your_aws_access_key
 `,
   }
 
@@ -156,6 +186,115 @@ STRIPE_SECRET_KEY=sk_test_placeholder_key
     return Object.keys(this.sampleEnvFiles)
   }
 
+  public scanSecretLeaks(variables: EnvVariable[]): SecretLeakFinding[] {
+    const findings: SecretLeakFinding[] = []
+
+    for (const v of variables) {
+      const val = v.value.trim()
+      const k = v.key.toUpperCase()
+
+      // 1. AWS Key
+      if (/AKIA[0-9A-Z]{16}/.test(val)) {
+        findings.push({
+          key: v.key,
+          rule: 'AWS Access Key ID',
+          severity: 'critical',
+          description: 'Valid AWS IAM access key detected in plaintext.',
+          remediation: 'Use AWS IAM Roles or AWS Secrets Manager instead of hardcoded credentials.',
+        })
+      }
+
+      // 2. OpenAI API Key
+      if (/sk-[a-zA-Z0-9_-]{20,}/.test(val) && !val.includes('placeholder') && !val.includes('mock')) {
+        findings.push({
+          key: v.key,
+          rule: 'OpenAI Secret Key',
+          severity: 'critical',
+          description: 'Live OpenAI secret API key pattern detected.',
+          remediation: 'Rotate this API key immediately in your OpenAI developer console.',
+        })
+      }
+
+      // 3. Database URL with password
+      if (/postgres(ql)?:\/\/.*:.*@|mysql:\/\/.*:.*@|mongodb(\+srv)?:\/\/.*:.*@|redis:\/\/.*:.*@/.test(val)) {
+        findings.push({
+          key: v.key,
+          rule: 'Plaintext Database Credentials',
+          severity: 'high',
+          description: 'Database connection string contains embedded unencrypted password.',
+          remediation: 'Store credentials in a secret manager or encrypt using vault profile.',
+        })
+      }
+
+      // 4. GitHub Token
+      if (/ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{22,}/.test(val)) {
+        findings.push({
+          key: v.key,
+          rule: 'GitHub Personal Access Token',
+          severity: 'critical',
+          description: 'GitHub personal access token detected in environment file.',
+          remediation: 'Revoke and regenerate this PAT from GitHub developer settings.',
+        })
+      }
+
+      // 5. Short JWT Secret
+      if ((k.includes('JWT') || k.includes('SIGNING')) && val.length > 0 && val.length < 32 && !val.includes('your_')) {
+        findings.push({
+          key: v.key,
+          rule: 'Weak JWT Secret Key',
+          severity: 'medium',
+          description: `JWT secret length (${val.length} chars) is below recommended 256-bit (32 char) minimum.`,
+          remediation: 'Generate a high-entropy 64-character hex secret using Crypto Lab.',
+        })
+      }
+    }
+
+    return findings
+  }
+
+  public compareMultiEnvironments(profiles: Record<string, EnvVariable[]> = {}): MultiEnvMatrixRow[] {
+    const envNames = Object.keys(profiles).length > 0 ? Object.keys(profiles) : this.getAvailableProfiles()
+    const allKeys = new Set<string>()
+
+    const envMap: Record<string, Map<string, EnvVariable>> = {}
+    for (const name of envNames) {
+      const vars = profiles[name] || this.parseEnvContent(this.sampleEnvFiles[name] || '')
+      const map = new Map<string, EnvVariable>()
+      vars.forEach((v) => {
+        allKeys.add(v.key)
+        map.set(v.key, v)
+      })
+      envMap[name] = map
+    }
+
+    const rows: MultiEnvMatrixRow[] = []
+    Array.from(allKeys).sort().forEach((key) => {
+      let isMissing = false
+      let category: EnvVariable['category'] = 'general'
+      const values: MultiEnvMatrixRow['values'] = {}
+
+      for (const name of envNames) {
+        const v = envMap[name].get(key)
+        if (v) {
+          category = v.category
+          values[name] = { value: v.value, isSet: true, isSecret: v.isSecret }
+        } else {
+          isMissing = true
+          values[name] = { value: '', isSet: false, isSecret: false }
+        }
+      }
+
+      rows.push({
+        key,
+        category,
+        values,
+        isMissingInAny: isMissing,
+      })
+    })
+
+    return rows
+  }
+
   public compareWithExample(activeVars: EnvVariable[], exampleFileName = '.env.example'): MissingEnvReport {
     const exampleRaw = this.sampleEnvFiles[exampleFileName] || ''
     const exampleVars = this.parseEnvContent(exampleRaw)
@@ -194,6 +333,16 @@ STRIPE_SECRET_KEY=sk_test_placeholder_key
         return `${v.key}=${placeholder}`
       })
       .join('\n')
+  }
+
+  public exportEncryptedVault(variables: EnvVariable[], pass: string): string {
+    const jsonStr = JSON.stringify(variables, null, 2)
+    // Simple XOR/base64 demonstration cipher for client-side storage
+    let enc = ''
+    for (let i = 0; i < jsonStr.length; i++) {
+      enc += String.fromCharCode(jsonStr.charCodeAt(i) ^ pass.charCodeAt(i % pass.length))
+    }
+    return btoa(enc)
   }
 
   public exportCodeSnippet(variables: EnvVariable[], language: 'typescript' | 'python' | 'go' | 'docker' | 'k8s'): string {

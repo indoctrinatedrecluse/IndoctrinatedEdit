@@ -14,6 +14,7 @@ interface ShortcutHandlers {
   onGitGraph?: () => void
   onShowExplorer?: () => void
   onShowSearch?: () => void
+  onShowTesting?: () => void
   onShowDebug?: () => void
   onToggleAi?: () => void
   onToggleDatabase?: () => void
@@ -58,6 +59,10 @@ interface ShortcutHandlers {
   onSelectAllOccurrences?: () => void
   onCursorAbove?: () => void
   onCursorBelow?: () => void
+  onFormatDocument?: () => void
+  onGoToDefinition?: () => void
+  onFindReferences?: () => void
+  onRenameSymbol?: () => void
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -156,6 +161,27 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.key === 'F11' && e.shiftKey && !ctrlOrCmd) {
         e.preventDefault()
         handlers.onStepOut?.()
+        return
+      }
+
+      // F2 -> Rename Symbol
+      if (e.key === 'F2' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onRenameSymbol?.()
+        return
+      }
+
+      // F12 -> Go to Definition
+      if (e.key === 'F12' && !e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onGoToDefinition?.()
+        return
+      }
+
+      // Shift+F12 -> Find All References
+      if (e.key === 'F12' && e.shiftKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onFindReferences?.()
         return
       }
 
@@ -273,10 +299,24 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
+      // Shift+Alt+F or Alt+Shift+F -> Format Document
+      if (key === 'f' && e.shiftKey && e.altKey) {
+        e.preventDefault()
+        handlers.onFormatDocument?.()
+        return
+      }
+
       // Ctrl+Shift+F -> Search
       if (e.shiftKey && key === 'f') {
         e.preventDefault()
         handlers.onShowSearch?.()
+        return
+      }
+
+      // Ctrl+Shift+T -> Testing & Test Explorer
+      if (e.shiftKey && key === 't') {
+        e.preventDefault()
+        handlers.onShowTesting?.()
         return
       }
 

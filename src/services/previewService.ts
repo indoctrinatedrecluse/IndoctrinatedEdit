@@ -80,19 +80,25 @@ class PreviewService {
     const chars = markdown.length
     const headings = (markdown.match(/^#{1,6}\s+/gm) || []).length
 
-    // Headers
-    processed = processed.replace(/^######\s+(.*$)/gm, '<h6 class="preview-h6">$1</h6>')
-    processed = processed.replace(/^#####\s+(.*$)/gm, '<h5 class="preview-h5">$1</h5>')
-    processed = processed.replace(/^####\s+(.*$)/gm, '<h4 class="preview-h4">$1</h4>')
-    processed = processed.replace(/^###\s+(.*$)/gm, '<h3 class="preview-h3">$1</h3>')
-    processed = processed.replace(/^##\s+(.*$)/gm, '<h2 class="preview-h2">$1</h2>')
-    processed = processed.replace(/^#\s+(.*$)/gm, '<h1 class="preview-h1">$1</h1>')
+    // Headers with click-to-pin navigation anchors
+    processed = processed.replace(/^######\s+(.*$)/gm, '<h6 class="preview-h6 preview-heading" data-heading="$1" id="heading-$1">$1</h6>')
+    processed = processed.replace(/^#####\s+(.*$)/gm, '<h5 class="preview-h5 preview-heading" data-heading="$1" id="heading-$1">$1</h5>')
+    processed = processed.replace(/^####\s+(.*$)/gm, '<h4 class="preview-h4 preview-heading" data-heading="$1" id="heading-$1">$1</h4>')
+    processed = processed.replace(/^###\s+(.*$)/gm, '<h3 class="preview-h3 preview-heading" data-heading="$1" id="heading-$1">$1</h3>')
+    processed = processed.replace(/^##\s+(.*$)/gm, '<h2 class="preview-h2 preview-heading" data-heading="$1" id="heading-$1">$1</h2>')
+    processed = processed.replace(/^#\s+(.*$)/gm, '<h1 class="preview-h1 preview-heading" data-heading="$1" id="heading-$1">$1</h1>')
+
+    // LaTeX Math Formula Rendering ($$...$$ and $...$)
+    processed = processed.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
+      return `<div class="latex-math-block glass-panel"><span class="math-tex-display">$$ ${this.escapeHtml(math.trim())} $$</span></div>`
+    })
+    processed = processed.replace(/\$([^\$\n]+)\$/g, '<span class="latex-math-inline">$1</span>')
 
     // Horizontal Rules
     processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="preview-hr" />')
 
     // Blockquotes & GitHub Alerts
-    processed = processed.replace(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*$)/gm, '<div class="github-alert alert-$1"><div class="alert-title">$1</div><div class="alert-body">$2</div></div>')
+    processed = processed.replace(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*$)/gm, '<div class="github-alert alert-$1 glass-panel"><div class="alert-title">$1</div><div class="alert-body">$2</div></div>')
     processed = processed.replace(/^>\s*(.*$)/gm, '<blockquote class="preview-blockquote">$1</blockquote>')
 
     // Code blocks with syntax badge

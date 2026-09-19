@@ -8,6 +8,9 @@ import {
   Sliders,
   Terminal,
   Bug,
+  Columns2,
+  Rows2,
+  Grid2X2,
 } from 'lucide-react'
 import { runService } from '../../services/runService'
 
@@ -28,6 +31,9 @@ interface TabBarProps {
   onRunWithArgs?: () => void
   onConfigureRun?: () => void
   onStartDebugging?: () => void
+  onSplitVertical?: () => void
+  onSplitHorizontal?: () => void
+  onSplitGrid2x2?: () => void
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -40,6 +46,9 @@ export const TabBar: React.FC<TabBarProps> = ({
   onRunWithArgs,
   onConfigureRun,
   onStartDebugging,
+  onSplitVertical,
+  onSplitHorizontal,
+  onSplitGrid2x2,
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -100,6 +109,31 @@ export const TabBar: React.FC<TabBarProps> = ({
       {/* Right-Aligned Editor Actions & Run Toolbar */}
       {activeTab && (
         <div className="tab-actions-bar" ref={dropdownRef}>
+          {/* Split Editor Panes Quick Action Buttons */}
+          <div className="tab-split-controls-group">
+            <button
+              className="tab-split-btn glass-interactive"
+              onClick={onSplitVertical}
+              title="Split Editor Right (Ctrl+\)"
+            >
+              <Columns2 size={13} />
+            </button>
+            <button
+              className="tab-split-btn glass-interactive"
+              onClick={onSplitHorizontal}
+              title="Split Editor Down (Ctrl+K Ctrl+\)"
+            >
+              <Rows2 size={13} />
+            </button>
+            <button
+              className="tab-split-btn glass-interactive"
+              onClick={onSplitGrid2x2}
+              title="Split Editor 2x2 Grid"
+            >
+              <Grid2X2 size={13} />
+            </button>
+          </div>
+
           {/* Quick Profile Tag */}
           {activeProfile && (
             <div
@@ -549,6 +583,35 @@ export const TabBar: React.FC<TabBarProps> = ({
           height: 1px;
           background: rgba(255, 255, 255, 0.08);
           margin: 4px 6px;
+        }
+
+        .tab-split-controls-group {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: var(--radius-sm);
+          padding: 2px;
+          margin-right: 6px;
+        }
+
+        .tab-split-btn {
+          background: transparent;
+          border: none;
+          color: rgba(255, 255, 255, 0.5);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px 5px;
+          border-radius: 4px;
+          transition: all 0.15s ease;
+        }
+
+        .tab-split-btn:hover {
+          color: #fff;
+          background: rgba(191, 90, 242, 0.2);
         }
       `}</style>
     </div>

@@ -32,6 +32,7 @@ import { gdscriptExtensionManifest, registerGDScriptExtension } from './gdscript
 import { shellScriptExtensionManifest, registerShellScriptExtension } from './shellScriptSupport/shellScriptExtension'
 import { juliaExtensionManifest, registerJuliaExtension } from './juliaSupport/juliaExtension'
 import { mcpExtensionManifest, registerMcpExtension } from './mcpSupport/mcpExtension'
+import { prettierExtensionManifest, registerPrettierExtension } from './formatterSupport/prettierExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
 
@@ -148,6 +149,19 @@ class ExtensionRegistry {
       type: 'Built-in',
     })
 
+    // JSON & JQ Structure Studio
+    this.register({
+      id: 'indoctrinated.ext.jsonstudio',
+      name: 'JSON & JQ Structure Studio',
+      version: '1.0.0',
+      description: 'Interactive JQ/JMESPath query sandbox, collapsible hierarchical tree explorer, JSON Schema validator, and multi-format data transformer.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'FileCode2',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
     // 33. Live Markdown, Static HTML & Mermaid Diagram Studio
     this.register({
       id: 'indoctrinated.ext.livepreview',
@@ -252,6 +266,9 @@ class ExtensionRegistry {
       type: 'Microservice',
     })
 
+    // 33. Universal Code Formatter (Prettier Multi-Language Engine)
+    this.register(prettierExtensionManifest)
+
     // Index all registered manifests into the conflict arbiter
     this.reindexConflicts()
   }
@@ -322,6 +339,7 @@ class ExtensionRegistry {
     safeInit('Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
     safeInit('Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
     safeInit('MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
+    safeInit('Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
   }
 }
 

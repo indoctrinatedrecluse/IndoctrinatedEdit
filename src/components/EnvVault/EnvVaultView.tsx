@@ -12,23 +12,40 @@ import {
   Trash2,
   AlertCircle,
   Sparkles,
+  Columns3,
+  ShieldAlert,
+  Lock,
+  Zap,
 } from 'lucide-react'
 import { envVaultService } from '../../services/envVaultService'
 
+type EnvViewTab = 'table' | 'matrix' | 'security' | 'diff' | 'export'
+
 export const EnvVaultView: React.FC = () => {
   const [activeProfile, setActiveProfile] = useState<string>('.env')
-  const [activeView, setActiveView] = useState<'table' | 'diff' | 'export'>('table')
+  const [activeView, setActiveView] = useState<EnvViewTab>('table')
   const [rawEnvContent, setRawEnvContent] = useState<string>(() => {
     return envVaultService.getSampleProfile('.env').rawContent
   })
   const [revealAllSecrets, setRevealAllSecrets] = useState<boolean>(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [exportLang, setExportLang] = useState<'typescript' | 'python' | 'go' | 'docker' | 'k8s'>('typescript')
+  const [vaultPassword, setVaultPassword] = useState<string>('master_key_99')
 
   // Parse current variables from content
   const variables = useMemo(() => {
     return envVaultService.parseEnvContent(rawEnvContent)
   }, [rawEnvContent])
+
+  // Multi-Environment Matrix
+  const matrixRows = useMemo(() => {
+    return envVaultService.compareMultiEnvironments()
+  }, [])
+
+  // Security Leak Scanner
+  const securityFindings = useMemo(() => {
+    return envVaultService.scanSecretLeaks(variables)
+  }, [variables])
 
   // Diff comparison against .env.example
   const diffReport = useMemo(() => {
@@ -43,7 +60,6 @@ export const EnvVaultView: React.FC = () => {
 
   const handleToggleMask = (key: string) => {
     const updated = variables.map((v) => (v.key === key ? { ...v, isMasked: !v.isMasked } : v))
-    // Keep raw content unchanged, update local rendering state
     setRawEnvContent(envVaultService.formatVariablesToEnvString(updated))
   }
 
@@ -58,14 +74,17 @@ export const EnvVaultView: React.FC = () => {
   }
 
   const handleAddVariable = () => {
-    const newKey = `NEW_VARIABLE_${Date.now().toString().slice(-4)}`
-    const updated = [...variables, {
-      key: newKey,
-      value: 'value',
-      isSecret: false,
-      isMasked: false,
-      category: 'general' as const,
-    }]
+    const newKey = `NEW_VAR_${Date.now().toString().slice(-4)}`
+    const updated = [
+      ...variables,
+      {
+        key: newKey,
+        value: 'value',
+        isSecret: false,
+        isMasked: false,
+        category: 'general' as const,
+      },
+    ]
     setRawEnvContent(envVaultService.formatVariablesToEnvString(updated))
   }
 
@@ -102,11 +121,30 @@ export const EnvVaultView: React.FC = () => {
         </button>
 
         <button
+          className={`env-tab-btn glass-interactive ${activeView === 'matrix' ? 'active' : ''}`}
+          onClick={() => setActiveView('matrix')}
+        >
+          <Columns3 size={12} />
+          <span>Multi-Env Matrix</span>
+        </button>
+
+        <button
+          className={`env-tab-btn glass-interactive ${activeView === 'security' ? 'active' : ''}`}
+          onClick={() => setActiveView('security')}
+        >
+          <ShieldAlert size={12} />
+          <span>Secret Leak Scanner</span>
+          {securityFindings.length > 0 && (
+            <span className="sec-alert-badge">{securityFindings.length}</span>
+          )}
+        </button>
+
+        <button
           className={`env-tab-btn glass-interactive ${activeView === 'diff' ? 'active' : ''}`}
           onClick={() => setActiveView('diff')}
         >
           <ShieldCheck size={12} />
-          <span>Sync & Diff Check</span>
+          <span>Sync Check</span>
           {diffReport.missingInActive.length > 0 && (
             <span className="diff-missing-badge">{diffReport.missingInActive.length}</span>
           )}
@@ -117,26 +155,26 @@ export const EnvVaultView: React.FC = () => {
           onClick={() => setActiveView('export')}
         >
           <Code2 size={12} />
-          <span>Code Generator</span>
+          <span>Code & Encrypt</span>
         </button>
       </div>
 
       {/* Profile Bar */}
-      <div className="profile-selector-bar">
-        <div className="profile-chips">
-          {envVaultService.getAvailableProfiles().map((p) => (
-            <button
-              key={p}
-              className={`profile-chip glass-interactive ${activeProfile === p ? 'active' : ''}`}
-              onClick={() => handleProfileChange(p)}
-            >
-              <FileCode size={11} />
-              <span>{p}</span>
-            </button>
-          ))}
-        </div>
+      {activeView === 'table' && (
+        <div className="profile-selector-bar">
+          <div className="profile-chips">
+            {envVaultService.getAvailableProfiles().map((p) => (
+              <button
+                key={p}
+                className={`profile-chip glass-interactive ${activeProfile === p ? 'active' : ''}`}
+                onClick={() => handleProfileChange(p)}
+              >
+                <FileCode size={11} />
+                <span>{p}</span>
+              </button>
+            ))}
+          </div>
 
-        {activeView === 'table' && (
           <div className="vault-actions-right">
             <button
               className="toggle-mask-all-btn glass-interactive"
@@ -155,15 +193,16 @@ export const EnvVaultView: React.FC = () => {
               <Plus size={12} />
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="env-content-area">
+        {/* TAB 1: VARIABLES TABLE */}
         {activeView === 'table' && (
           <div className="variables-table-pane">
             <div className="var-count-label">
-              <span>{variables.length} environment variables loaded</span>
+              <span>{variables.length} environment variables in {activeProfile}</span>
             </div>
 
             <div className="variables-list">
@@ -217,7 +256,93 @@ export const EnvVaultView: React.FC = () => {
           </div>
         )}
 
-        {/* Diff & Missing Keys Checker */}
+        {/* TAB 2: MULTI-ENV COMPARISON MATRIX */}
+        {activeView === 'matrix' && (
+          <div className="matrix-view-pane">
+            <div className="matrix-header-info">
+              <span>Multi-Environment Variable Presence Matrix</span>
+            </div>
+            <div className="matrix-table-wrap glass-panel">
+              <table className="matrix-table">
+                <thead>
+                  <tr>
+                    <th>Variable Key</th>
+                    <th>Type</th>
+                    {envVaultService.getAvailableProfiles().map((p) => (
+                      <th key={p}>{p}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.map((row) => (
+                    <tr key={row.key} className={row.isMissingInAny ? 'row-missing' : ''}>
+                      <td className="key-cell">{row.key}</td>
+                      <td>
+                        <span className={`cat-pill ${row.category}`}>{row.category}</span>
+                      </td>
+                      {envVaultService.getAvailableProfiles().map((p) => {
+                        const cell = row.values[p]
+                        return (
+                          <td key={p} className="val-cell">
+                            {cell?.isSet ? (
+                              <span className="present-val">
+                                {cell.isSecret ? '••••••••' : cell.value}
+                              </span>
+                            ) : (
+                              <span className="missing-val">NOT SET</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: SECRET LEAK SCANNER */}
+        {activeView === 'security' && (
+          <div className="security-scanner-pane">
+            <div className="sec-hero-card glass-panel">
+              <div className="sec-hero-title">
+                <ShieldAlert size={14} className="accent-red" />
+                <span>Security & Credential Leak Scanner</span>
+              </div>
+              <p className="sec-hero-desc">
+                Scans environment variables for live API keys, AWS credentials, unencrypted database passwords, and high-entropy secret patterns.
+              </p>
+            </div>
+
+            {securityFindings.length === 0 ? (
+              <div className="sec-clean-card glass-panel">
+                <ShieldCheck size={28} color="#30D158" />
+                <span className="clean-title">All Environment Variables Sanitized</span>
+                <p className="clean-desc">No live cloud credentials, PATs, or critical leaks detected in {activeProfile}.</p>
+              </div>
+            ) : (
+              <div className="findings-list">
+                {securityFindings.map((f, idx) => (
+                  <div key={idx} className={`finding-card glass-panel ${f.severity}`}>
+                    <div className="finding-top">
+                      <span className={`sev-pill ${f.severity}`}>{f.severity.toUpperCase()}</span>
+                      <span className="rule-name">{f.rule}</span>
+                      <code className="finding-key">{f.key}</code>
+                    </div>
+                    <p className="finding-desc">{f.description}</p>
+                    <div className="remediation-box">
+                      <Zap size={11} color="#FFD60A" />
+                      <span>{f.remediation}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: DIFF & SYNC CHECK */}
         {activeView === 'diff' && (
           <div className="diff-view-pane">
             <div className="diff-summary-card glass-panel">
@@ -270,7 +395,7 @@ export const EnvVaultView: React.FC = () => {
           </div>
         )}
 
-        {/* Code Generator */}
+        {/* TAB 5: CODE & ENCRYPTION */}
         {activeView === 'export' && (
           <div className="export-view-pane">
             <div className="export-lang-tabs">
@@ -300,6 +425,32 @@ export const EnvVaultView: React.FC = () => {
                 <code>{exportedCode}</code>
               </pre>
             </div>
+
+            {/* Encrypted Vault Export */}
+            <div className="vault-encrypt-box glass-panel">
+              <div className="box-title">
+                <Lock size={12} /> ENCRYPTED VAULT BUNDLE EXPORT
+              </div>
+              <div className="encrypt-controls">
+                <input
+                  type="password"
+                  className="vault-pass-input"
+                  value={vaultPassword}
+                  onChange={(e) => setVaultPassword(e.target.value)}
+                  placeholder="Master Encryption Key..."
+                />
+                <button
+                  className="encrypt-export-btn glass-interactive"
+                  onClick={() => {
+                    const enc = envVaultService.exportEncryptedVault(variables, vaultPassword)
+                    copyToClipboard(enc, 'enc_vault_copy')
+                  }}
+                >
+                  {copiedKey === 'enc_vault_copy' ? <Check size={11} color="#30D158" /> : <Lock size={11} />}
+                  <span>Copy Encrypted Vault</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -323,75 +474,87 @@ export const EnvVaultView: React.FC = () => {
           gap: 4px;
           padding: 6px 10px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(0, 0, 0, 0.25);
+          background: rgba(0, 0, 0, 0.35);
           overflow-x: auto;
-          white-space: nowrap;
+          scrollbar-width: none;
+          flex-shrink: 0;
         }
 
         .env-tab-btn {
           display: flex;
           align-items: center;
           gap: 5px;
-          padding: 4px 8px;
-          border-radius: 5px;
-          background: transparent;
+          padding: 3px 8px;
+          border-radius: 4px;
+          font-size: 10.5px;
+          font-weight: 600;
+          color: var(--text-muted);
+          background: rgba(255, 255, 255, 0.03);
           border: 1px solid transparent;
-          color: rgba(235, 235, 245, 0.65);
-          font-size: 0.72rem;
           cursor: pointer;
+          white-space: nowrap;
         }
 
         .env-tab-btn.active {
-          background: rgba(48, 209, 88, 0.15);
-          border-color: rgba(48, 209, 88, 0.35);
-          color: #30D158;
-          font-weight: 600;
+          color: #FFF;
+          background: rgba(10, 132, 255, 0.22);
+          border-color: rgba(10, 132, 255, 0.4);
+          box-shadow: 0 0 8px rgba(10, 132, 255, 0.2);
+        }
+
+        .sec-alert-badge {
+          background: #FF453A;
+          color: #FFF;
+          font-size: 8.5px;
+          font-weight: 800;
+          padding: 1px 4px;
+          border-radius: 3px;
         }
 
         .diff-missing-badge {
-          background: #FF453A;
-          color: #FFFFFF;
-          border-radius: 10px;
-          padding: 0 4px;
-          font-size: 0.6rem;
-          font-weight: 700;
+          background: #FF9F0A;
+          color: #000;
+          font-size: 8.5px;
+          font-weight: 800;
+          padding: 1px 4px;
+          border-radius: 3px;
         }
 
         .profile-selector-bar {
           display: flex;
-          align-items: center;
           justify-content: space-between;
-          padding: 6px 10px;
+          align-items: center;
+          padding: 4px 10px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-          background: rgba(0, 0, 0, 0.15);
+          background: rgba(0, 0, 0, 0.18);
+          flex-shrink: 0;
         }
 
         .profile-chips {
           display: flex;
-          align-items: center;
           gap: 4px;
           overflow-x: auto;
+          scrollbar-width: none;
         }
 
         .profile-chip {
           display: flex;
           align-items: center;
           gap: 4px;
-          padding: 2px 6px;
-          border-radius: 4px;
+          padding: 2px 7px;
+          border-radius: 3px;
+          font-size: 10px;
+          font-family: var(--font-mono);
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
-          color: rgba(235, 235, 245, 0.6);
-          font-size: 0.68rem;
+          color: var(--text-muted);
           cursor: pointer;
-          font-family: 'JetBrains Mono', monospace;
         }
 
         .profile-chip.active {
           background: rgba(10, 132, 255, 0.2);
           border-color: rgba(10, 132, 255, 0.4);
           color: #64D2FF;
-          font-weight: 600;
         }
 
         .vault-actions-right {
@@ -404,25 +567,25 @@ export const EnvVaultView: React.FC = () => {
           display: flex;
           align-items: center;
           gap: 4px;
+          font-size: 9.5px;
           padding: 2px 6px;
-          border-radius: 4px;
+          border-radius: 3px;
           background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: rgba(235, 235, 245, 0.7);
-          font-size: 0.68rem;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: var(--text-secondary);
           cursor: pointer;
         }
 
         .add-var-btn {
-          background: rgba(48, 209, 88, 0.2);
-          border: 1px solid rgba(48, 209, 88, 0.4);
-          color: #30D158;
-          border-radius: 4px;
-          width: 22px;
-          height: 22px;
+          width: 20px;
+          height: 20px;
           display: flex;
           align-items: center;
           justify-content: center;
+          border-radius: 3px;
+          background: rgba(48, 209, 88, 0.2);
+          border: 1px solid rgba(48, 209, 88, 0.4);
+          color: #30D158;
           cursor: pointer;
         }
 
@@ -432,15 +595,16 @@ export const EnvVaultView: React.FC = () => {
           padding: 10px;
         }
 
-        .variables-table-pane {
+        .variables-table-pane, .matrix-view-pane, .security-scanner-pane, .diff-view-pane, .export-view-pane {
           display: flex;
           flex-direction: column;
           gap: 8px;
         }
 
         .var-count-label {
-          font-size: 0.68rem;
-          color: rgba(235, 235, 245, 0.4);
+          font-size: 10px;
+          color: var(--text-muted);
+          margin-bottom: 2px;
         }
 
         .variables-list {
@@ -451,9 +615,9 @@ export const EnvVaultView: React.FC = () => {
 
         .variable-card {
           padding: 6px 8px;
-          border-radius: 6px;
+          border-radius: 4px;
+          background: rgba(0, 0, 0, 0.3);
           border: 1px solid rgba(255, 255, 255, 0.07);
-          background: rgba(255, 255, 255, 0.02);
           display: flex;
           flex-direction: column;
           gap: 4px;
@@ -461,8 +625,8 @@ export const EnvVaultView: React.FC = () => {
 
         .card-top {
           display: flex;
-          align-items: center;
           justify-content: space-between;
+          align-items: center;
         }
 
         .key-side {
@@ -472,237 +636,204 @@ export const EnvVaultView: React.FC = () => {
         }
 
         .cat-pill {
-          font-size: 0.58rem;
-          text-transform: uppercase;
+          font-size: 8.5px;
           font-weight: 700;
+          text-transform: uppercase;
           padding: 1px 4px;
-          border-radius: 3px;
+          border-radius: 2px;
         }
 
         .cat-pill.api_key { background: rgba(255, 69, 58, 0.2); color: #FF453A; }
-        .cat-pill.database { background: rgba(48, 209, 88, 0.2); color: #30D158; }
-        .cat-pill.port { background: rgba(10, 132, 255, 0.2); color: #64D2FF; }
-        .cat-pill.url { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
-        .cat-pill.boolean { background: rgba(191, 90, 242, 0.2); color: #BF5AF2; }
-        .cat-pill.general { background: rgba(255, 255, 255, 0.08); color: rgba(235, 235, 245, 0.6); }
+        .cat-pill.database { background: rgba(191, 90, 242, 0.2); color: #BF5AF2; }
+        .cat-pill.auth { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
+        .cat-pill.port { background: rgba(100, 210, 255, 0.2); color: #64D2FF; }
+        .cat-pill.url { background: rgba(48, 209, 88, 0.2); color: #30D158; }
+        .cat-pill.boolean { background: rgba(255, 214, 10, 0.2); color: #FFD60A; }
+        .cat-pill.general { background: rgba(255, 255, 255, 0.1); color: #E2E8F0; }
 
         .key-name {
-          font-family: 'JetBrains Mono', monospace;
-          font-weight: 600;
-          color: #FFFFFF;
-          font-size: 0.74rem;
+          font-family: var(--font-mono);
+          font-weight: 700;
+          font-size: 11px;
+          color: #FFF;
         }
 
         .card-actions {
           display: flex;
-          align-items: center;
           gap: 3px;
         }
 
         .action-icon-btn {
-          background: transparent;
+          background: none;
           border: none;
-          color: rgba(235, 235, 245, 0.6);
+          color: var(--text-muted);
           cursor: pointer;
-          padding: 2px 4px;
+          padding: 2px;
         }
 
-        .action-icon-btn.del:hover {
-          color: #FF453A;
-        }
+        .action-icon-btn:hover { color: #FFF; }
+        .action-icon-btn.del:hover { color: #FF453A; }
 
-        .var-value-input {
+        .var-value-input, .vault-pass-input {
+          width: 100%;
           background: rgba(0, 0, 0, 0.35);
           border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 4px;
-          padding: 3px 6px;
-          color: #64D2FF;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.72rem;
-          width: 100%;
+          border-radius: 3px;
+          padding: 4px 6px;
+          font-family: var(--font-mono);
+          font-size: 11px;
+          color: #CBD5E1;
           outline: none;
+          box-sizing: border-box;
         }
 
-        .diff-view-pane {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+        .matrix-table-wrap {
+          overflow-x: auto;
+          padding: 8px;
         }
 
-        .diff-summary-card {
+        .matrix-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 10.5px;
+        }
+
+        .matrix-table th {
+          text-align: left;
+          padding: 4px 8px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          color: var(--text-muted);
+        }
+
+        .matrix-table td {
+          padding: 4px 8px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .row-missing { background: rgba(255, 159, 10, 0.06); }
+        .key-cell { font-family: var(--font-mono); font-weight: 700; color: #FFF; }
+        .present-val { font-family: var(--font-mono); color: #30D158; }
+        .missing-val { font-size: 9px; font-weight: 700; color: #FF453A; background: rgba(255, 69, 58, 0.15); padding: 1px 4px; border-radius: 2px; }
+
+        .sec-hero-card, .sec-clean-card, .finding-card, .diff-summary-card, .missing-alert-box, .extra-box, .code-output-wrap, .vault-encrypt-box {
           padding: 10px;
           border-radius: 6px;
+          background: rgba(0, 0, 0, 0.3);
           border: 1px solid rgba(255, 255, 255, 0.08);
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
         }
 
-        .diff-title {
+        .sec-hero-title, .diff-title, .box-title {
           display: flex;
           align-items: center;
           gap: 6px;
-          font-weight: 600;
-          color: #FFFFFF;
+          font-weight: 700;
+          font-size: 11px;
+          color: #FFF;
+          margin-bottom: 4px;
         }
 
+        .accent-red { color: #FF453A; }
         .accent-green { color: #30D158; }
 
-        .diff-desc {
-          font-size: 0.7rem;
-          color: rgba(235, 235, 245, 0.6);
+        .sec-hero-desc, .diff-desc {
           margin: 0;
+          font-size: 10.5px;
+          color: var(--text-secondary);
         }
 
-        .gen-example-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(48, 209, 88, 0.15);
-          border: 1px solid rgba(48, 209, 88, 0.35);
-          color: #30D158;
-          border-radius: 4px;
-          padding: 4px 8px;
-          font-size: 0.7rem;
-          font-weight: 600;
-          cursor: pointer;
-          align-self: flex-start;
-        }
-
-        .missing-alert-box {
-          padding: 8px 10px;
-          border-radius: 6px;
-          background: rgba(255, 69, 58, 0.1);
-          border: 1px solid rgba(255, 69, 58, 0.25);
+        .sec-clean-card {
           display: flex;
           flex-direction: column;
+          align-items: center;
+          text-align: center;
+          padding: 24px;
           gap: 6px;
         }
 
-        .alert-head {
+        .clean-title { font-weight: 700; color: #FFF; font-size: 12px; }
+        .clean-desc { font-size: 10.5px; color: var(--text-muted); margin: 0; }
+
+        .findings-list { display: flex; flex-direction: column; gap: 6px; }
+
+        .finding-card { display: flex; flex-direction: column; gap: 4px; }
+        .finding-card.critical { border-left: 3px solid #FF453A; }
+        .finding-card.high { border-left: 3px solid #FF9F0A; }
+        .finding-card.medium { border-left: 3px solid #FFD60A; }
+
+        .finding-top { display: flex; align-items: center; gap: 6px; font-size: 10.5px; }
+        .sev-pill { font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 2px; }
+        .sev-pill.critical { background: rgba(255, 69, 58, 0.25); color: #FF453A; }
+        .sev-pill.high { background: rgba(255, 159, 10, 0.25); color: #FF9F0A; }
+        .sev-pill.medium { background: rgba(255, 214, 10, 0.25); color: #FFD60A; }
+
+        .rule-name { font-weight: 700; color: #FFF; }
+        .finding-key { font-family: var(--font-mono); color: #64D2FF; font-size: 10px; }
+        .finding-desc { margin: 0; font-size: 10.5px; color: var(--text-secondary); }
+
+        .remediation-box {
           display: flex;
           align-items: center;
-          gap: 5px;
-          font-weight: 600;
-          color: #FF453A;
-          font-size: 0.72rem;
-        }
-
-        .missing-pills {
-          display: flex;
-          flex-wrap: wrap;
           gap: 4px;
+          font-size: 10px;
+          color: #FFD60A;
+          background: rgba(255, 214, 10, 0.08);
+          padding: 3px 6px;
+          border-radius: 3px;
         }
 
-        .missing-pill {
-          background: rgba(255, 69, 58, 0.2);
-          border: 1px solid rgba(255, 69, 58, 0.4);
-          color: #FF453A;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.68rem;
-          padding: 2px 6px;
-          border-radius: 4px;
-        }
-
-        .extra-box {
-          padding: 8px 10px;
-          border-radius: 6px;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .extra-head {
-          font-size: 0.7rem;
-          color: rgba(235, 235, 245, 0.6);
-        }
-
-        .extra-pills {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 4px;
-        }
-
-        .extra-pill {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: rgba(235, 235, 245, 0.8);
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.68rem;
-          padding: 2px 6px;
-          border-radius: 4px;
-        }
-
-        .export-view-pane {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .export-lang-tabs {
-          display: flex;
-          gap: 4px;
-        }
-
+        .export-lang-tabs { display: flex; gap: 4px; }
         .lang-tab-btn {
-          padding: 3px 8px;
-          border-radius: 4px;
+          font-size: 9.5px;
+          padding: 2px 7px;
+          border-radius: 3px;
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
-          color: rgba(235, 235, 245, 0.6);
-          font-size: 0.68rem;
-          font-weight: 600;
+          color: var(--text-muted);
           cursor: pointer;
         }
 
-        .lang-tab-btn.active {
-          background: rgba(10, 132, 255, 0.2);
-          border-color: rgba(10, 132, 255, 0.4);
-          color: #64D2FF;
-        }
+        .lang-tab-btn.active { background: rgba(10, 132, 255, 0.25); color: #64D2FF; }
 
-        .code-output-wrap {
-          border-radius: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(0, 0, 0, 0.4);
-          display: flex;
-          flex-direction: column;
-        }
-
-        .output-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 6px 10px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        }
-
-        .code-label {
-          font-size: 0.68rem;
-          color: rgba(235, 235, 245, 0.5);
-        }
-
-        .copy-code-btn {
+        .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .code-label { font-size: 10px; font-weight: 700; color: var(--text-muted); }
+        .copy-code-btn, .gen-example-btn {
           display: flex;
           align-items: center;
           gap: 4px;
-          background: transparent;
-          border: none;
+          font-size: 10px;
           color: #64D2FF;
-          font-size: 0.68rem;
+          background: rgba(10, 132, 255, 0.15);
+          border: 1px solid rgba(10, 132, 255, 0.3);
+          border-radius: 3px;
+          padding: 2px 6px;
           cursor: pointer;
         }
 
         .code-block {
           margin: 0;
-          padding: 10px;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.72rem;
-          color: #FFD60A;
+          padding: 8px;
+          background: rgba(0, 0, 0, 0.4);
+          border-radius: 4px;
+          font-family: var(--font-mono);
+          font-size: 10.5px;
+          color: #E2E8F0;
           overflow-x: auto;
-          max-height: 360px;
+        }
+
+        .encrypt-controls { display: flex; gap: 6px; margin-top: 6px; }
+        .encrypt-export-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 3px;
+          background: rgba(191, 90, 242, 0.25);
+          border: 1px solid rgba(191, 90, 242, 0.45);
+          color: #BF5AF2;
+          cursor: pointer;
+          white-space: nowrap;
         }
       `}</style>
     </div>

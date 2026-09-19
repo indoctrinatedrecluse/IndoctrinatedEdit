@@ -193,6 +193,172 @@ class RegexService {
     return explanations
   }
 
+  public substituteRegex(pattern: string, flags: string, text: string, replacement: string): { result: string; count: number; error?: string } {
+    if (!pattern) return { result: text, count: 0 }
+    try {
+      const safeFlags = flags.includes('g') ? flags : flags + 'g'
+      const re = new RegExp(pattern, safeFlags)
+      let count = 0
+      const substituted = text.replace(re, (...args) => {
+        count++
+        let rep = replacement
+        // Handle $1, $2, etc.
+        for (let i = 1; i < args.length - 2; i++) {
+          rep = rep.replace(new RegExp(`\\$${i}`, 'g'), args[i] ?? '')
+        }
+        rep = rep.replace(/\$&/g, args[0] ?? '')
+        return rep
+      })
+      return { result: substituted, count }
+    } catch (err: any) {
+      return { result: text, count: 0, error: err.message }
+    }
+  }
+
+  public benchmarkRegex(pattern: string, flags: string, text: string, iterations = 1000): {
+    durationUs: number
+    iterations: number
+    riskLevel: 'safe' | 'warning' | 'critical'
+    message: string
+  } {
+    if (!pattern) {
+      return { durationUs: 0, iterations, riskLevel: 'safe', message: 'Empty pattern' }
+    }
+    try {
+      const re = new RegExp(pattern, flags)
+      const t0 = performance.now()
+      for (let i = 0; i < iterations; i++) {
+        re.test(text)
+      }
+      const totalMs = performance.now() - t0
+      const durationUs = Math.round((totalMs / iterations) * 1000 * 100) / 100
+
+      let riskLevel: 'safe' | 'warning' | 'critical' = 'safe'
+      let message = 'Linear execution speed. No catastrophic backtracking detected.'
+
+      if (durationUs > 500) {
+        riskLevel = 'critical'
+        message = 'High execution latency (>500µs). Potential exponential backtracking / ReDoS vulnerability.'
+      } else if (durationUs > 100) {
+        riskLevel = 'warning'
+        message = 'Moderate execution latency (>100µs). Review nested quantifiers (e.g. (a+)+).'
+      }
+
+      return { durationUs, iterations, riskLevel, message }
+    } catch (err: any) {
+      return { durationUs: -1, iterations, riskLevel: 'critical', message: `Invalid regex: ${err.message}` }
+    }
+  }
+
+  public generateRegexFromPrompt(prompt: string): { pattern: string; flags: string; explanation: string; sample: string } {
+    const q = prompt.toLowerCase().trim()
+
+    if (q.includes('email') || q.includes('mail')) {
+      return {
+        pattern: '([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})',
+        flags: 'g',
+        explanation: 'Matches standard RFC email addresses with username and domain capture groups.',
+        sample: 'dev@indoctrinated.io, support+team@corp.net',
+      }
+    }
+    if (q.includes('url') || q.includes('http') || q.includes('website') || q.includes('link')) {
+      return {
+        pattern: 'https?:\\/\\/([\\w.-]+)(?::(\\d+))?([\\/\\w.-]*)(?:\\?([\\w=&]+))?',
+        flags: 'g',
+        explanation: 'Matches HTTP/HTTPS URLs with hostname, optional port, path, and query params.',
+        sample: 'https://github.com:443/indoctrinated/edit?tab=readme',
+      }
+    }
+    if (q.includes('ip') || q.includes('ipv4')) {
+      return {
+        pattern: '\\b(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?:\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}\\b',
+        flags: 'g',
+        explanation: 'Validates strict IPv4 addresses from 0.0.0.0 to 255.255.255.255.',
+        sample: 'Server IP: 192.168.1.1 and 10.0.0.254',
+      }
+    }
+    if (q.includes('ipv6')) {
+      return {
+        pattern: '(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:',
+        flags: 'gi',
+        explanation: 'Matches 8-hextet or compressed IPv6 hexadecimal addresses.',
+        sample: '2001:0db8:85a3:0000:0000:8a2e:0370:7334 or fe80::1',
+      }
+    }
+    if (q.includes('hex') || q.includes('color')) {
+      return {
+        pattern: '#([a-fA-F0-9]{6}|[a-fA-F0-9]{3}|[a-fA-F0-9]{8})\\b',
+        flags: 'g',
+        explanation: 'Matches 3, 6, or 8-digit hexadecimal color codes with leading # hash.',
+        sample: 'Primary #0A84FF, surface #1c1c1e, alpha #FF3B30AA',
+      }
+    }
+    if (q.includes('phone') || q.includes('number') || q.includes('mobile')) {
+      return {
+        pattern: '(?:\\+?\\d{1,3}[- ]?)?\\(?\\d{3}\\)?[- ]?\\d{3}[- ]?\\d{4}',
+        flags: 'g',
+        explanation: 'Matches standard 10-digit telephone numbers with optional country code and delimiters.',
+        sample: '+1 (555) 019-2834, 555-867-5309, +44 20 7946 0912',
+      }
+    }
+    if (q.includes('date') || q.includes('iso') || q.includes('time')) {
+      return {
+        pattern: '\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])(?:T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|[+-][01]\\d:[0-5]\\d)?)?',
+        flags: 'g',
+        explanation: 'Matches ISO-8601 dates (YYYY-MM-DD) and full datetime stamps.',
+        sample: '2026-09-19 or 2026-09-19T12:00:00.000Z',
+      }
+    }
+    if (q.includes('jwt') || q.includes('token') || q.includes('bearer')) {
+      return {
+        pattern: 'eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+',
+        flags: 'g',
+        explanation: 'Matches JWT Bearer tokens with base64url JSON headers and claims.',
+        sample: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.do_g_sample_signature',
+      }
+    }
+    if (q.includes('semver') || q.includes('version')) {
+      return {
+        pattern: 'v?(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9a-zA-Z.-]+))?',
+        flags: 'g',
+        explanation: 'Matches Semantic Versioning specifications (Major.Minor.Patch-prerelease).',
+        sample: 'v4.6.0, 1.0.0-beta.2, 0.12.4',
+      }
+    }
+    if (q.includes('uuid') || q.includes('guid')) {
+      return {
+        pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}',
+        flags: 'gi',
+        explanation: 'Matches standard 36-character hexadecimal UUID identifiers (v1-v8).',
+        sample: '43195151-510d-419a-b938-ae1e0988ba0b',
+      }
+    }
+    if (q.includes('slug') || q.includes('kebab')) {
+      return {
+        pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
+        flags: 'g',
+        explanation: 'Matches clean URL slugs consisting of lowercase alphanumeric words separated by single dashes.',
+        sample: 'liquid-glass-dark-velvet-ide',
+      }
+    }
+    if (q.includes('html') || q.includes('tag')) {
+      return {
+        pattern: '<\\/?([a-zA-Z0-9]+)(?:\\s+[^>]*?)?\\/?>',
+        flags: 'gi',
+        explanation: 'Matches opening, closing, and self-closing HTML/XML elements.',
+        sample: '<div class="glass-card"><img src="icon.png" /></div>',
+      }
+    }
+
+    // Default generic extraction
+    return {
+      pattern: `\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+      flags: 'gi',
+      explanation: `Matches exact word occurrences of "${prompt}".`,
+      sample: `Sample text containing ${prompt} along with extra keywords.`,
+    }
+  }
+
   public generateSnippet(pattern: string, flags: string, language: 'typescript' | 'python' | 'go' | 'rust'): string {
     const escaped = pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 
