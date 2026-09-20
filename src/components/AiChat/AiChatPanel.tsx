@@ -39,6 +39,9 @@ import {
   Cpu,
   CornerDownLeft,
   Server,
+  UserCheck,
+  LogOut,
+  User,
 } from 'lucide-react'
 import { McpService } from '../../services/mcpService'
 import {
@@ -49,6 +52,7 @@ import {
   AutoApprovePreset,
   AiToolCall,
   AiToolResult,
+  AntigravitySession,
 } from '@sdk/types'
 import {
   AiService,
@@ -56,6 +60,7 @@ import {
   AiSettingsMap,
   AUTO_APPROVE_PRESETS,
 } from '../../services/aiService'
+import { antigravityAuthService } from '../../services/antigravityAuthService'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { terminalService } from '../../services/terminalService'
 import {
@@ -135,9 +140,41 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
 
+  // Google Antigravity Session State
+  const [agSession, setAgSession] = useState<AntigravitySession | null>(antigravityAuthService.getSession())
+  const [isLoggingInGoogle, setIsLoggingInGoogle] = useState(false)
+
+  const modelSelectorRef = useRef<HTMLDivElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // Sync Antigravity auth state
+  useEffect(() => {
+    const unsub = antigravityAuthService.onAuthChanged((sess) => {
+      setAgSession(sess)
+    })
+    return () => unsub()
+  }, [])
+
+  // Close model selector dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        modelSelectorRef.current &&
+        !modelSelectorRef.current.contains(e.target as Node)
+      ) {
+        setIsModelDropdownOpen(false)
+      }
+    }
+
+    if (isModelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isModelDropdownOpen])
 
   // Auto-scroll inside messages container
   useEffect(() => {
@@ -834,7 +871,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           </div>
 
           {/* Model Selector Dropdown */}
-          <div className="model-selector-container">
+          <div className="model-selector-container" ref={modelSelectorRef}>
             <button
               className="model-pill glass-interactive"
               onClick={() => {
@@ -852,33 +889,45 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             </button>
 
             {isModelDropdownOpen && (
-              <div className="model-dropdown-menu glass-panel custom-scrollbar">
+              <div
+                className="model-dropdown-menu glass-panel custom-scrollbar"
+                onWheel={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="dropdown-header">Available AI Models</div>
                 <div className="dropdown-list">
-                  {models.map((model) => (
-                    <button
-                      key={model.id}
-                      className={`model-option ${model.id === selectedModelId ? 'active' : ''}`}
-                      onClick={() => {
-                        setSelectedModelId(model.id)
-                        AiService.setActiveModelId(model.id)
-                        setIsModelDropdownOpen(false)
-                      }}
-                    >
-                      <div className="model-option-info">
-                        <div className="model-option-name">
-                          <span
-                            className="provider-dot"
-                            style={{ backgroundColor: getProviderColor(model.provider) }}
-                          />
-                          <span>{model.name}</span>
-                          {model.supportsReasoning && <span className="cot-badge">CoT Thinking</span>}
+                  {models.map((model) => {
+                    const isAntigravityModel = model.provider === 'antigravity'
+                    return (
+                      <button
+                        key={model.id}
+                        className={`model-option ${model.id === selectedModelId ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedModelId(model.id)
+                          AiService.setActiveModelId(model.id)
+                          setIsModelDropdownOpen(false)
+                        }}
+                      >
+                        <div className="model-option-info">
+                          <div className="model-option-name">
+                            <span
+                              className="provider-dot"
+                              style={{ backgroundColor: getProviderColor(model.provider) }}
+                            />
+                            <span>{model.name}</span>
+                            {model.supportsReasoning && <span className="cot-badge">CoT Thinking</span>}
+                            {isAntigravityModel && (
+                              <span className="ag-sub-badge" title="Powered by Google Antigravity Personal Subscription">
+                                {agSession ? 'Google Active' : 'Personal Sub'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="model-option-desc">{model.description}</div>
                         </div>
-                        <div className="model-option-desc">{model.description}</div>
-                      </div>
-                      {model.id === selectedModelId && <Check size={13} className="check-active" />}
-                    </button>
-                  ))}
+                        {model.id === selectedModelId && <Check size={13} className="check-active" />}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -1183,7 +1232,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                         />
                         <span className="prov-name">
                           {isAntigravity
-                            ? 'ANTIGRAVITY (PERSONAL SUBSCRIPTION)'
+                            ? 'GOOGLE ANTIGRAVITY (PERSONAL SUBSCRIPTION)'
                             : isOpenAI
                             ? 'OPENAI / CHATGPT CODEX'
                             : prov.toUpperCase()}
@@ -1201,51 +1250,150 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                       )}
                     </div>
 
-                    {!isOllama && (
-                      <div className="prov-input-row">
-                        <label>
-                          {isAntigravity
-                            ? 'Subscription Token / Session Key'
-                            : isOpenAI
-                            ? 'API Key or Session Token'
-                            : 'API Key'}
-                        </label>
-                        <div className="input-with-icon">
-                          <input
-                            type={isRevealed ? 'text' : 'password'}
-                            placeholder={
-                              isAntigravity
-                                ? 'Personal subscription token or API key...'
-                                : `Enter ${prov} API Key...`
-                            }
-                            value={cfg.apiKey}
-                            onChange={(e) => handleSaveSettings(prov, 'apiKey', e.target.value)}
-                          />
-                          <button
-                            className="toggle-vis-btn"
-                            onClick={() => setShowKey((prev) => ({ ...prev, [prov]: !prev[prov] }))}
-                          >
-                            {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    {isAntigravity ? (
+                      <div className="google-account-panel">
+                        {agSession ? (
+                          <div className="google-session-active">
+                            <div className="google-user-row">
+                              {agSession.picture ? (
+                                <img
+                                  src={agSession.picture}
+                                  alt={agSession.name}
+                                  className="google-user-avatar"
+                                />
+                              ) : (
+                                <div className="google-user-avatar placeholder">
+                                  <User size={14} />
+                                </div>
+                              )}
+                              <div className="google-user-details">
+                                <div className="google-user-name">{agSession.name || 'Google User'}</div>
+                                <div className="google-user-email">{agSession.email}</div>
+                              </div>
+                              <span className="ag-active-pill">
+                                <UserCheck size={11} />
+                                <span>Subscription Active</span>
+                              </span>
+                            </div>
 
-                    <div className="prov-input-row">
-                      <label>{isOllama ? 'Host URL' : 'Endpoint / Proxy (Optional)'}</label>
-                      <input
-                        type="text"
-                        placeholder={
-                          isOllama
-                            ? 'http://localhost:11434'
-                            : isAntigravity
-                            ? 'http://localhost:8080/v1 (or proxy endpoint)'
-                            : 'Default API endpoint'
-                        }
-                        value={cfg.endpoint || ''}
-                        onChange={(e) => handleSaveSettings(prov, 'endpoint', e.target.value)}
-                      />
-                    </div>
+                            <div className="ag-quota-row">
+                              <div className="ag-quota-item">
+                                <span className="quota-label">Tier:</span>
+                                <span className="quota-val">Personal (1M Context)</span>
+                              </div>
+                              <div className="ag-quota-item">
+                                <span className="quota-label">Rate Limit:</span>
+                                <span className="quota-val">60 RPM / 4M TPM</span>
+                              </div>
+                            </div>
+
+                            <div className="google-session-actions">
+                              <button
+                                className="google-action-btn switch glass-interactive"
+                                disabled={isLoggingInGoogle}
+                                onClick={async () => {
+                                  setIsLoggingInGoogle(true)
+                                  try {
+                                    await antigravityAuthService.loginWithGoogle()
+                                  } finally {
+                                    setIsLoggingInGoogle(false)
+                                  }
+                                }}
+                              >
+                                <span>Switch Account</span>
+                              </button>
+                              <button
+                                className="google-action-btn logout glass-interactive"
+                                onClick={async () => {
+                                  await antigravityAuthService.logout()
+                                }}
+                              >
+                                <LogOut size={11} />
+                                <span>Sign Out</span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="google-signin-prompt">
+                            <p className="google-signin-desc">
+                              Connect your personal Google account to use your Antigravity subscription without needing a manual API key.
+                            </p>
+                            <button
+                              className="google-signin-btn glass-interactive"
+                              disabled={isLoggingInGoogle}
+                              onClick={async () => {
+                                setIsLoggingInGoogle(true)
+                                try {
+                                  await antigravityAuthService.loginWithGoogle()
+                                } finally {
+                                  setIsLoggingInGoogle(false)
+                                }
+                              }}
+                            >
+                              <svg className="google-g-icon" viewBox="0 0 24 24" width="14" height="14">
+                                <path
+                                  fill="#4285F4"
+                                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                />
+                                <path
+                                  fill="#34A853"
+                                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                />
+                                <path
+                                  fill="#FBBC05"
+                                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                                />
+                                <path
+                                  fill="#EA4335"
+                                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                                />
+                              </svg>
+                              <span>{isLoggingInGoogle ? 'Connecting Google Account...' : 'Sign In with Google (Antigravity)'}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {!isOllama && (
+                          <div className="prov-input-row">
+                            <label>
+                              {isOpenAI
+                                ? 'API Key or Session Token'
+                                : 'API Key'}
+                            </label>
+                            <div className="input-with-icon">
+                              <input
+                                type={isRevealed ? 'text' : 'password'}
+                                placeholder={`Enter ${prov} API Key...`}
+                                value={cfg.apiKey}
+                                onChange={(e) => handleSaveSettings(prov, 'apiKey', e.target.value)}
+                              />
+                              <button
+                                className="toggle-vis-btn"
+                                onClick={() => setShowKey((prev) => ({ ...prev, [prov]: !prev[prov] }))}
+                              >
+                                {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="prov-input-row">
+                          <label>{isOllama ? 'Host URL' : 'Endpoint / Proxy (Optional)'}</label>
+                          <input
+                            type="text"
+                            placeholder={
+                              isOllama
+                                ? 'http://localhost:11434'
+                                : 'Default API endpoint'
+                            }
+                            value={cfg.endpoint || ''}
+                            onChange={(e) => handleSaveSettings(prov, 'endpoint', e.target.value)}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )
               })}
@@ -1738,6 +1886,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         }
 
         .ai-panel-header {
+          position: relative;
           height: 42px;
           min-height: 42px;
           display: flex;
@@ -1747,7 +1896,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
           background: rgba(255, 255, 255, 0.02);
           flex-shrink: 0;
-          z-index: 10;
+          z-index: 100;
+          overflow: visible;
         }
 
         .ai-header-left {
@@ -1756,6 +1906,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           gap: 8px;
           min-width: 0;
           flex: 1;
+          overflow: visible;
         }
 
         .ai-brand-pill {
@@ -1783,6 +1934,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           position: relative;
           min-width: 0;
           flex-shrink: 1;
+          z-index: 101;
+          overflow: visible;
         }
 
         .model-pill {
@@ -1810,16 +1963,19 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           position: absolute;
           top: calc(100% + 6px);
           left: 0;
-          width: 270px;
-          max-height: 320px;
+          width: 290px;
+          max-height: 380px;
           overflow-y: auto;
-          background: rgba(14, 18, 32, 0.96);
-          backdrop-filter: blur(24px);
-          border: 1px solid rgba(255, 255, 255, 0.15);
+          background: rgba(14, 18, 32, 0.98);
+          backdrop-filter: blur(28px);
+          -webkit-backdrop-filter: blur(28px);
+          border: 1px solid rgba(255, 255, 255, 0.18);
           border-radius: 8px;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
-          z-index: 100;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+          z-index: 9999;
           padding: 6px;
+          pointer-events: auto;
+          touch-action: pan-y;
         }
 
         .dropdown-header {
@@ -1830,6 +1986,16 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           color: rgba(235, 235, 245, 0.45);
           padding: 4px 8px;
           margin-bottom: 2px;
+        }
+
+        .ag-sub-badge {
+          font-size: 8.5px;
+          font-weight: 700;
+          padding: 1px 5px;
+          background: rgba(10, 132, 255, 0.25);
+          border: 1px solid rgba(10, 132, 255, 0.45);
+          color: #5AC8FA;
+          border-radius: 4px;
         }
 
         .model-option {
@@ -2262,6 +2428,154 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           cursor: pointer;
         }
 
+        /* Google Antigravity Account Panel */
+        .google-account-panel {
+          padding: 4px 0;
+        }
+
+        .google-session-active {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .google-user-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .google-user-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          object-fit: cover;
+        }
+
+        .google-user-avatar.placeholder {
+          background: rgba(255, 255, 255, 0.1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #5AC8FA;
+        }
+
+        .google-user-details {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .google-user-name {
+          font-size: 11px;
+          font-weight: 600;
+          color: #FFFFFF;
+        }
+
+        .google-user-email {
+          font-size: 10px;
+          color: rgba(235, 235, 245, 0.6);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .ag-active-pill {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 6px;
+          border-radius: 999px;
+          background: rgba(48, 209, 88, 0.18);
+          border: 1px solid rgba(48, 209, 88, 0.35);
+          color: #30D158;
+          font-size: 9.5px;
+          font-weight: 600;
+          flex-shrink: 0;
+        }
+
+        .ag-quota-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 6px 8px;
+          border-radius: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          font-size: 10px;
+        }
+
+        .ag-quota-item {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .quota-label { color: rgba(235, 235, 245, 0.5); }
+        .quota-val { color: #5AC8FA; font-weight: 600; }
+
+        .google-session-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .google-action-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 600;
+          cursor: pointer;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.05);
+          color: #FFFFFF;
+        }
+
+        .google-action-btn.logout {
+          color: #FF453A;
+          border-color: rgba(255, 69, 58, 0.3);
+          background: rgba(255, 69, 58, 0.1);
+        }
+
+        .google-signin-prompt {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 4px 0;
+        }
+
+        .google-signin-desc {
+          font-size: 10.5px;
+          color: rgba(235, 235, 245, 0.65);
+          line-height: 1.4;
+          margin: 0;
+        }
+
+        .google-signin-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 7px 12px;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: #FFFFFF;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .google-signin-btn:hover {
+          background: rgba(255, 255, 255, 0.14);
+          border-color: rgba(255, 255, 255, 0.3);
+          box-shadow: 0 0 12px rgba(66, 133, 244, 0.3);
+        }
+
         /* Messages Scroll Container */
         .ai-messages-container {
           flex: 1;
@@ -2270,7 +2584,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           display: flex;
           flex-direction: column;
           gap: 14px;
-          z-index: 10;
+          z-index: 5;
         }
 
         .ai-message-row {

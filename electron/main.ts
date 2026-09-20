@@ -22,6 +22,7 @@ import {
 } from './toolchain-service'
 import { terminalService } from './terminal-service'
 import { updateService } from './update-service'
+import { antigravityBackendService } from './antigravity-backend-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -342,6 +343,29 @@ ipcMain.handle('ai:startStream', async (event, requestId: string, options: AiReq
     }
   })
   return true
+})
+
+// ==========================================
+// Antigravity Python SDK & Personal Account IPC
+// ==========================================
+ipcMain.handle('antigravity:login', async () => {
+  return await antigravityBackendService.login()
+})
+
+ipcMain.handle('antigravity:logout', async () => {
+  return await antigravityBackendService.logout()
+})
+
+ipcMain.handle('antigravity:getSession', async () => {
+  return await antigravityBackendService.getSession()
+})
+
+ipcMain.handle('antigravity:getQuota', async () => {
+  return await antigravityBackendService.getQuota()
+})
+
+ipcMain.handle('antigravity:getStatus', async () => {
+  return await antigravityBackendService.getStatus()
 })
 
 // ==========================================

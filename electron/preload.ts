@@ -5,6 +5,9 @@ import {
   AiStreamChunk,
   ToolchainDefinition,
   DetectedToolchain,
+  AntigravitySession,
+  AntigravityQuotaInfo,
+  AntigravitySidecarStatus,
 } from '../packages/sdk/types'
 
 export interface FileOpenResult {
@@ -41,6 +44,14 @@ export interface ElectronAiAPI {
     },
     onChunk: (chunk: AiStreamChunk) => void
   ) => () => void
+}
+
+export interface ElectronAntigravityAPI {
+  login: () => Promise<AntigravitySession>
+  logout: () => Promise<boolean>
+  getSession: () => Promise<AntigravitySession | null>
+  getQuota: () => Promise<AntigravityQuotaInfo>
+  getStatus: () => Promise<AntigravitySidecarStatus>
 }
 
 export interface ElectronToolchainAPI {
@@ -120,6 +131,9 @@ export interface ElectronAPI {
   // AI Multi-Model service operations
   ai: ElectronAiAPI
 
+  // Antigravity Python SDK & Personal Account Subsystem
+  antigravity: ElectronAntigravityAPI
+
   // Toolchain & SDK auto-detection operations
   toolchain: ElectronToolchainAPI
 
@@ -176,6 +190,14 @@ const api: ElectronAPI = {
         ipcRenderer.invoke('ai:cancelStream', requestId)
       }
     },
+  },
+
+  antigravity: {
+    login: () => ipcRenderer.invoke('antigravity:login'),
+    logout: () => ipcRenderer.invoke('antigravity:logout'),
+    getSession: () => ipcRenderer.invoke('antigravity:getSession'),
+    getQuota: () => ipcRenderer.invoke('antigravity:getQuota'),
+    getStatus: () => ipcRenderer.invoke('antigravity:getStatus'),
   },
 
   toolchain: {

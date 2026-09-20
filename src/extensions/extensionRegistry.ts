@@ -32,6 +32,7 @@ import { gdscriptExtensionManifest, registerGDScriptExtension } from './gdscript
 import { shellScriptExtensionManifest, registerShellScriptExtension } from './shellScriptSupport/shellScriptExtension'
 import { juliaExtensionManifest, registerJuliaExtension } from './juliaSupport/juliaExtension'
 import { mcpExtensionManifest, registerMcpExtension } from './mcpSupport/mcpExtension'
+import { antigravityExtensionManifest, registerAntigravityExtension } from './antigravitySupport/antigravityExtension'
 import { prettierExtensionManifest, registerPrettierExtension } from './formatterSupport/prettierExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
@@ -136,7 +137,10 @@ class ExtensionRegistry {
     // 32. Model Context Protocol (MCP) & AI Agent Studio
     this.register(mcpExtensionManifest)
 
-    // 33. Cryptography & DevTools Studio
+    // 33. Google Antigravity Suite & Agent Subsystem
+    this.register(antigravityExtensionManifest)
+
+    // 34. Cryptography & DevTools Studio
     this.register({
       id: 'indoctrinated.ext.cryptolab',
       name: 'Cryptography & DevTools Studio',
@@ -339,6 +343,7 @@ class ExtensionRegistry {
     safeInit('Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
     safeInit('Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
     safeInit('MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
+    safeInit('Google Antigravity', () => registerAntigravityExtension(monacoInstance))
     safeInit('Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
   }
 }

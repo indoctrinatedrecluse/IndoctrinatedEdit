@@ -25,6 +25,7 @@ import {
   Shapes,
   FlaskConical,
 } from 'lucide-react'
+import { AntigravityIcon } from '../Brand/AntigravityIcon'
 
 export type ActivityView = 'files' | 'git' | 'search' | 'testing' | 'debug' | 'extensions' | 'themes' | 'settings'
 
@@ -32,6 +33,8 @@ interface ActivityBarProps {
   activeView: ActivityView | null
   onSelectView: (view: ActivityView) => void
   gitChangesCount?: number
+  isAntigravityOpen?: boolean
+  onToggleAntigravity?: () => void
   isAiOpen?: boolean
   onToggleAi?: () => void
   isDatabaseOpen?: boolean
@@ -74,6 +77,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   activeView,
   onSelectView,
   gitChangesCount = 0,
+  isAntigravityOpen = false,
+  onToggleAntigravity,
   isAiOpen = false,
   onToggleAi,
   isDatabaseOpen = false,
@@ -334,6 +339,17 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           </button>
         )}
 
+        {onToggleAntigravity && (
+          <button
+            className={`activity-btn glass-interactive antigravity-bar-btn ${isAntigravityOpen ? 'active' : ''}`}
+            onClick={onToggleAntigravity}
+            title="Google Antigravity Studio (Personal Account & Python SDK)"
+          >
+            <AntigravityIcon size={20} className="antigravity-activity-icon" />
+            {isAntigravityOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
         {onToggleAi && (
           <button
             className={`activity-btn glass-interactive ai-bar-btn ${isAiOpen ? 'active' : ''}`}
@@ -425,6 +441,15 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           color: #FFF;
           background: var(--glass-bg-active);
           box-shadow: 0 0 16px rgba(10, 132, 255, 0.35);
+        }
+
+        .activity-btn.antigravity-bar-btn:hover {
+          filter: drop-shadow(0 0 8px rgba(100, 210, 255, 0.5));
+        }
+
+        .activity-btn.antigravity-bar-btn.active {
+          background: rgba(100, 210, 255, 0.15);
+          box-shadow: 0 0 18px rgba(100, 210, 255, 0.45);
         }
 
         .activity-badge {

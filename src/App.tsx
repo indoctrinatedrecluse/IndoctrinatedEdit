@@ -344,6 +344,20 @@ export const App: React.FC = () => {
   }, [])
   const [currentSelection, setCurrentSelection] = useState<SelectionInfo | null>(null)
 
+  const handleToggleAntigravity = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('antigravity')
+        return true
+      }
+      if (rightPaneTab !== 'antigravity') {
+        setRightPaneTab('antigravity')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
   const handleToggleAi = useCallback(() => {
     setIsRightPaneOpen((prev) => {
       if (!prev) {
@@ -1405,6 +1419,10 @@ export const App: React.FC = () => {
 
       // Git & Toolchain
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
+
+      // Google Antigravity Studio & Personal Account
+      { id: 'antigravity.toggle', title: 'Google Antigravity: Toggle Studio & Personal Account', category: 'AI', shortcut: 'Ctrl+Alt+G', description: 'Open Google Antigravity Studio, manage personal account login, Python SDK sidecar & quota metrics', handler: handleToggleAntigravity },
+      { id: 'antigravity.login', title: 'Google Antigravity: Sign in with Google Account', category: 'AI', description: 'Authenticate your personal Google account with Antigravity SDK', handler: () => { handleToggleAntigravity(); window.electronAPI?.antigravity?.login(); } },
       
       // Port & Process Sentinel
       { id: 'ports.toggle', title: 'Port Sentinel: Toggle Port & Process Sentinel', category: 'Tools', shortcut: 'Ctrl+Alt+1', description: 'Inspect active listening ports, detect conflicts, probe latency, and kill processes', handler: handleTogglePorts },
@@ -1631,6 +1649,8 @@ export const App: React.FC = () => {
           activeView={activeView}
           onSelectView={handleSelectView}
           gitChangesCount={gitChangesCount}
+          isAntigravityOpen={isRightPaneOpen && rightPaneTab === 'antigravity'}
+          onToggleAntigravity={handleToggleAntigravity}
           isAiOpen={isRightPaneOpen && rightPaneTab === 'ai'}
           onToggleAi={handleToggleAi}
           isDatabaseOpen={isRightPaneOpen && rightPaneTab === 'database'}
@@ -1839,6 +1859,7 @@ export const App: React.FC = () => {
         isUpdateAvailable={isUpdateAvailable}
         updateVersion={latestUpdateVersion}
         onUpdateClick={() => setIsUpdateModalOpen(true)}
+        onAntigravityClick={handleToggleAntigravity}
         onThemeClick={() => setActiveView('themes')}
         onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
         onTerminalClick={handleToggleTerminal}

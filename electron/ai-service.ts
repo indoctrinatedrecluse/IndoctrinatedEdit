@@ -1,4 +1,5 @@
 import { AiProvider, AiStreamChunk } from '../packages/sdk/types'
+import { antigravityBackendService } from './antigravity-backend-service'
 
 export interface AiRequestOptions {
   provider: AiProvider
@@ -66,14 +67,25 @@ export async function streamAiResponse(
         onChunk
       )
     } else if (provider === 'antigravity') {
-      await streamOpenAiCompatible(
-        endpoint || 'http://localhost:8080/v1',
-        model,
-        messages,
-        apiKey,
-        controller.signal,
-        onChunk
-      )
+      if (endpoint && !endpoint.includes('localhost') && !endpoint.includes('127.0.0.1')) {
+        // Custom remote endpoint
+        await streamOpenAiCompatible(
+          endpoint,
+          model,
+          messages,
+          apiKey,
+          controller.signal,
+          onChunk
+        )
+      } else {
+        // Python Antigravity SDK sidecar
+        await antigravityBackendService.streamChat(
+          requestId,
+          model,
+          messages,
+          onChunk
+        )
+      }
     } else {
       // Default: OpenAI
       await streamOpenAiCompatible(

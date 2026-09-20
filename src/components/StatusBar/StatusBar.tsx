@@ -1,5 +1,6 @@
 import React from 'react'
 import { GitBranch, AlertCircle, Check, Palette, Sparkles, Terminal, ArrowUpCircle } from 'lucide-react'
+import { AntigravityIcon } from '../Brand/AntigravityIcon'
 
 interface StatusBarProps {
   line: number
@@ -13,6 +14,8 @@ interface StatusBarProps {
   warningCount?: number
   isUpdateAvailable?: boolean
   updateVersion?: string
+  antigravityUser?: string
+  onAntigravityClick?: () => void
   onUpdateClick?: () => void
   onThemeClick?: () => void
   onGitClick?: () => void
@@ -32,6 +35,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   warningCount = 0,
   isUpdateAvailable = false,
   updateVersion,
+  antigravityUser,
+  onAntigravityClick,
   onUpdateClick,
   onThemeClick,
   onGitClick,
@@ -49,6 +54,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         >
           <GitBranch size={12} className="branch-icon" />
           <span>{gitBranch}</span>
+        </button>
+
+        <button
+          className="status-chip antigravity-chip glass-interactive"
+          onClick={onAntigravityClick}
+          title="Google Antigravity SDK: Connected with Personal Account (Click to open Studio)"
+        >
+          <AntigravityIcon size={12} className="antigravity-status-icon" />
+          <span className="antigravity-status-label">{antigravityUser ? `Antigravity: ${antigravityUser}` : 'Antigravity: Personal'}</span>
         </button>
 
         <button
@@ -172,6 +186,19 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         .branch-icon {
           color: var(--accent-cyan);
+        }
+
+        .antigravity-chip {
+          background: rgba(100, 210, 255, 0.08) !important;
+          border-color: rgba(100, 210, 255, 0.25) !important;
+          color: #64D2FF !important;
+          font-weight: 500;
+        }
+
+        .antigravity-chip:hover {
+          background: rgba(100, 210, 255, 0.16) !important;
+          border-color: rgba(100, 210, 255, 0.45) !important;
+          box-shadow: 0 0 10px rgba(100, 210, 255, 0.3);
         }
 
         .update-chip {

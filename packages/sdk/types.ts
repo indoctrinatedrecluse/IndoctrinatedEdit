@@ -288,3 +288,48 @@ export interface AiAutoApproveSettings {
 
 export type AutoApprovePreset = 'paranoid' | 'balanced' | 'autonomous'
 
+/* =========================================================================
+ * Antigravity Python SDK & Personal Account Contracts
+ * ========================================================================= */
+
+export interface AntigravityUserProfile {
+  id: string
+  email: string
+  name: string
+  picture?: string
+  locale?: string
+}
+
+export interface AntigravitySession {
+  userId: string
+  email: string
+  name: string
+  picture?: string
+  tier: 'personal' | 'pro' | 'enterprise'
+  subscriptionActive: boolean
+  tokenType: 'oauth' | 'adc' | 'session'
+  accessToken: string
+  refreshToken?: string
+  expiresAt: number
+}
+
+export interface AntigravityQuotaInfo {
+  tier: string
+  rpmLimit: number
+  rpmRemaining: number
+  tpmLimit: number
+  tpmRemaining: number
+  contextWindowTokens: number
+  dailyComputesRemaining: number
+  dailyComputesLimit: number
+  activeModels: string[]
+}
+
+export interface AntigravitySidecarStatus {
+  running: boolean
+  port: number
+  pid?: number
+  pythonVersion?: string
+  authStatus: 'authenticated' | 'unauthenticated' | 'authenticating' | 'error'
+  activeSession?: AntigravitySession | null
+}

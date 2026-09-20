@@ -47,9 +47,12 @@ import { DiagramStudioView } from '../DiagramStudio/DiagramStudioView'
 import { BundleAnalyzerView } from '../BundleAnalyzer/BundleAnalyzerView'
 import { SvgStudioView } from '../SvgStudio/SvgStudioView'
 import { JsonStudioView } from '../JsonStudio/JsonStudioView'
+import { AntigravityStudioView } from '../Antigravity/AntigravityStudioView'
+import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab =
+  | 'antigravity'
   | 'ai'
   | 'database'
   | 'rest'
@@ -309,6 +312,15 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           </button>
 
           <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'antigravity' ? 'active' : ''}`}
+            onClick={() => onSelectTab('antigravity')}
+            title="Google Antigravity Studio (Personal Account & Python SDK)"
+          >
+            <AntigravityIcon size={14} className="tab-icon antigravity" />
+            <span>Antigravity Studio</span>
+          </button>
+
+          <button
             className={`dock-tab-item glass-interactive ${activeTab === 'ai' ? 'active' : ''}`}
             onClick={() => onSelectTab('ai')}
             title="AI Multi-Model Assistant (Ctrl+Alt+A)"
@@ -327,6 +339,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
+        {activeTab === 'antigravity' && <AntigravityStudioView />}
         {activeTab === 'ports' && <PortSentinelView />}
         {activeTab === 'redis' && <RedisStudioView />}
         {activeTab === 'env' && <EnvVaultView />}
@@ -509,6 +522,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
         .dock-tab-item .tab-icon.regex { color: #BF5AF2; }
         .dock-tab-item .tab-icon.pkg { color: #FF453A; }
         .dock-tab-item .tab-icon.task { color: #30D158; }
+        .dock-tab-item .tab-icon.antigravity { color: #64D2FF; filter: drop-shadow(0 0 6px rgba(100, 210, 255, 0.4)); }
         .dock-tab-item .tab-icon.ai { color: #BF5AF2; }
         .dock-tab-item .tab-icon.db { color: #30D158; }
         .dock-tab-item .tab-icon.rest { color: #0A84FF; }
