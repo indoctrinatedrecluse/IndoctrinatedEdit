@@ -1,833 +1,818 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
-  Bot,
-  UserCheck,
-  LogOut,
-  RefreshCw,
-  Zap,
-  Play,
-  Cpu,
+  Send,
+  Square,
+  Trash2,
+  Copy,
+  Check,
+  Code2,
   Sliders,
-  CheckCircle2,
-  AlertCircle,
+  RefreshCw,
+  LogOut,
+  Sparkles,
+  Zap,
   User,
+  ChevronDown,
+  ChevronRight,
+  FileCode,
+  Paperclip,
+  X,
+  AlertCircle,
 } from 'lucide-react'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { antigravityAuthService } from '../../services/antigravityAuthService'
+import { AiService } from '../../services/aiService'
 import {
   AntigravitySession,
   AntigravityQuotaInfo,
   AntigravitySidecarStatus,
+  AiModelOption,
+  AiChatMessage,
 } from '@sdk/types'
-import { AiService } from '../../services/aiService'
+import { SelectionInfo } from '../Editor/EditorHost'
+import './AntigravityStudioView.css'
 
-export const AntigravityStudioView: React.FC = () => {
+export interface AntigravityStudioViewProps {
+  activeFileName?: string
+  activeFileContent?: string
+  currentSelection?: SelectionInfo | null
+  onInsertAtCursor?: (code: string) => void
+  onReplaceSelection?: (code: string) => void
+  onClose?: () => void
+}
+
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  reasoning?: string
+  timestamp: number
+  model?: string
+  isStreaming?: boolean
+}
+
+export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
+  activeFileName = 'untitled.ts',
+  activeFileContent = '',
+  currentSelection,
+  onInsertAtCursor,
+  onReplaceSelection,
+  onClose,
+}) => {
+  // Session & Sidecar State
   const [session, setSession] = useState<AntigravitySession | null>(antigravityAuthService.getSession())
   const [quota, setQuota] = useState<AntigravityQuotaInfo | null>(antigravityAuthService.getCachedQuota())
-  const [status, setStatus] = useState<AntigravitySidecarStatus | null>(antigravityAuthService.getCachedSidecarStatus())
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoggingIn, setIsLoggingIn] = useState(false)
-  const [selectedAgentModel, setSelectedAgentModel] = useState('antigravity-personal-agent')
-  const [agentBehavior, setAgentBehavior] = useState<'autonomous' | 'interactive'>('autonomous')
+  const [sidecarStatus, setSidecarStatus] = useState<AntigravitySidecarStatus | null>(null)
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
-  // Load status and session on-demand when user opens this extension view
+  // Chat State
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'welcome-msg',
+      role: 'assistant',
+      content: `Welcome to **Google Antigravity Studio**!\n\nPowered by the Python Antigravity SDK with your personal Google account. Enjoy 1M-token context windows, real-time reasoning streaming, and zero manual API key configuration.`,
+      timestamp: Date.now(),
+      model: 'antigravity-gemini-2-5-pro',
+    },
+  ])
+  const [inputPrompt, setInputPrompt] = useState('')
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('antigravity-gemini-2-5-pro')
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false)
+  const [includeFileContext, setIncludeFileContext] = useState(false)
+  const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null)
+  const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
+
+  // Generation Settings
+  const [temperature, setTemperature] = useState(0.7)
+  const [systemInstruction, setSystemInstruction] = useState(
+    'You are an expert Google Antigravity pair programmer and software architect. Provide clean, modular, production-grade code with TypeScript types and concise explanations.'
+  )
+
+  const activeStreamCancelRef = useRef<(() => void) | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const modelDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Available Models
+  const availableModels = useMemo(
+    () => [
+      {
+        id: 'antigravity-gemini-2-5-pro',
+        name: 'Antigravity Gemini 2.5 Pro',
+        badge: 'Recommended',
+        context: '1M Context',
+        desc: 'Advanced reasoning, deep architectural analysis & complex code synthesis.',
+      },
+      {
+        id: 'antigravity-gemini-2-5-flash',
+        name: 'Antigravity Gemini 2.5 Flash',
+        badge: 'Ultra Fast',
+        context: '1M Context',
+        desc: 'Sub-second real-time streaming for rapid edits, refactors & explanations.',
+      },
+      {
+        id: 'antigravity-claude-3-7-sonnet',
+        name: 'Antigravity Claude 3.7 Sonnet',
+        badge: 'Hybrid CoT',
+        context: '200k Context',
+        desc: 'Personal subscription proxy with deep chain-of-thought code generation.',
+      },
+      {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro (Direct)',
+        badge: 'Google SDK',
+        context: '1M Context',
+        desc: 'Native Google GenAI model execution with personal OAuth credentials.',
+      },
+      {
+        id: 'deepseek-r1',
+        name: 'DeepSeek R1 (Antigravity Agent)',
+        badge: 'Open Reasoning',
+        context: '128k Context',
+        desc: 'High-math and strict formal verification model via Antigravity harness.',
+      },
+    ],
+    []
+  )
+
+  // Auto-scroll on new messages
   useEffect(() => {
-    let isMounted = true
-    const init = async () => {
-      setIsLoading(true)
-      try {
-        const [currStatus, currQuota, currSession] = await Promise.all([
-          antigravityAuthService.getSidecarStatus(),
-          antigravityAuthService.getQuota(),
-          antigravityAuthService.syncSession(),
-        ])
-        if (isMounted) {
-          setStatus(currStatus)
-          setQuota(currQuota)
-          setSession(currSession)
-        }
-      } finally {
-        if (isMounted) setIsLoading(false)
-      }
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-    init()
-
+  // Sync auth & quota
+  useEffect(() => {
     const unsub = antigravityAuthService.onAuthChanged((newSession) => {
-      if (isMounted) {
-        setSession(newSession)
-        antigravityAuthService.getQuota().then(setQuota)
-        antigravityAuthService.getSidecarStatus().then(setStatus)
-      }
+      setSession(newSession)
+      antigravityAuthService.getQuota().then(setQuota).catch(() => {})
     })
 
-    return () => {
-      isMounted = false
-      unsub()
-    }
+    antigravityAuthService.syncSession().then((sess) => {
+      setSession(sess)
+      antigravityAuthService.getQuota().then(setQuota).catch(() => {})
+      antigravityAuthService.getSidecarStatus().then(setSidecarStatus).catch(() => {})
+    })
+
+    return () => unsub()
   }, [])
 
-  const handleRefresh = async () => {
-    setIsLoading(true)
-    try {
-      const [s, q] = await Promise.all([
-        antigravityAuthService.getSidecarStatus(),
-        antigravityAuthService.getQuota(),
-      ])
-      setStatus(s)
-      setQuota(q)
-    } finally {
-      setIsLoading(false)
+  // Outside click listener for model dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Auto-resize input textarea
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputPrompt(e.target.value)
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`
     }
   }
 
-  const handleGoogleSignIn = async () => {
-    setIsLoggingIn(true)
+  // Handle OAuth Google Login
+  const handleGoogleLogin = async () => {
+    setIsAuthenticating(true)
+    setAuthError(null)
     try {
       const newSession = await antigravityAuthService.loginWithGoogle()
       setSession(newSession)
+      const q = await antigravityAuthService.getQuota()
+      setQuota(q)
+      const st = await antigravityAuthService.getSidecarStatus()
+      setSidecarStatus(st)
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to authenticate with Google')
     } finally {
-      setIsLoggingIn(false)
+      setIsAuthenticating(false)
     }
   }
 
-  const handleSignOut = async () => {
+  // Handle Logout
+  const handleGoogleLogout = async () => {
     await antigravityAuthService.logout()
     setSession(null)
   }
 
-  const handleLaunchInAiChat = () => {
-    AiService.setActiveModelId(selectedAgentModel)
-    window.dispatchEvent(new CustomEvent('open-ai-chat', { detail: { modelId: selectedAgentModel } }))
+  // Copy Snippet
+  const handleCopyCode = (code: string, id: string) => {
+    navigator.clipboard.writeText(code)
+    setCopiedSnippetId(id)
+    setTimeout(() => setCopiedSnippetId(null), 2000)
   }
 
-  return (
-    <div className="antigravity-studio-container custom-scrollbar">
-      {/* Ambient background glows */}
-      <div className="ag-ambient-orb ag-orb-1" />
-      <div className="ag-ambient-orb ag-orb-2" />
+  // Insert code into active buffer
+  const handleInsertCode = (code: string) => {
+    if (onReplaceSelection && currentSelection && currentSelection.text) {
+      onReplaceSelection(code)
+    } else if (onInsertAtCursor) {
+      onInsertAtCursor(code)
+    }
+  }
 
-      {/* Header Banner */}
-      <header className="ag-header-banner glass-card">
-        <div className="ag-title-row">
-          <div className="ag-logo-wrapper">
-            <AntigravityIcon size={24} />
-          </div>
-          <div className="ag-title-text">
-            <h2 className="ag-main-title">Google Antigravity</h2>
-            <span className="ag-subtitle">Python SDK & Personal Subscription Suite</span>
+  // Send Prompt to Python Antigravity SDK
+  const handleSendMessage = async (customPrompt?: string) => {
+    const promptToSend = (customPrompt || inputPrompt).trim()
+    if (!promptToSend || isStreaming) return
+
+    // Construct Context Attachment if enabled
+    let finalPrompt = promptToSend
+    if (includeFileContext && activeFileName && activeFileContent) {
+      const selectedSnippet = currentSelection?.text ? `\n\nActive Selection:\n\`\`\`\n${currentSelection.text}\n\`\`\`` : ''
+      finalPrompt = `${promptToSend}\n\n[Active File Context: ${activeFileName}]\n\`\`\`\n${activeFileContent.slice(0, 12000)}\n\`\`\`${selectedSnippet}`
+    }
+
+    const userMessageId = `user-${Date.now()}`
+    const assistantMessageId = `asst-${Date.now()}`
+
+    const newMessages: ChatMessage[] = [
+      ...messages,
+      {
+        id: userMessageId,
+        role: 'user',
+        content: promptToSend,
+        timestamp: Date.now(),
+      },
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        reasoning: '',
+        timestamp: Date.now(),
+        model: selectedModel,
+        isStreaming: true,
+      },
+    ]
+
+    setMessages(newMessages)
+    setInputPrompt('')
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
+    setIsStreaming(true)
+
+    const modelOption: AiModelOption = {
+      id: selectedModel,
+      name: currentModelObj.name,
+      provider: 'antigravity',
+      description: currentModelObj.desc,
+      supportsReasoning: true,
+    }
+
+    const historyForApi: AiChatMessage[] = newMessages
+      .filter((m) => m.id !== assistantMessageId)
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.id === userMessageId ? finalPrompt : m.content,
+        timestamp: m.timestamp,
+      }))
+
+    try {
+      const cancel = AiService.streamChat(modelOption, historyForApi, (chunk) => {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === assistantMessageId) {
+              return {
+                ...msg,
+                content: chunk.text ? msg.content + chunk.text : msg.content,
+                reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
+                isStreaming: !chunk.done && !chunk.error,
+              }
+            }
+            return msg
+          })
+        )
+
+        if (chunk.done || chunk.error) {
+          setIsStreaming(false)
+          activeStreamCancelRef.current = null
+        }
+      })
+
+      activeStreamCancelRef.current = cancel
+    } catch (err: any) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content: msg.content + `\n\n> ⚠️ **Error**: ${err.message || 'Stream connection failed'}. Please verify Google Login in Antigravity settings.`,
+                isStreaming: false,
+              }
+            : msg
+        )
+      )
+      setIsStreaming(false)
+      activeStreamCancelRef.current = null
+    }
+  }
+
+  // Stop Generation
+  const handleStopGeneration = () => {
+    if (activeStreamCancelRef.current) {
+      activeStreamCancelRef.current()
+      activeStreamCancelRef.current = null
+    }
+    setIsStreaming(false)
+    setMessages((prev) =>
+      prev.map((msg) => (msg.isStreaming ? { ...msg, isStreaming: false } : msg))
+    )
+  }
+
+  // Clear Chat
+  const handleClearChat = () => {
+    setMessages([
+      {
+        id: `welcome-${Date.now()}`,
+        role: 'assistant',
+        content: `Conversation reset. Ready for new Antigravity instructions!`,
+        timestamp: Date.now(),
+        model: selectedModel,
+      },
+    ])
+  }
+
+  // Render markdown with code block parsing
+  const renderMessageContent = (content: string, msgId: string) => {
+    const parts = content.split(/(```[\s\S]*?```)/g)
+
+    return (
+      <div className="markdown-rendered-body">
+        {parts.map((part, index) => {
+          if (part.startsWith('```')) {
+            const lines = part.slice(3, -3).trim().split('\n')
+            const lang = lines[0].trim() || 'text'
+            const code = lines.slice(1).join('\n') || lines[0]
+            const snippetId = `${msgId}-code-${index}`
+
+            return (
+              <div key={snippetId} className="antigravity-code-block glass-panel">
+                <div className="code-block-header">
+                  <span className="code-lang-tag">
+                    <Code2 size={12} />
+                    {lang}
+                  </span>
+                  <div className="code-block-actions">
+                    <button
+                      className="code-action-btn glass-interactive"
+                      onClick={() => handleCopyCode(code, snippetId)}
+                      title="Copy Code to Clipboard"
+                    >
+                      {copiedSnippetId === snippetId ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                      <span>{copiedSnippetId === snippetId ? 'Copied' : 'Copy'}</span>
+                    </button>
+                    {(onInsertAtCursor || onReplaceSelection) && (
+                      <button
+                        className="code-action-btn glass-interactive insert-btn"
+                        onClick={() => handleInsertCode(code)}
+                        title="Insert into Active Editor Buffer"
+                      >
+                        <FileCode size={12} />
+                        <span>Insert</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <pre className="code-pre-wrapper">
+                  <code>{code}</code>
+                </pre>
+              </div>
+            )
+          }
+
+          // Plain text / basic markdown bold / lists
+          return (
+            <div
+              key={index}
+              className="text-chunk"
+              dangerouslySetInnerHTML={{
+                __html: part
+                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                  .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+                  .replace(/\n\n/g, '<br/><br/>')
+                  .replace(/\n/g, '<br/>'),
+              }}
+            />
+          )
+        })}
+      </div>
+    )
+  }
+
+  const currentModelObj = availableModels.find((m) => m.id === selectedModel) || availableModels[0]
+
+  return (
+    <div className="antigravity-studio-container">
+      {/* Studio Header */}
+      <header className="studio-header">
+        <div className="header-left">
+          <AntigravityIcon size={20} className="antigravity-logo-glow" />
+          <div className="title-group">
+            <span className="brand-title">Google Antigravity</span>
+            <span className="brand-badge">Python SDK</span>
           </div>
         </div>
 
-        <button
-          className="ag-refresh-btn glass-interactive"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          title="Refresh Sidecar & Quota"
-        >
-          <RefreshCw size={13} className={isLoading ? 'spinning' : ''} />
-          <span>Sync</span>
-        </button>
-      </header>
+        <div className="header-right">
+          {/* Model Selector Trigger */}
+          <div className="model-dropdown-anchor" ref={modelDropdownRef}>
+            <button
+              className="model-pill-trigger glass-interactive"
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              title="Select Antigravity Model"
+            >
+              <Zap size={13} className="model-pill-icon" />
+              <span className="model-pill-label">{currentModelObj.name}</span>
+              <ChevronDown size={12} />
+            </button>
 
-      {/* 1. Google Account & Personal Subscription Card */}
-      <section className="ag-section-card glass-panel">
-        <div className="ag-section-header">
-          <div className="ag-section-title">
-            <UserCheck size={14} className="text-cyan" />
-            <span>Google Account Credentials</span>
+            {isModelDropdownOpen && (
+              <div className="model-dropdown-menu glass-panel">
+                <div className="dropdown-header">
+                  <span>Antigravity Models (1M Context)</span>
+                </div>
+                {availableModels.map((m) => (
+                  <button
+                    key={m.id}
+                    className={`model-option-item ${selectedModel === m.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedModel(m.id)
+                      setIsModelDropdownOpen(false)
+                    }}
+                  >
+                    <div className="model-opt-top">
+                      <span className="model-opt-name">{m.name}</span>
+                      <span className="model-opt-badge">{m.badge}</span>
+                    </div>
+                    <p className="model-opt-desc">{m.desc}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          {session ? (
-            <span className="ag-status-badge active">
-              <CheckCircle2 size={11} />
-              <span>Personal Subscription Active</span>
-            </span>
-          ) : (
-            <span className="ag-status-badge inactive">
-              <AlertCircle size={11} />
-              <span>Unlinked</span>
-            </span>
+
+          {/* Settings & Quota Drawer Toggle */}
+          <button
+            className={`header-tool-btn glass-interactive ${showSettingsDrawer ? 'active' : ''}`}
+            onClick={() => setShowSettingsDrawer(!showSettingsDrawer)}
+            title="Antigravity Settings & Google Account"
+          >
+            <Sliders size={14} />
+          </button>
+
+          {/* Clear Chat */}
+          <button
+            className="header-tool-btn glass-interactive"
+            onClick={handleClearChat}
+            title="Reset Conversation"
+          >
+            <Trash2 size={14} />
+          </button>
+
+          {onClose && (
+            <button className="header-tool-btn glass-interactive close-btn" onClick={onClose} title="Close Pane">
+              <X size={14} />
+            </button>
           )}
         </div>
+      </header>
 
-        {session ? (
-          <div className="ag-user-profile-box glass-subcard">
-            <div className="ag-profile-left">
-              {session.picture ? (
-                <img src={session.picture} alt={session.name} className="ag-avatar-img" />
-              ) : (
-                <div className="ag-avatar-placeholder">
-                  <User size={16} />
+      {/* Main Studio Body (Split / Settings Drawer) */}
+      <div className="studio-body">
+        {/* Chat Feed */}
+        <div className="chat-viewport">
+          {/* Unauthenticated Alert Banner if not logged in */}
+          {!session && (
+            <div className="auth-alert-banner glass-panel">
+              <div className="auth-alert-content">
+                <AlertCircle size={18} className="text-amber-400" />
+                <div className="auth-alert-text">
+                  <strong>Personal Google Account Required</strong>
+                  <p>Sign in with your Google account to enable 1M-token context Antigravity generation.</p>
+                </div>
+              </div>
+              <button
+                className="google-signin-btn glass-interactive"
+                onClick={handleGoogleLogin}
+                disabled={isAuthenticating}
+              >
+                {isAuthenticating ? (
+                  <RefreshCw size={13} className="spin-anim" />
+                ) : (
+                  <AntigravityIcon size={14} />
+                )}
+                <span>{isAuthenticating ? 'Connecting...' : 'Sign In with Google'}</span>
+              </button>
+            </div>
+          )}
+
+          {authError && (
+            <div className="auth-error-banner">
+              <AlertCircle size={14} />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {/* Messages List */}
+          <div className="messages-stream">
+            {messages.map((msg) => {
+              const isUser = msg.role === 'user'
+              const isReasoningOpen = expandedReasoning[msg.id] !== false
+
+              return (
+                <div key={msg.id} className={`message-row ${isUser ? 'user-row' : 'assistant-row'}`}>
+                  <div className="avatar-col">
+                    {isUser ? (
+                      <div className="user-avatar-bubble">
+                        {session?.picture ? (
+                          <img src={session.picture} alt="User" className="user-avatar-img" />
+                        ) : (
+                          <User size={14} />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="assistant-avatar-bubble">
+                        <AntigravityIcon size={16} />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="message-content-col">
+                    {/* Reasoning Accordion if assistant message has CoT thoughts */}
+                    {!isUser && msg.reasoning && (
+                      <div className="reasoning-accordion glass-panel">
+                        <button
+                          className="reasoning-toggle-btn"
+                          onClick={() =>
+                            setExpandedReasoning((prev) => ({
+                              ...prev,
+                              [msg.id]: !isReasoningOpen,
+                            }))
+                          }
+                        >
+                          {isReasoningOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                          <Sparkles size={12} className="reasoning-icon" />
+                          <span>Antigravity Reasoning & Context Inspection</span>
+                        </button>
+                        {isReasoningOpen && (
+                          <div className="reasoning-body">
+                            <pre>{msg.reasoning}</pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Message Bubble */}
+                    <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
+                      {renderMessageContent(msg.content, msg.id)}
+                      {msg.isStreaming && (
+                        <span className="streaming-cursor-pulse" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Quick Action Prompt Chips */}
+          <div className="quick-prompt-chips">
+            <button
+              className="quick-chip glass-interactive"
+              onClick={() => handleSendMessage('Explain how to optimize this function and improve its runtime complexity.')}
+            >
+              ⚡ Optimize Complexity
+            </button>
+            <button
+              className="quick-chip glass-interactive"
+              onClick={() => handleSendMessage('Refactor the active code with strict TypeScript interfaces and error handling.')}
+            >
+              🛠️ Strict TS Refactor
+            </button>
+            <button
+              className="quick-chip glass-interactive"
+              onClick={() => handleSendMessage('Write comprehensive Vitest unit tests covering edge cases and error handling.')}
+            >
+              🧪 Generate Unit Tests
+            </button>
+            <button
+              className="quick-chip glass-interactive"
+              onClick={() => handleSendMessage('Analyze potential security vulnerabilities and ReDoS risks in this codebase.')}
+            >
+              🔒 Security & ReDoS Audit
+            </button>
+          </div>
+
+          {/* Chat Input Console */}
+          <div className="chat-input-area glass-panel">
+            <div className="input-toolbar-top">
+              <button
+                className={`context-toggle-chip ${includeFileContext ? 'active' : ''}`}
+                onClick={() => setIncludeFileContext(!includeFileContext)}
+                title="Include active editor file buffer & selection in prompt"
+              >
+                <Paperclip size={12} />
+                <span>Attach File ({activeFileName})</span>
+              </button>
+
+              {session && (
+                <span className="account-pill-tag">
+                  <span className="status-dot green" />
+                  {session.email}
+                </span>
+              )}
+            </div>
+
+            <div className="textarea-row">
+              <textarea
+                ref={textareaRef}
+                className="chat-textarea"
+                placeholder={
+                  session
+                    ? `Ask ${currentModelObj.name} with 1M context... (Shift+Enter for newline)`
+                    : 'Sign in with Google above to ask Antigravity...'
+                }
+                value={inputPrompt}
+                onChange={handleTextareaChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendMessage()
+                  }
+                }}
+                rows={1}
+              />
+
+              <div className="input-actions-col">
+                {isStreaming ? (
+                  <button
+                    className="send-btn stop-btn glass-interactive"
+                    onClick={handleStopGeneration}
+                    title="Stop Generating"
+                  >
+                    <Square size={14} />
+                  </button>
+                ) : (
+                  <button
+                    className="send-btn submit-btn glass-interactive"
+                    onClick={() => handleSendMessage()}
+                    disabled={!inputPrompt.trim()}
+                    title="Send to Antigravity (Enter)"
+                  >
+                    <Send size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Settings & Account Drawer */}
+        {showSettingsDrawer && (
+          <aside className="settings-drawer glass-panel">
+            <div className="drawer-header">
+              <div className="drawer-title">
+                <Sliders size={14} />
+                <span>Antigravity Settings & Account</span>
+              </div>
+              <button className="drawer-close-btn" onClick={() => setShowSettingsDrawer(false)}>
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="drawer-content">
+              {/* Account Section */}
+              <div className="drawer-section">
+                <span className="section-label">Google Account & Subscription</span>
+                {session ? (
+                  <div className="account-card glass-panel">
+                    <div className="account-card-header">
+                      {session.picture ? (
+                        <img src={session.picture} alt="Avatar" className="drawer-avatar-img" />
+                      ) : (
+                        <div className="drawer-avatar-placeholder">
+                          <User size={18} />
+                        </div>
+                      )}
+                      <div className="account-info">
+                        <span className="acc-name">{session.name}</span>
+                        <span className="acc-email">{session.email}</span>
+                      </div>
+                    </div>
+                    <div className="subscription-badge">
+                      <span className="sub-tag">● Personal Tier Active</span>
+                      <span className="sub-type">{session.tokenType.toUpperCase()} Auth</span>
+                    </div>
+                    <button className="logout-btn glass-interactive" onClick={handleGoogleLogout}>
+                      <LogOut size={13} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="unauth-box">
+                    <p>No active Google account connected.</p>
+                    <button
+                      className="google-signin-btn glass-interactive full-width"
+                      onClick={handleGoogleLogin}
+                      disabled={isAuthenticating}
+                    >
+                      <AntigravityIcon size={14} />
+                      <span>{isAuthenticating ? 'Authorizing in Browser...' : 'Connect Google Account'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Quota Telemetry */}
+              {quota && (
+                <div className="drawer-section">
+                  <span className="section-label">Antigravity Quota Telemetry</span>
+                  <div className="quota-grid">
+                    <div className="quota-card">
+                      <span className="q-label">Context Window</span>
+                      <span className="q-val">1,048,576</span>
+                      <span className="q-sub">Tokens (1M Context)</span>
+                    </div>
+                    <div className="quota-card">
+                      <span className="q-label">Rate Limit</span>
+                      <span className="q-val">{quota.rpmRemaining} / {quota.rpmLimit}</span>
+                      <span className="q-sub">RPM Remaining</span>
+                    </div>
+                    <div className="quota-card">
+                      <span className="q-label">Daily Computes</span>
+                      <span className="q-val">{quota.dailyComputesRemaining}</span>
+                      <span className="q-sub">of {quota.dailyComputesLimit} available</span>
+                    </div>
+                  </div>
                 </div>
               )}
-              <div className="ag-user-info">
-                <div className="ag-name">{session.name || 'Google User'}</div>
-                <div className="ag-email">{session.email}</div>
-                <div className="ag-tier-meta">
-                  <span className="tier-tag">Antigravity {session.tier?.toUpperCase()}</span>
-                  <span className="auth-type">OAuth 2.0 Loopback</span>
+
+              {/* Generation Controls */}
+              <div className="drawer-section">
+                <span className="section-label">Generation Parameters</span>
+                <div className="param-item">
+                  <div className="param-header">
+                    <span>Temperature</span>
+                    <span className="param-val">{temperature}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={temperature}
+                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                    className="slider-input"
+                  />
+                </div>
+
+                <div className="param-item">
+                  <div className="param-header">
+                    <span>System Prompt</span>
+                  </div>
+                  <textarea
+                    className="sys-prompt-input"
+                    rows={3}
+                    value={systemInstruction}
+                    onChange={(e) => setSystemInstruction(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Python Sidecar Diagnostics */}
+              <div className="drawer-section">
+                <span className="section-label">Python Sidecar Diagnostics</span>
+                <div className="diag-list">
+                  <div className="diag-row">
+                    <span>Daemon Status</span>
+                    <span className="status-badge green">Active (Lazy Loaded)</span>
+                  </div>
+                  <div className="diag-row">
+                    <span>Sidecar Port</span>
+                    <code>{sidecarStatus?.port || 45281}</code>
+                  </div>
+                  <div className="diag-row">
+                    <span>GenAI SDK Bridge</span>
+                    <span>Ready</span>
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="ag-account-actions">
-              <button
-                className="ag-btn secondary glass-interactive"
-                onClick={handleGoogleSignIn}
-                disabled={isLoggingIn}
-              >
-                <span>Switch Account</span>
-              </button>
-              <button
-                className="ag-btn danger glass-interactive"
-                onClick={handleSignOut}
-              >
-                <LogOut size={12} />
-                <span>Sign Out</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="ag-signin-banner glass-subcard">
-            <p className="ag-signin-desc">
-              Log in with your personal Google account to activate Antigravity 2.0 multi-model agents with zero API key configuration.
-            </p>
-            <button
-              className="ag-google-login-btn glass-interactive"
-              onClick={handleGoogleSignIn}
-              disabled={isLoggingIn}
-            >
-              <svg className="google-icon" viewBox="0 0 24 24" width="16" height="16">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span>{isLoggingIn ? 'Authenticating with Google...' : 'Sign In with Google (Antigravity)'}</span>
-            </button>
-          </div>
+          </aside>
         )}
-      </section>
-
-      {/* 2. Python Antigravity SDK Sidecar Status */}
-      <section className="ag-section-card glass-panel">
-        <div className="ag-section-header">
-          <div className="ag-section-title">
-            <Cpu size={14} className="text-purple" />
-            <span>Python SDK Sidecar Daemon</span>
-          </div>
-          <div className="ag-sidecar-pill">
-            <span className={`status-dot ${status?.running ? 'online' : 'offline'}`} />
-            <span>{status?.running ? `Online (Port ${status.port})` : 'Lazy Standby'}</span>
-          </div>
-        </div>
-
-        <div className="ag-daemon-grid">
-          <div className="daemon-metric glass-subcard">
-            <span className="metric-label">Python Version</span>
-            <span className="metric-value">{status?.pythonVersion || 'Python 3.10+'}</span>
-          </div>
-          <div className="daemon-metric glass-subcard">
-            <span className="metric-label">SDK Protocol</span>
-            <span className="metric-value">google-antigravity / SSE</span>
-          </div>
-          <div className="daemon-metric glass-subcard">
-            <span className="metric-label">Boot Mode</span>
-            <span className="metric-value">On-Demand Lazy Boot</span>
-          </div>
-          <div className="daemon-metric glass-subcard">
-            <span className="metric-label">Process State</span>
-            <span className="metric-value text-success">{status?.running ? 'Attached' : 'Ready'}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Subscription Quotas & Token Limits */}
-      <section className="ag-section-card glass-panel">
-        <div className="ag-section-header">
-          <div className="ag-section-title">
-            <Zap size={14} className="text-amber" />
-            <span>Antigravity Subscription Quotas</span>
-          </div>
-          <span className="quota-tag">1M Context Window</span>
-        </div>
-
-        <div className="ag-quota-grid">
-          <div className="ag-quota-card glass-subcard">
-            <div className="quota-top">
-              <span className="q-label">Requests / Min (RPM)</span>
-              <span className="q-val">{quota?.rpmRemaining || 58} / {quota?.rpmLimit || 60}</span>
-            </div>
-            <div className="quota-bar-wrapper">
-              <div
-                className="quota-bar-fill rpm"
-                style={{ width: `${Math.min(100, ((quota?.rpmRemaining || 58) / (quota?.rpmLimit || 60)) * 100)}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="ag-quota-card glass-subcard">
-            <div className="quota-top">
-              <span className="q-label">Tokens / Min (TPM)</span>
-              <span className="q-val">3.95M / 4.0M</span>
-            </div>
-            <div className="quota-bar-wrapper">
-              <div className="quota-bar-fill tpm" style={{ width: '98%' }} />
-            </div>
-          </div>
-
-          <div className="ag-quota-card glass-subcard">
-            <div className="quota-top">
-              <span className="q-label">Daily Agent Computes</span>
-              <span className="q-val">{quota?.dailyComputesRemaining || 950} / {quota?.dailyComputesLimit || 1000}</span>
-            </div>
-            <div className="quota-bar-wrapper">
-              <div className="quota-bar-fill compute" style={{ width: '95%' }} />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. Antigravity 2.0 Agent Session Launcher */}
-      <section className="ag-section-card glass-panel">
-        <div className="ag-section-header">
-          <div className="ag-section-title">
-            <Bot size={14} className="text-emerald" />
-            <span>Launch Antigravity 2.0 Agent</span>
-          </div>
-        </div>
-
-        <div className="ag-agent-setup glass-subcard">
-          <div className="setup-row">
-            <label>Agent Model</label>
-            <select
-              className="ag-select"
-              value={selectedAgentModel}
-              onChange={(e) => setSelectedAgentModel(e.target.value)}
-            >
-              <option value="antigravity-personal-agent">Antigravity 2.0 Agent (Personal)</option>
-              <option value="antigravity-gemini-2-5-pro">Gemini 2.5 Pro (Antigravity Tier)</option>
-              <option value="antigravity-claude-3-7-sonnet">Claude 3.7 Sonnet (Antigravity Tier)</option>
-            </select>
-          </div>
-
-          <div className="setup-row">
-            <label>Agent Behavior</label>
-            <div className="behavior-buttons">
-              <button
-                className={`behavior-btn glass-interactive ${agentBehavior === 'autonomous' ? 'active' : ''}`}
-                onClick={() => setAgentBehavior('autonomous')}
-              >
-                <Zap size={11} />
-                <span>Autonomous</span>
-              </button>
-              <button
-                className={`behavior-btn glass-interactive ${agentBehavior === 'interactive' ? 'active' : ''}`}
-                onClick={() => setAgentBehavior('interactive')}
-              >
-                <Sliders size={11} />
-                <span>Interactive</span>
-              </button>
-            </div>
-          </div>
-
-          <button className="ag-launch-btn glass-interactive" onClick={handleLaunchInAiChat}>
-            <Play size={13} fill="currentColor" />
-            <span>Open in AI Assistant & Start Turn</span>
-          </button>
-        </div>
-      </section>
-
-      <style>{`
-        .antigravity-studio-container {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          padding: 14px;
-          height: 100%;
-          overflow-y: auto;
-          position: relative;
-          color: #FFFFFF;
-          background: rgba(10, 14, 26, 0.92);
-        }
-
-        .ag-ambient-orb {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(80px);
-          pointer-events: none;
-          z-index: 0;
-          opacity: 0.18;
-        }
-
-        .ag-orb-1 {
-          width: 300px;
-          height: 300px;
-          background: #00F0FF;
-          top: -50px;
-          right: -50px;
-        }
-
-        .ag-orb-2 {
-          width: 320px;
-          height: 320px;
-          background: #BF5AF2;
-          bottom: 20px;
-          left: -60px;
-        }
-
-        .ag-header-banner {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 12px 14px;
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          position: relative;
-          z-index: 10;
-        }
-
-        .ag-title-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .ag-logo-wrapper {
-          width: 36px;
-          height: 36px;
-          border-radius: 8px;
-          background: rgba(0, 240, 255, 0.1);
-          border: 1px solid rgba(0, 240, 255, 0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 0 15px rgba(0, 240, 255, 0.25);
-        }
-
-        .ag-main-title {
-          font-size: 13px;
-          font-weight: 700;
-          margin: 0;
-          background: linear-gradient(135deg, #FFFFFF 0%, #5AC8FA 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-
-        .ag-subtitle {
-          font-size: 10px;
-          color: rgba(235, 235, 245, 0.6);
-        }
-
-        .ag-refresh-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          padding: 4px 10px;
-          border-radius: 5px;
-          font-size: 10.5px;
-          font-weight: 600;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          color: #FFFFFF;
-          cursor: pointer;
-        }
-
-        .spinning {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        .ag-section-card {
-          padding: 12px;
-          border-radius: 8px;
-          background: rgba(14, 18, 32, 0.85);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          position: relative;
-          z-index: 10;
-        }
-
-        .ag-section-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .ag-section-title {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 11.5px;
-          font-weight: 700;
-          color: #FFFFFF;
-        }
-
-        .text-cyan { color: #00F0FF; }
-        .text-purple { color: #BF5AF2; }
-        .text-amber { color: #FF9F0A; }
-        .text-emerald { color: #30D158; }
-        .text-success { color: #30D158; }
-
-        .ag-status-badge {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 2px 7px;
-          border-radius: 999px;
-          font-size: 9.5px;
-          font-weight: 600;
-        }
-
-        .ag-status-badge.active {
-          background: rgba(48, 209, 88, 0.18);
-          border: 1px solid rgba(48, 209, 88, 0.4);
-          color: #30D158;
-        }
-
-        .ag-status-badge.inactive {
-          background: rgba(255, 159, 10, 0.15);
-          border: 1px solid rgba(255, 159, 10, 0.35);
-          color: #FF9F0A;
-        }
-
-        .ag-sidecar-pill {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 10px;
-          color: rgba(235, 235, 245, 0.7);
-        }
-
-        .status-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-        }
-
-        .status-dot.online { background: #30D158; box-shadow: 0 0 8px #30D158; }
-        .status-dot.offline { background: #FF9F0A; }
-
-        .ag-user-profile-box {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 10px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 6px;
-        }
-
-        .ag-profile-left {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .ag-avatar-img {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          border: 1px solid rgba(0, 240, 255, 0.4);
-        }
-
-        .ag-avatar-placeholder {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          background: rgba(0, 240, 255, 0.15);
-          border: 1px solid rgba(0, 240, 255, 0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #00F0FF;
-        }
-
-        .ag-user-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .ag-name {
-          font-size: 12px;
-          font-weight: 700;
-          color: #FFFFFF;
-        }
-
-        .ag-email {
-          font-size: 10px;
-          color: rgba(235, 235, 245, 0.6);
-        }
-
-        .ag-tier-meta {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          margin-top: 2px;
-        }
-
-        .tier-tag {
-          font-size: 9px;
-          font-weight: 700;
-          padding: 1px 5px;
-          border-radius: 4px;
-          background: rgba(191, 90, 242, 0.25);
-          border: 1px solid rgba(191, 90, 242, 0.45);
-          color: #BF5AF2;
-        }
-
-        .auth-type {
-          font-size: 9px;
-          color: rgba(235, 235, 245, 0.45);
-        }
-
-        .ag-account-actions {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .ag-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: 600;
-          cursor: pointer;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          background: rgba(255, 255, 255, 0.06);
-          color: #FFFFFF;
-        }
-
-        .ag-btn.danger {
-          background: rgba(255, 69, 58, 0.15);
-          border-color: rgba(255, 69, 58, 0.35);
-          color: #FF453A;
-        }
-
-        .ag-signin-banner {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          padding: 10px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 6px;
-        }
-
-        .ag-signin-desc {
-          font-size: 11px;
-          color: rgba(235, 235, 245, 0.7);
-          margin: 0;
-          line-height: 1.4;
-        }
-
-        .ag-google-login-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 8px 14px;
-          border-radius: 6px;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: #FFFFFF;
-          font-size: 11px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .ag-google-login-btn:hover {
-          background: rgba(255, 255, 255, 0.14);
-          border-color: rgba(255, 255, 255, 0.35);
-          box-shadow: 0 0 16px rgba(66, 133, 244, 0.35);
-        }
-
-        .ag-daemon-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 6px;
-        }
-
-        .daemon-metric {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          padding: 6px 8px;
-          background: rgba(0, 0, 0, 0.25);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 5px;
-        }
-
-        .metric-label {
-          font-size: 9.5px;
-          color: rgba(235, 235, 245, 0.5);
-        }
-
-        .metric-value {
-          font-size: 11px;
-          font-weight: 600;
-          color: #FFFFFF;
-        }
-
-        .ag-quota-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .ag-quota-card {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          padding: 6px 8px;
-          background: rgba(0, 0, 0, 0.25);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 5px;
-        }
-
-        .quota-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          font-size: 10px;
-        }
-
-        .q-label { color: rgba(235, 235, 245, 0.6); }
-        .q-val { color: #FFFFFF; font-weight: 600; font-family: monospace; }
-
-        .quota-bar-wrapper {
-          width: 100%;
-          height: 4px;
-          background: rgba(255, 255, 255, 0.08);
-          border-radius: 999px;
-          overflow: hidden;
-        }
-
-        .quota-bar-fill {
-          height: 100%;
-          border-radius: 999px;
-        }
-
-        .quota-bar-fill.rpm { background: #00F0FF; box-shadow: 0 0 6px #00F0FF; }
-        .quota-bar-fill.tpm { background: #BF5AF2; box-shadow: 0 0 6px #BF5AF2; }
-        .quota-bar-fill.compute { background: #30D158; box-shadow: 0 0 6px #30D158; }
-
-        .quota-tag {
-          font-size: 9px;
-          font-weight: 700;
-          padding: 1px 5px;
-          background: rgba(255, 159, 10, 0.2);
-          border: 1px solid rgba(255, 159, 10, 0.4);
-          color: #FF9F0A;
-          border-radius: 4px;
-        }
-
-        .ag-agent-setup {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          padding: 10px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 6px;
-        }
-
-        .setup-row {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .setup-row label {
-          font-size: 10px;
-          font-weight: 600;
-          color: rgba(235, 235, 245, 0.6);
-        }
-
-        .ag-select {
-          background: rgba(0, 0, 0, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 5px;
-          color: #FFFFFF;
-          padding: 5px 8px;
-          font-size: 11px;
-          outline: none;
-        }
-
-        .behavior-buttons {
-          display: flex;
-          gap: 6px;
-        }
-
-        .behavior-btn {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
-          padding: 5px 8px;
-          border-radius: 5px;
-          font-size: 10.5px;
-          font-weight: 600;
-          cursor: pointer;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.04);
-          color: rgba(235, 235, 245, 0.7);
-        }
-
-        .behavior-btn.active {
-          background: rgba(0, 240, 255, 0.18);
-          border-color: rgba(0, 240, 255, 0.45);
-          color: #00F0FF;
-          box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
-        }
-
-        .ag-launch-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          padding: 8px 12px;
-          border-radius: 6px;
-          background: linear-gradient(135deg, #0A84FF 0%, #BF5AF2 100%);
-          border: none;
-          color: #FFFFFF;
-          font-size: 11.5px;
-          font-weight: 700;
-          cursor: pointer;
-          box-shadow: 0 0 16px rgba(191, 90, 242, 0.35);
-          margin-top: 4px;
-          transition: transform 0.15s ease;
-        }
-
-        .ag-launch-btn:hover {
-          transform: scale(1.02);
-        }
-      `}</style>
+      </div>
     </div>
   )
 }

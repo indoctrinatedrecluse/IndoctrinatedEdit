@@ -5,11 +5,11 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.7.1] - 2026-09-20
+## [4.7.1] - 2026-09-21
 
-### 🚀 Release — Multi-Pane Grid Viewport Fix, Google Antigravity Personal Subscription SDK Integration, 5-Tier Project Context Arbiter & Developer GUI Extensions Suite
+### 🚀 Release — Multi-Pane Grid Viewport Fix, Google Antigravity Studio & OAuth2 Integration, 5-Tier Project Context Arbiter & Developer GUI Extensions Suite
 
-IndoctrinatedEdit 4.7.1 delivers a critical hotfix for multi-pane split grid viewport rendering, an AI Chat model changer stacking & scroll interaction resolution, full Google Antigravity Personal Subscription integration powered by a zero-boot-overhead Python SDK sidecar with OAuth2 browser login, an intelligent 5-Tier Project-Context-Aware Extension Conflict Resolution Engine, and the complete Developer GUI Extensions suite:
+IndoctrinatedEdit 4.7.1 delivers a critical hotfix for multi-pane split grid viewport rendering, an AI Chat model changer stacking & scroll interaction resolution, full Google Antigravity Personal Subscription integration powered by a zero-boot-overhead Python SDK sidecar with genuine Google OAuth2 loopback browser authentication & interactive chat studio, an intelligent 5-Tier Project-Context-Aware Extension Conflict Resolution Engine, and the complete Developer GUI Extensions suite:
 
 #### 🩹 Core Hotfixes & AI Chat Model Selector Restoration
 - **AI Chat Model Selector Stacking & Scroll Fix**: Resolved an issue where the AI model changer dropdown could not be interacted with or scrolled due to competing z-indexes and event interception between flex container siblings. Elevated header stacking contexts (`z-index: 100`), established dedicated dropdown layers (`z-index: 9999; pointer-events: auto;`), added scroll propagation isolation, and implemented smooth outside-click auto-closing.
@@ -17,11 +17,12 @@ IndoctrinatedEdit 4.7.1 delivers a critical hotfix for multi-pane split grid vie
 - **Automatic Multi-Pane Resize Observer**: Integrated a responsive `ResizeObserver` inside `EditorHost` that triggers immediate Monaco `editor.layout()` calls on pane split creation, ratio sash dragging, and window resizing.
 - **Compact Git Blame & Breadcrumbs Bar**: Enforced explicit `size={11}` constraints and inline-flex sizing on `InlineBlameLens` and `BreadcrumbsBar` icons, preventing vertical layout blowout in split editor panes.
 
-#### 🌌 Google Antigravity Personal Subscription Integration & Zero-Boot-Overhead Python Sidecar
+#### 🌌 Google Antigravity Studio & Personal Account OAuth2 Integration
+- **Full Interactive Chat Studio**: Multi-turn pair programming interface with syntax-highlighted code blocks, one-click "Copy Code" & "Insert into Editor", expandable Chain-of-Thought (CoT) reasoning inspector, quick prompt chips, model selector, and active file context attachment.
+- **Authentic Google OAuth2 Loopback Authentication**: Authenticate directly with personal Google accounts via local browser loopback flow without manual API keys, retrieving authentic Google user profiles with seamless fallback to Application Default Credentials (ADC) and `gcloud` authentication.
 - **Zero Boot Overhead Architecture**: Backend service files and the Python SDK harness are **strictly loaded on-demand** into working memory and spawned only when the user opens the Antigravity extension view or initiates an Antigravity action—preventing any startup latency or memory overhead.
-- **Personal Google Account OAuth2 Authentication**: Authenticate directly with personal Google accounts via local loopback OAuth2 browser flow without requiring manual API keys, with automatic Application Default Credentials (ADC) fallback.
-- **Python Antigravity SDK Sidecar Harness**: High-performance local sidecar daemon interfacing `google-antigravity` and `google-genai` with streaming SSE responses (`/v1/chat/stream`), quota telemetry (60 RPM / 1M token context tracking), and real-time latency monitors.
-- **Antigravity Studio & UI Iconography**: Dedicated Liquid Glass Antigravity Studio view, glowing Antigravity vector logo component, Left Activity Bar toggle, Right Auxiliary Dock integration, and dynamic bottom Status Bar chips.
+- **Python Antigravity SDK Sidecar Daemon**: High-performance local sidecar daemon interfacing `google-antigravity` and `google-genai` with streaming SSE responses (`/v1/chat/stream`), quota telemetry (60 RPM / 1M token context tracking), and real-time model metrics.
+- **Modularized & Consolidated Architecture**: Cleanly structured modular components with dedicated stylesheets and deduplicated helper utilities across frontend, Electron service, and Python sidecar layers.
 
 #### 🧠 5-Tier Project-Context-Aware Extension Conflict Resolution Engine
 - **Tier 1 — Workspace Project & Build Context**: Dynamically inspects project configuration markers (`angular.json`, `next.config.*`, `nuxt.config.*`, `svelte.config.*`, `nest-cli.json`, `Cargo.toml`, `go.mod`, `pubspec.yaml`, `requirements.txt`, `pom.xml`, etc.) and `package.json` dependencies. If an Angular project is detected, Angular Enterprise Suite claims `.ts`/`.html`/`.css`/`.json`; for React/Next.js projects, React 19 Suite claims `.tsx`/`.ts`/`.jsx`/`.js`.

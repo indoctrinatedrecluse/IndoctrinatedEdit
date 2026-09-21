@@ -25,10 +25,52 @@ describe('AntigravityAuthService & Antigravity Extension Tests', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.restoreAllMocks()
+
+    // Mock electronAPI
+    ;(globalThis as any).window = {
+      electronAPI: {
+        antigravity: {
+          login: vi.fn().mockResolvedValue({
+            userId: 'google-uid-12345',
+            email: 'abhishek.mitra@gmail.com',
+            name: 'Abhishek Mitra',
+            picture: 'https://lh3.googleusercontent.com/a/mock-pic',
+            tier: 'personal',
+            subscriptionActive: true,
+            tokenType: 'oauth',
+            accessToken: 'mock_oauth_token_xyz',
+            expiresAt: Math.floor(Date.now() / 1000) + 3600,
+          }),
+          logout: vi.fn().mockResolvedValue(true),
+          getSession: vi.fn().mockResolvedValue(null),
+          getQuota: vi.fn().mockResolvedValue({
+            tier: 'personal',
+            rpmLimit: 60,
+            rpmRemaining: 58,
+            tpmLimit: 4000000,
+            tpmRemaining: 3950000,
+            contextWindowTokens: 1048576,
+            dailyComputesRemaining: 950,
+            dailyComputesLimit: 1000,
+            activeModels: [
+              'antigravity-personal-agent',
+              'antigravity-gemini-2-5-pro',
+              'antigravity-gemini-2-5-flash',
+              'gemini-2.5-pro',
+            ],
+          }),
+          getStatus: vi.fn().mockResolvedValue({
+            isReady: true,
+            port: 45281,
+            authStatus: 'authenticated',
+          }),
+        },
+      },
+    }
   })
 
   it('should initialize with null session when no stored credentials exist', () => {
-    const session = antigravityAuthService.getSession()
+    expect(antigravityAuthService.getSession()).toBeNull()
     expect(antigravityAuthService.isAuthenticated()).toBe(false)
   })
 
@@ -36,7 +78,7 @@ describe('AntigravityAuthService & Antigravity Extension Tests', () => {
     const session = await antigravityAuthService.loginWithGoogle()
 
     expect(session).toBeDefined()
-    expect(session.email).toContain('@gmail.com')
+    expect(session.email).toBe('abhishek.mitra@gmail.com')
     expect(session.tier).toBe('personal')
     expect(session.subscriptionActive).toBe(true)
     expect(antigravityAuthService.isAuthenticated()).toBe(true)

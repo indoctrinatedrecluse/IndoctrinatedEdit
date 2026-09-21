@@ -339,7 +339,16 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
-        {activeTab === 'antigravity' && <AntigravityStudioView />}
+        {activeTab === 'antigravity' && (
+          <AntigravityStudioView
+            activeFileName={activeFileName}
+            activeFileContent={activeFileContent}
+            currentSelection={currentSelection}
+            onInsertAtCursor={onInsertAtCursor}
+            onReplaceSelection={onReplaceSelection}
+            onClose={onClose}
+          />
+        )}
         {activeTab === 'ports' && <PortSentinelView />}
         {activeTab === 'redis' && <RedisStudioView />}
         {activeTab === 'env' && <EnvVaultView />}

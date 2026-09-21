@@ -70,34 +70,20 @@ class AntigravityAuthService {
     if (typeof window !== 'undefined' && window.electronAPI?.antigravity?.login) {
       try {
         const session = await window.electronAPI.antigravity.login()
-        this.activeSession = session
-        localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(session))
-        this._emit('auth-changed', session)
-        return session
-      } catch (err) {
+        if (session && session.email) {
+          this.activeSession = session
+          localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(session))
+          this._emit('auth-changed', session)
+          return session
+        }
+        throw new Error('No session returned from Google login')
+      } catch (err: any) {
         console.error('[AntigravityAuthService] Login failed:', err)
+        throw new Error(err.message || 'Google OAuth2 login failed')
       }
     }
 
-    // Direct / Web fallback session
-    const fallbackSession: AntigravitySession = {
-      userId: `google-user-${Date.now()}`,
-      email: 'personal.developer@gmail.com',
-      name: 'Google Antigravity Developer',
-      picture: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
-      tier: 'personal',
-      subscriptionActive: true,
-      tokenType: 'oauth',
-      accessToken: `ag_token_${Date.now()}`,
-      expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
-    }
-
-    this.activeSession = fallbackSession
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(fallbackSession))
-    }
-    this._emit('auth-changed', fallbackSession)
-    return fallbackSession
+    throw new Error('Google OAuth requires running in Electron application environment.')
   }
 
   /**
@@ -216,8 +202,12 @@ class AntigravityAuthService {
 
   private _emit(event: string, data?: any): void {
     this.listeners.get(event)?.forEach((cb) => cb(data))
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(`antigravity-${event}`, { detail: data }))
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      try {
+        window.dispatchEvent(new CustomEvent(`antigravity-${event}`, { detail: data }))
+      } catch {
+        // Ignored in headless test environments
+      }
     }
   }
 }

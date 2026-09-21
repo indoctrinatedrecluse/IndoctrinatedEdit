@@ -128,31 +128,21 @@ class AntigravityBackendService {
    */
   public async login(): Promise<AntigravitySession> {
     await this.ensureStarted()
-    try {
-      const res = await fetch(`${this.getBaseUrl()}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      if (res.ok) {
-        const data = (await res.json()) as { success: boolean; session: AntigravitySession }
+    const res = await fetch(`${this.getBaseUrl()}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    
+    if (res.ok) {
+      const data = (await res.json()) as { success: boolean; session: AntigravitySession; error?: string }
+      if (data.session) {
         return data.session
       }
-    } catch (err) {
-      console.warn('[AntigravityBackend] Login request error:', err)
+      throw new Error(data.error || 'Google OAuth login failed')
+    } else {
+      const errData = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new Error(errData.error || `Google OAuth failed with status ${res.status}`)
     }
-
-    // Fallback active session if offline or direct
-    const fallback: AntigravitySession = {
-      userId: 'google-personal-user',
-      email: 'personal.developer@gmail.com',
-      name: 'Google Antigravity Developer',
-      tier: 'personal',
-      subscriptionActive: true,
-      tokenType: 'oauth',
-      accessToken: `antigravity_token_${Date.now()}`,
-      expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
-    }
-    return fallback
   }
 
   /**
