@@ -17,12 +17,15 @@ import sys
 import json
 import time
 import socket
+import secrets
+import hashlib
+import base64
 import urllib.request
 import urllib.parse
 import urllib.error
 import webbrowser
 import subprocess
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 # Paths & Constants
@@ -47,7 +50,6 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/generative-language",
-    "https://www.googleapis.com/auth/cloud-platform",
 ]
 
 DEFAULT_MODEL = "gemini-3.7-flash"
@@ -207,30 +209,6 @@ class AntigravitySessionManager:
             }
             log("Initialized session from GEMINI_API_KEY environment variable", "AUTH")
             return
-
-        self._try_detect_adc()
-
-    def _try_detect_adc(self):
-        """Attempts to discover active gcloud account or ADC credentials."""
-        account = _run_command_safe(["gcloud", "config", "get-value", "account"], timeout=2)
-        project = _run_command_safe(["gcloud", "config", "get-value", "project"], timeout=2)
-        if account and "@" in account and account != "(unset)":
-            access_token = _run_command_safe(["gcloud", "auth", "print-access-token"], timeout=2)
-            if access_token:
-                log(f"Discovered active gcloud CLI account: {account} (project={project})", "AUTH")
-                self.session = {
-                    "userId": f"gcloud-{account}",
-                    "email": account,
-                    "name": account.split("@")[0].replace(".", " ").title(),
-                    "picture": "",
-                    "tier": "personal",
-                    "subscriptionActive": True,
-                    "tokenType": "adc",
-                    "project": project if project and project != "(unset)" else "default",
-                    "accessToken": access_token,
-                    "expiresAt": int(time.time()) + 3600,
-                }
-                return
 
     def set_api_key(self, api_key):
         """Sets an explicit Google AI Studio API Key / Personal Token."""
@@ -442,6 +420,14 @@ class OAuthLoopbackHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
+def generate_pkce():
+    """Generates standard PKCE code verifier and code challenge."""
+    code_verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return code_verifier, code_challenge
+
+
 def run_oauth_browser_flow():
     """Runs a local ephemeral loopback server and opens browser for Google OAuth."""
     loopback_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -450,11 +436,15 @@ def run_oauth_browser_flow():
     loopback_sock.close()
 
     redirect_uri = f"http://127.0.0.1:{port}/callback"
+    code_verifier, code_challenge = generate_pkce()
+
     auth_params = {
         "client_id": GOOGLE_OAUTH_CLIENT_ID,
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": " ".join(GOOGLE_SCOPES),
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
         "access_type": "offline",
         "prompt": "consent select_account",
     }
@@ -490,6 +480,7 @@ def run_oauth_browser_flow():
             "client_id": GOOGLE_OAUTH_CLIENT_ID,
             "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
+            "code_verifier": code_verifier,
         }).encode("utf-8")
 
         req = urllib.request.Request(GOOGLE_OAUTH_TOKEN_URI, data=token_data, method="POST")
@@ -840,9 +831,9 @@ def main():
 
     log(f"Starting Antigravity backend service on port {port} (PID {os.getpid()})", "INIT")
     try:
-        server = HTTPServer((DEFAULT_HOST, port), AntigravityBackendHandler)
+        server = ThreadingHTTPServer((DEFAULT_HOST, port), AntigravityBackendHandler)
     except OSError:
-        server = HTTPServer((DEFAULT_HOST, 0), AntigravityBackendHandler)
+        server = ThreadingHTTPServer((DEFAULT_HOST, 0), AntigravityBackendHandler)
         port = server.server_address[1]
         log(f"Port was busy; bound to ephemeral port {port}", "INIT")
 

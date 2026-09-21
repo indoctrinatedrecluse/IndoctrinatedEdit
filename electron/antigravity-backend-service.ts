@@ -77,6 +77,18 @@ class AntigravityBackendService {
     if (this.isReady && this.childProcess) {
       return this.port
     }
+
+    // Probe existing daemon if already running on port
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.port}/health`, { signal: AbortSignal.timeout(800) })
+      if (res.ok) {
+        this.isReady = true
+        return this.port
+      }
+    } catch {
+      // Daemon not running yet, proceed with spawn
+    }
+
     if (this.readyPromise) {
       return this.readyPromise
     }
@@ -186,6 +198,7 @@ class AntigravityBackendService {
       const res = await fetch(`${this.getBaseUrl()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(300000), // 5 minute browser sign-in timeout
       })
       
       if (res.ok) {
@@ -200,6 +213,9 @@ class AntigravityBackendService {
       }
     } catch (err: any) {
       console.error('[AntigravityBackend] Login failed:', err)
+      if (err.name === 'TimeoutError' || err.message?.includes('timed out')) {
+        throw new Error('Google Sign-In timed out. Please click "Sign In with Google" to try again.')
+      }
       throw new Error(
         err.message?.includes('fetch failed') || err.code === 'ECONNREFUSED'
           ? 'Could not connect to Python Antigravity service. Please verify Python 3 is installed on your system.'
