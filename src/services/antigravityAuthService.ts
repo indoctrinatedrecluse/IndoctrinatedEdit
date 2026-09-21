@@ -144,17 +144,62 @@ class AntigravityAuthService {
       dailyComputesRemaining: isSubscribed ? 950 : 100,
       dailyComputesLimit: isSubscribed ? 1000 : 100,
       activeModels: [
-        'antigravity-personal-agent',
+        'antigravity-gemini-3-7-flash',
         'antigravity-gemini-2-5-pro',
+        'antigravity-gemini-2-5-flash',
         'antigravity-claude-3-7-sonnet',
+        'gemini-3.7-flash',
         'gemini-2.5-pro',
         'gemini-2.5-flash',
         'claude-3-7-sonnet',
-        'deepseek-r1',
       ],
     }
     this.quotaInfo = quota
     return quota
+  }
+
+  public async setApiKey(apiKey: string): Promise<AntigravitySession | null> {
+    if (typeof window !== 'undefined' && window.electronAPI?.antigravity?.setApiKey) {
+      try {
+        const session = await window.electronAPI.antigravity.setApiKey(apiKey)
+        if (session) {
+          this.activeSession = session
+          localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(session))
+          this._emit('auth-changed', session)
+          return session
+        }
+      } catch (err) {
+        console.warn('[AntigravityAuthService] setApiKey failed:', err)
+      }
+    }
+    if (apiKey.trim()) {
+      const fallbackSession: AntigravitySession = {
+        userId: 'api-key-user',
+        email: 'personal-key@antigravity.dev',
+        name: 'Google AI Studio User',
+        tier: 'personal',
+        subscriptionActive: true,
+        tokenType: 'api_key',
+        accessToken: apiKey,
+        expiresAt: Math.floor(Date.now() / 1000) + 86400 * 365,
+      }
+      this.activeSession = fallbackSession
+      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(fallbackSession))
+      this._emit('auth-changed', fallbackSession)
+      return fallbackSession
+    }
+    return null
+  }
+
+  public async removeApiKey(): Promise<void> {
+    if (typeof window !== 'undefined' && window.electronAPI?.antigravity?.removeApiKey) {
+      try {
+        await window.electronAPI.antigravity.removeApiKey()
+      } catch {
+        // Ignored
+      }
+    }
+    await this.logout()
   }
 
   public async getSidecarStatus(): Promise<AntigravitySidecarStatus> {

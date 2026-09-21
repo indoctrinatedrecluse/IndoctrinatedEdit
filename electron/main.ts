@@ -376,6 +376,14 @@ ipcMain.handle('antigravity:tokenize', async (_, text: string, messages?: Array<
   return await antigravityBackendService.tokenize(text, messages)
 })
 
+ipcMain.handle('antigravity:setApiKey', async (_, apiKey: string) => {
+  return await antigravityBackendService.setApiKey(apiKey)
+})
+
+ipcMain.handle('antigravity:removeApiKey', async () => {
+  return await antigravityBackendService.removeApiKey()
+})
+
 // ==========================================
 // Compiler & SDK Auto-Detection IPC Handlers
 // ==========================================

@@ -73,19 +73,23 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
     {
       id: 'welcome-msg',
       role: 'assistant',
-      content: `Welcome to **Google Antigravity Studio**!\n\nPowered by the Python Antigravity SDK with your personal Google account. Enjoy 1M-token context windows, real-time reasoning streaming, and zero manual API key configuration.`,
+      content: `Welcome to **Google Antigravity Studio**!\n\nPowered by **Gemini 3.7 Flash** with hybrid Chain-of-Thought reasoning, 1M-token context windows, and real-time streaming using your personal Google account.`,
       timestamp: Date.now(),
-      model: 'antigravity-gemini-2-5-pro',
+      model: 'antigravity-gemini-3-7-flash',
     },
   ])
   const [inputPrompt, setInputPrompt] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [selectedModel, setSelectedModel] = useState('antigravity-gemini-2-5-pro')
+  const [selectedModel, setSelectedModel] = useState('antigravity-gemini-3-7-flash')
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false)
   const [includeFileContext, setIncludeFileContext] = useState(false)
   const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null)
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
+
+  // API Key Override State
+  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [apiKeySavedNotice, setApiKeySavedNotice] = useState(false)
 
   // Live Backend Logs & Tokenization State
   const [showLogsModal, setShowLogsModal] = useState(false)
@@ -116,11 +120,18 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
   const availableModels = useMemo(
     () => [
       {
+        id: 'antigravity-gemini-3-7-flash',
+        name: 'Antigravity Gemini 3.7 Flash',
+        badge: 'Flagship Reasoning',
+        context: '1M Context',
+        desc: 'Hybrid Chain-of-Thought reasoning, ultra-fast streaming & complex architecture.',
+      },
+      {
         id: 'antigravity-gemini-2-5-pro',
         name: 'Antigravity Gemini 2.5 Pro',
-        badge: 'Recommended',
+        badge: 'Deep Coding',
         context: '1M Context',
-        desc: 'Advanced reasoning, deep architectural analysis & complex code synthesis.',
+        desc: 'Deep multi-file reasoning, refactoring & whole-project analysis.',
       },
       {
         id: 'antigravity-gemini-2-5-flash',
@@ -134,21 +145,21 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
         name: 'Antigravity Claude 3.7 Sonnet',
         badge: 'Hybrid CoT',
         context: '200k Context',
-        desc: 'Personal subscription proxy with deep chain-of-thought code generation.',
+        desc: 'Benchmark-leading coding intelligence and reasoning via Antigravity.',
+      },
+      {
+        id: 'gemini-3.7-flash',
+        name: 'Gemini 3.7 Flash (Direct)',
+        badge: 'Google SDK',
+        context: '1M Context',
+        desc: 'Native Google GenAI model execution with personal OAuth credentials.',
       },
       {
         id: 'gemini-2.5-pro',
         name: 'Gemini 2.5 Pro (Direct)',
         badge: 'Google SDK',
         context: '1M Context',
-        desc: 'Native Google GenAI model execution with personal OAuth credentials.',
-      },
-      {
-        id: 'deepseek-r1',
-        name: 'DeepSeek R1 (Antigravity Agent)',
-        badge: 'Open Reasoning',
-        context: '128k Context',
-        desc: 'High-math and strict formal verification model via Antigravity harness.',
+        desc: 'Direct Google GenAI Pro model execution.',
       },
     ],
     []
@@ -273,6 +284,25 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
   const handleGoogleLogout = async () => {
     await antigravityAuthService.logout()
     setSession(null)
+    setApiKeyInput('')
+  }
+
+  // Save Google AI Studio API Key Override
+  const handleSaveApiKey = async () => {
+    if (!apiKeyInput.trim()) return
+    const newSession = await antigravityAuthService.setApiKey(apiKeyInput.trim())
+    if (newSession) {
+      setSession(newSession)
+      setApiKeySavedNotice(true)
+      setTimeout(() => setApiKeySavedNotice(false), 3000)
+    }
+  }
+
+  // Remove Google AI Studio API Key Override
+  const handleRemoveApiKey = async () => {
+    await antigravityAuthService.removeApiKey()
+    setApiKeyInput('')
+    setSession(null)
   }
 
   // Copy Snippet
@@ -354,9 +384,17 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id === assistantMessageId) {
+              let updatedContent = msg.content
+              if (chunk.error && !chunk.text) {
+                updatedContent =
+                  (updatedContent ? updatedContent + '\n\n' : '') +
+                  `> ⚠️ **Google Antigravity Notice**: ${chunk.error}\n\n*Tip: Connect your Google Account via OAuth or enter a Google AI Studio API Key in Antigravity Settings.*`
+              } else if (chunk.text) {
+                updatedContent = updatedContent + chunk.text
+              }
               return {
                 ...msg,
-                content: chunk.text ? msg.content + chunk.text : msg.content,
+                content: updatedContent,
                 reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
                 isStreaming: !chunk.done && !chunk.error,
               }
@@ -378,7 +416,9 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: msg.content + `\n\n> ⚠️ **Error**: ${err.message || 'Stream connection failed'}. Please verify Google Login in Antigravity settings.`,
+                content:
+                  msg.content +
+                  `\n\n> ⚠️ **Error**: ${err.message || 'Stream connection failed'}. Please verify Google Login in Antigravity settings.`,
                 isStreaming: false,
               }
             : msg
@@ -818,6 +858,45 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Google AI Studio API Key Override */}
+              <div className="drawer-section">
+                <span className="section-label">Google AI Studio Key / Antigravity Token</span>
+                <div className="api-key-box glass-panel">
+                  <p className="api-key-desc">
+                    Direct API Key access enables full 1M-token Gemini 3.7 Flash generation without local gcloud scope limitations.
+                  </p>
+                  <div className="api-key-input-row">
+                    <input
+                      type="password"
+                      className="api-key-input"
+                      placeholder="AIzaSy... (Google AI Studio Key)"
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                    />
+                    <button
+                      className="api-key-save-btn glass-interactive"
+                      onClick={handleSaveApiKey}
+                      disabled={!apiKeyInput.trim()}
+                      title="Save Google AI Studio API Key"
+                    >
+                      Save Key
+                    </button>
+                    {session?.tokenType === 'api_key' && (
+                      <button
+                        className="api-key-remove-btn glass-interactive"
+                        onClick={handleRemoveApiKey}
+                        title="Remove Saved Key"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {apiKeySavedNotice && (
+                    <span className="api-key-saved-tag">✓ Key saved & active for Antigravity generation</span>
+                  )}
+                </div>
               </div>
 
               {/* Quota Telemetry */}

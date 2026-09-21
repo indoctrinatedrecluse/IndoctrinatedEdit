@@ -264,15 +264,51 @@ class AntigravityBackendService {
       dailyComputesRemaining: 950,
       dailyComputesLimit: 1000,
       activeModels: [
-        'antigravity-personal-agent',
+        'antigravity-gemini-3-7-flash',
         'antigravity-gemini-2-5-pro',
         'antigravity-gemini-2-5-flash',
         'antigravity-claude-3-7-sonnet',
+        'gemini-3.7-flash',
         'gemini-2.5-pro',
         'gemini-2.5-flash',
         'claude-3-7-sonnet',
-        'deepseek-r1',
       ],
+    }
+  }
+
+  /**
+   * Sets or updates a Google AI Studio API Key.
+   */
+  public async setApiKey(apiKey: string): Promise<AntigravitySession | null> {
+    await this.ensureStarted()
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/auth/api-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { success: boolean; session: AntigravitySession | null }
+        return data.session
+      }
+    } catch {
+      // Ignored
+    }
+    return null
+  }
+
+  /**
+   * Removes saved Google AI Studio API key.
+   */
+  public async removeApiKey(): Promise<boolean> {
+    await this.ensureStarted()
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/auth/api-key`, {
+        method: 'DELETE',
+      })
+      return res.ok
+    } catch {
+      return false
     }
   }
 

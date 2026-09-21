@@ -60,12 +60,12 @@ export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettin
 }
 
 export const PRESET_MODELS: AiModelOption[] = [
-  // Antigravity (Personal Subscription)
+  // Antigravity (Personal Subscription & Flagship Models)
   {
-    id: 'antigravity-personal-agent',
-    name: 'Antigravity 2.0 Agent (Personal)',
+    id: 'antigravity-gemini-3-7-flash',
+    name: 'Gemini 3.7 Flash (Flagship Reasoning)',
     provider: 'antigravity',
-    description: 'Autonomous multi-turn agent with full workspace grounding, terminal execution, and deep reasoning',
+    description: 'Antigravity flagship model with hybrid Chain-of-Thought reasoning, high-speed streaming, and 1M context',
     supportsReasoning: true,
   },
   {

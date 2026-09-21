@@ -806,6 +806,92 @@
   justify-content: center;
 }
 
+/* API Key Override Box */
+.api-key-box {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-key-desc {
+  font-size: 0.68rem;
+  color: rgba(235, 235, 245, 0.65);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.api-key-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.api-key-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #FFFFFF;
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.api-key-input:focus {
+  border-color: #00F0FF;
+}
+
+.api-key-save-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  color: #00F0FF;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.api-key-save-btn:hover:not(:disabled) {
+  background: rgba(0, 240, 255, 0.25);
+  border-color: #00F0FF;
+}
+
+.api-key-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.api-key-remove-btn {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 69, 58, 0.15);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  color: #FF453A;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.api-key-remove-btn:hover {
+  background: rgba(255, 69, 58, 0.25);
+}
+
+.api-key-saved-tag {
+  font-size: 0.65rem;
+  color: #30D158;
+  font-weight: 500;
+}
+
 .quota-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

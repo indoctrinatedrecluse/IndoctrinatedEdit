@@ -307,7 +307,7 @@ export interface AntigravitySession {
   picture?: string
   tier: 'personal' | 'pro' | 'enterprise'
   subscriptionActive: boolean
-  tokenType: 'oauth' | 'adc' | 'session'
+  tokenType: 'oauth' | 'adc' | 'session' | 'api_key'
   accessToken: string
   refreshToken?: string
   expiresAt: number
