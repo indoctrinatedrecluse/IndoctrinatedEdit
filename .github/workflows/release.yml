@@ -50,11 +50,46 @@ jobs:
 
       - name: Package with Electron Builder (Windows)
         if: runner.os == 'Windows'
-        run: npx electron-builder --win --x64 --publish never
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $maxAttempts = 3
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            Write-Host "Starting Windows packaging (Attempt $i of $maxAttempts)..."
+            npx electron-builder --win --x64 --publish never
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Windows packaging completed successfully."
+              break
+            }
+            if ($i -lt $maxAttempts) {
+              Write-Warning "Packaging attempt $i failed with exit code $LASTEXITCODE. Waiting 15 seconds before retrying..."
+              Start-Sleep -Seconds 15
+            } else {
+              Write-Error "Windows packaging failed after $maxAttempts attempts."
+              exit $LASTEXITCODE
+            }
+          }
 
       - name: Package with Electron Builder (Linux)
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux AppImage tar.gz --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3; do
+            echo "Starting Linux packaging (Attempt $i of 3)..."
+            npx electron-builder --linux AppImage tar.gz --x64 --publish never && break || {
+              if [ $i -lt 3 ]; then
+                echo "Linux packaging attempt $i failed. Retrying in 15s..."
+                sleep 15
+              else
+                echo "Linux packaging failed after 3 attempts."
+                exit 1
+              fi
+            }
+          done
 
       - name: Generate SHA-256 Checksums (Windows)
         if: runner.os == 'Windows'
