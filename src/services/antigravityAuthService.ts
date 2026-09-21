@@ -178,6 +178,41 @@ class AntigravityAuthService {
     return status
   }
 
+  public async getLogs(): Promise<{ logFile: string; logs: string[] }> {
+    if (typeof window !== 'undefined' && window.electronAPI?.antigravity?.getLogs) {
+      try {
+        return await window.electronAPI.antigravity.getLogs()
+      } catch {
+        // Fallback
+      }
+    }
+    return {
+      logFile: '~/.indoctrinated/antigravity_backend.log',
+      logs: ['[INIT] Logging initialized.'],
+    }
+  }
+
+  public async tokenize(
+    text: string,
+    messages?: Array<{ role: string; content: string }>
+  ): Promise<{ characterCount: number; estimatedTokens: number; contextLimit: number; remainingContext: number }> {
+    if (typeof window !== 'undefined' && window.electronAPI?.antigravity?.tokenize) {
+      try {
+        return await window.electronAPI.antigravity.tokenize(text, messages)
+      } catch {
+        // Fallback
+      }
+    }
+    const totalChars = (text || '').length + (messages || []).reduce((acc, m) => acc + (m.content || '').length, 0)
+    const estTokens = Math.max(1, Math.floor(totalChars / 4))
+    return {
+      characterCount: totalChars,
+      estimatedTokens: estTokens,
+      contextLimit: 1048576,
+      remainingContext: Math.max(0, 1048576 - estTokens),
+    }
+  }
+
   public getCachedQuota(): AntigravityQuotaInfo | null {
     return this.quotaInfo
   }

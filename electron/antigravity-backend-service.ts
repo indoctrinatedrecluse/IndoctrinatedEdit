@@ -274,6 +274,56 @@ class AntigravityBackendService {
   }
 
   /**
+   * Fetches recent backend logs from Python daemon.
+   */
+  public async getLogs(): Promise<{ logFile: string; logs: string[] }> {
+    await this.ensureStarted()
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/debug/logs`)
+      if (res.ok) {
+        return (await res.json()) as { logFile: string; logs: string[] }
+      }
+    } catch {
+      // Offline fallback
+    }
+    const logPath = path.join(process.env.USERPROFILE || process.env.HOME || '', '.indoctrinated', 'antigravity_backend.log')
+    return {
+      logFile: logPath,
+      logs: ['[INIT] Python sidecar not running or offline.'],
+    }
+  }
+
+  /**
+   * Estimates token usage for a prompt and messages payload.
+   */
+  public async tokenize(
+    text: string,
+    messages?: Array<{ role: string; content: string }>
+  ): Promise<{ characterCount: number; estimatedTokens: number; contextLimit: number; remainingContext: number }> {
+    await this.ensureStarted()
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/v1/tokenize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, messages: messages || [] }),
+      })
+      if (res.ok) {
+        return (await res.json()) as { characterCount: number; estimatedTokens: number; contextLimit: number; remainingContext: number }
+      }
+    } catch {
+      // Offline heuristic fallback
+    }
+    const totalChars = (text || '').length + (messages || []).reduce((acc, m) => acc + (m.content || '').length, 0)
+    const estTokens = Math.max(1, Math.floor(totalChars / 4))
+    return {
+      characterCount: totalChars,
+      estimatedTokens: estTokens,
+      contextLimit: 1048576,
+      remainingContext: Math.max(0, 1048576 - estTokens),
+    }
+  }
+
+  /**
    * Streams chat completions directly through the Antigravity Python backend.
    */
   public async streamChat(

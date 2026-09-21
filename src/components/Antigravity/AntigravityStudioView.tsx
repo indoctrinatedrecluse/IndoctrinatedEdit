@@ -18,6 +18,8 @@ import {
   Paperclip,
   X,
   AlertCircle,
+  Terminal,
+  Activity,
 } from 'lucide-react'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { antigravityAuthService } from '../../services/antigravityAuthService'
@@ -84,6 +86,20 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
   const [includeFileContext, setIncludeFileContext] = useState(false)
   const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null)
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
+
+  // Live Backend Logs & Tokenization State
+  const [showLogsModal, setShowLogsModal] = useState(false)
+  const [logsData, setLogsData] = useState<{ logFile: string; logs: string[] }>({
+    logFile: '~/.indoctrinated/antigravity_backend.log',
+    logs: [],
+  })
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false)
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(false)
+  const [copiedLogs, setCopiedLogs] = useState(false)
+  const [tokenEstimation, setTokenEstimation] = useState<{ estimatedTokens: number; remainingContext: number }>({
+    estimatedTokens: 0,
+    remainingContext: 1048576,
+  })
 
   // Generation Settings
   const [temperature, setTemperature] = useState(0.7)
@@ -198,6 +214,60 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
       setIsAuthenticating(false)
     }
   }
+
+  // Live Token Estimation Debounce
+  useEffect(() => {
+    let active = true
+    const updateTokenCount = async () => {
+      const fullText = (includeFileContext && activeFileContent ? `Context File: ${activeFileName}\n${activeFileContent}\n\n` : '') + inputPrompt
+      const res = await antigravityAuthService.tokenize(
+        fullText,
+        messages.map((m) => ({ role: m.role, content: m.content }))
+      )
+      if (active) {
+        setTokenEstimation({
+          estimatedTokens: res.estimatedTokens,
+          remainingContext: res.remainingContext,
+        })
+      }
+    }
+    const timer = setTimeout(updateTokenCount, 250)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [inputPrompt, includeFileContext, activeFileName, activeFileContent, messages])
+
+  // Fetch Backend Daemon Logs
+  const handleFetchLogs = async () => {
+    setIsLoadingLogs(true)
+    try {
+      const data = await antigravityAuthService.getLogs()
+      setLogsData(data)
+    } catch {
+      // Ignored
+    } finally {
+      setIsLoadingLogs(false)
+    }
+  }
+
+  // Copy Logs to Clipboard
+  const handleCopyLogs = () => {
+    const raw = logsData.logs.join('\n')
+    navigator.clipboard.writeText(raw)
+    setCopiedLogs(true)
+    setTimeout(() => setCopiedLogs(false), 2000)
+  }
+
+  // Auto-refresh Logs Effect
+  useEffect(() => {
+    if (!showLogsModal) return
+    handleFetchLogs()
+    if (autoRefreshLogs) {
+      const interval = setInterval(handleFetchLogs, 2500)
+      return () => clearInterval(interval)
+    }
+  }, [showLogsModal, autoRefreshLogs])
 
   // Handle Logout
   const handleGoogleLogout = async () => {
@@ -464,6 +534,15 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
             )}
           </div>
 
+          {/* Live Backend Logs */}
+          <button
+            className={`header-tool-btn glass-interactive ${showLogsModal ? 'active' : ''}`}
+            onClick={() => setShowLogsModal(true)}
+            title="View Live Antigravity Python Daemon Logs"
+          >
+            <Terminal size={14} />
+          </button>
+
           {/* Settings & Quota Drawer Toggle */}
           <button
             className={`header-tool-btn glass-interactive ${showSettingsDrawer ? 'active' : ''}`}
@@ -627,6 +706,11 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
                 <Paperclip size={12} />
                 <span>Attach File ({activeFileName})</span>
               </button>
+
+              <span className="token-counter-pill" title="Estimated prompt + context tokens / 1M limit">
+                <Zap size={11} className="token-pill-icon" />
+                <span>{tokenEstimation.estimatedTokens.toLocaleString()} / 1,048,576 tokens</span>
+              </span>
 
               {session && (
                 <span className="account-pill-tag">
@@ -794,7 +878,7 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
 
               {/* Python Sidecar Diagnostics */}
               <div className="drawer-section">
-                <span className="section-label">Python Sidecar Diagnostics</span>
+                <span className="section-label">Python Sidecar Diagnostics & Logs</span>
                 <div className="diag-list">
                   <div className="diag-row">
                     <span>Daemon Status</span>
@@ -808,12 +892,102 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
                     <span>GenAI SDK Bridge</span>
                     <span>Ready</span>
                   </div>
+                  <div className="diag-row logs-drawer-btn-row">
+                    <button
+                      className="view-logs-drawer-btn glass-interactive full-width"
+                      onClick={() => setShowLogsModal(true)}
+                    >
+                      <Terminal size={13} />
+                      <span>View Live Backend Logs</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </aside>
         )}
       </div>
+
+      {/* Live Daemon Logs Modal */}
+      {showLogsModal && (
+        <div className="logs-modal-overlay" onClick={() => setShowLogsModal(false)}>
+          <div className="logs-modal-dialog glass-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="logs-modal-header">
+              <div className="logs-modal-title">
+                <Terminal size={16} className="logs-title-icon" />
+                <span className="logs-title-text">Antigravity Backend Daemon Logs</span>
+                <span className="logs-file-pill" title={logsData.logFile}>
+                  {logsData.logFile.replace(/\\/g, '/').split('/').slice(-2).join('/')}
+                </span>
+              </div>
+              <div className="logs-modal-actions">
+                <label className="auto-refresh-toggle">
+                  <input
+                    type="checkbox"
+                    checked={autoRefreshLogs}
+                    onChange={(e) => setAutoRefreshLogs(e.target.checked)}
+                  />
+                  <span>Auto-refresh (2.5s)</span>
+                </label>
+                <button
+                  className="logs-action-btn glass-interactive"
+                  onClick={handleFetchLogs}
+                  disabled={isLoadingLogs}
+                  title="Refresh Logs"
+                >
+                  <RefreshCw size={13} className={isLoadingLogs ? 'spin-anim' : ''} />
+                  <span>Refresh</span>
+                </button>
+                <button
+                  className="logs-action-btn glass-interactive"
+                  onClick={handleCopyLogs}
+                  title="Copy All Logs to Clipboard"
+                >
+                  {copiedLogs ? <Check size={13} color="#30D158" /> : <Copy size={13} />}
+                  <span>{copiedLogs ? 'Copied!' : 'Copy'}</span>
+                </button>
+                <button
+                  className="logs-close-btn glass-interactive"
+                  onClick={() => setShowLogsModal(false)}
+                  title="Close Logs"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div className="logs-modal-content">
+              {logsData.logs && logsData.logs.length > 0 ? (
+                <div className="logs-terminal-viewport">
+                  {logsData.logs.map((line, idx) => {
+                    let levelClass = 'log-info'
+                    if (line.includes('[ERROR]') || line.includes('Error:') || line.includes('Exception:')) {
+                      levelClass = 'log-error'
+                    } else if (line.includes('[DEBUG]')) {
+                      levelClass = 'log-debug'
+                    } else if (line.includes('[SSE]') || line.includes('[STREAM]')) {
+                      levelClass = 'log-stream'
+                    } else if (line.includes('[AUTH]') || line.includes('[OAUTH]')) {
+                      levelClass = 'log-auth'
+                    }
+                    return (
+                      <div key={idx} className={`log-line-item ${levelClass}`}>
+                        <span className="log-line-number">{idx + 1}</span>
+                        <span className="log-line-text">{line}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="logs-empty-state">
+                  <Activity size={24} className="spin-anim" />
+                  <span>Waiting for logs or backend initialization...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

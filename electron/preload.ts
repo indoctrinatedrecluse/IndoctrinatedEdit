@@ -52,6 +52,11 @@ export interface ElectronAntigravityAPI {
   getSession: () => Promise<AntigravitySession | null>
   getQuota: () => Promise<AntigravityQuotaInfo>
   getStatus: () => Promise<AntigravitySidecarStatus>
+  getLogs: () => Promise<{ logFile: string; logs: string[] }>
+  tokenize: (
+    text: string,
+    messages?: Array<{ role: string; content: string }>
+  ) => Promise<{ characterCount: number; estimatedTokens: number; contextLimit: number; remainingContext: number }>
 }
 
 export interface ElectronToolchainAPI {
@@ -198,6 +203,8 @@ const api: ElectronAPI = {
     getSession: () => ipcRenderer.invoke('antigravity:getSession'),
     getQuota: () => ipcRenderer.invoke('antigravity:getQuota'),
     getStatus: () => ipcRenderer.invoke('antigravity:getStatus'),
+    getLogs: () => ipcRenderer.invoke('antigravity:getLogs'),
+    tokenize: (text, messages) => ipcRenderer.invoke('antigravity:tokenize', text, messages),
   },
 
   toolchain: {

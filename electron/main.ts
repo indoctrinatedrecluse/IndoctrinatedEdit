@@ -368,6 +368,14 @@ ipcMain.handle('antigravity:getStatus', async () => {
   return await antigravityBackendService.getStatus()
 })
 
+ipcMain.handle('antigravity:getLogs', async () => {
+  return await antigravityBackendService.getLogs()
+})
+
+ipcMain.handle('antigravity:tokenize', async (_, text: string, messages?: Array<{ role: string; content: string }>) => {
+  return await antigravityBackendService.tokenize(text, messages)
+})
+
 // ==========================================
 // Compiler & SDK Auto-Detection IPC Handlers
 // ==========================================

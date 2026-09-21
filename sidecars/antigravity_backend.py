@@ -7,6 +7,7 @@ Provides local Python backend services for Google Antigravity:
 - Native ADC (Application Default Credentials) & gcloud token discovery
 - Antigravity Python SDK (`google-antigravity` / `google-genai`) streaming integration
 - Server-Sent Events (SSE) streaming for real-time model completions & CoT thinking tokens
+- Integrated file & console logging for live debugging
 """
 
 import os
@@ -24,7 +25,9 @@ from pathlib import Path
 
 # Paths & Constants
 SESSION_DIR = Path.home() / ".indoctrinated"
+SESSION_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_FILE = SESSION_DIR / "antigravity_credentials.json"
+LOG_FILE = SESSION_DIR / "antigravity_backend.log"
 DEFAULT_HOST = "127.0.0.1"
 
 # Google OAuth2 client settings (Standard Google Cloud SDK desktop client or custom)
@@ -43,11 +46,38 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/generative-language",
 ]
 
+
+def log(msg, level="INFO"):
+    """Writes structured log entries to stderr and the persistent log file."""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{timestamp}] [{level}] {msg}"
+    sys.stderr.write(line + "\n")
+    sys.stderr.flush()
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def get_recent_logs(max_lines=150):
+    """Retrieves the most recent log lines from the log file."""
+    if not LOG_FILE.exists():
+        return []
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            return [line.rstrip("\r\n") for line in lines[-max_lines:]]
+    except Exception as e:
+        return [f"Error reading logs: {e}"]
+
+
 # Check SDK availability
 HAS_ANTIGRAVITY_SDK = False
 try:
     import google.antigravity  # type: ignore
     HAS_ANTIGRAVITY_SDK = True
+    log("google.antigravity SDK detected", "INIT")
 except ImportError:
     pass
 
@@ -56,6 +86,7 @@ try:
     from google import genai  # type: ignore
     from google.genai import types  # type: ignore
     HAS_GENAI_SDK = True
+    log("google.genai SDK detected", "INIT")
 except ImportError:
     pass
 
@@ -86,11 +117,13 @@ class AntigravitySessionManager:
                     data = json.load(f)
                     if data.get("email") and (data.get("expiresAt", 0) > time.time() or data.get("refreshToken") or data.get("tokenType") == "adc"):
                         self.session = data
+                        log(f"Loaded existing session for: {data.get('email')} (expires in {max(0, int(data.get('expiresAt', 0) - time.time()))}s)", "AUTH")
                         if data.get("refreshToken") and data.get("expiresAt", 0) <= time.time():
+                            log("Session token expired; triggering automatic refresh", "AUTH")
                             self.refresh_token()
                         return
         except Exception as e:
-            sys.stderr.write(f"[Antigravity] Failed to load session: {e}\n")
+            log(f"Failed to load session: {e}", "WARN")
         
         self._try_detect_adc()
 
@@ -100,6 +133,7 @@ class AntigravitySessionManager:
         if account and "@" in account and account != "(unset)":
             access_token = _run_command_safe(["gcloud", "auth", "print-access-token"], timeout=2)
             if access_token:
+                log(f"Discovered active gcloud CLI account: {account}", "AUTH")
                 self.session = {
                     "userId": f"gcloud-{account}",
                     "email": account,
@@ -130,9 +164,10 @@ class AntigravitySessionManager:
                     quota_project = adc_data.get("quota_project_id", "")
                     
                     if refresh_token:
+                        log("Discovered ADC credentials file with refresh token", "AUTH")
                         self._exchange_refresh_token(refresh_token, client_id, client_secret, quota_project)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"ADC detection check error: {e}", "DEBUG")
 
     def _exchange_refresh_token(self, refresh_token, client_id, client_secret="", quota_project=""):
         try:
@@ -168,15 +203,17 @@ class AntigravitySessionManager:
                                 "refreshToken": refresh_token,
                                 "expiresAt": int(time.time()) + res_json.get("expires_in", 3600),
                             }
-                    except Exception:
-                        pass
+                            log(f"Successfully authenticated session via ADC for {self.session['email']}", "AUTH")
+                    except Exception as u_err:
+                        log(f"Userinfo request failed: {u_err}", "DEBUG")
         except Exception as e:
-            sys.stderr.write(f"[Antigravity] Failed refreshing ADC token: {e}\n")
+            log(f"Failed refreshing ADC token: {e}", "WARN")
 
     def refresh_token(self):
         if not self.session or not self.session.get("refreshToken"):
             return False
         try:
+            log("Refreshing Google OAuth token...", "AUTH")
             post_params = {
                 "client_id": GOOGLE_OAUTH_CLIENT_ID,
                 "refresh_token": self.session["refreshToken"],
@@ -192,9 +229,10 @@ class AntigravitySessionManager:
                     self.session["accessToken"] = access_token
                     self.session["expiresAt"] = int(time.time()) + res_json.get("expires_in", 3600)
                     self.save_session(self.session)
+                    log(f"OAuth token refreshed successfully (valid for {res_json.get('expires_in', 3600)}s)", "AUTH")
                     return True
         except Exception as e:
-            sys.stderr.write(f"[Antigravity] Token refresh error: {e}\n")
+            log(f"Token refresh error: {e}", "ERROR")
         return False
 
     def get_valid_access_token(self):
@@ -207,20 +245,22 @@ class AntigravitySessionManager:
 
     def save_session(self, session_data):
         self.session = session_data
-        SESSION_DIR.mkdir(parents=True, exist_ok=True)
         try:
             with open(SESSION_FILE, "w", encoding="utf-8") as f:
                 json.dump(session_data, f, indent=2)
+            log(f"Session saved to {SESSION_FILE} for {session_data.get('email')}", "AUTH")
         except Exception as e:
-            sys.stderr.write(f"[Antigravity] Failed to write session: {e}\n")
+            log(f"Failed to write session file: {e}", "ERROR")
 
     def clear_session(self):
+        email = self.session.get("email") if self.session else "unknown"
         self.session = None
         if SESSION_FILE.exists():
             try:
                 SESSION_FILE.unlink()
             except Exception:
                 pass
+        log(f"Session cleared for {email}", "AUTH")
 
     def get_quota_info(self):
         is_active = bool(self.session and self.session.get("subscriptionActive"))
@@ -263,6 +303,7 @@ class OAuthLoopbackHandler(BaseHTTPRequestHandler):
 
         if "code" in params:
             OAuthLoopbackHandler.received_code = params["code"][0]
+            log("Received authorization code from Google OAuth loopback callback", "AUTH")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -339,6 +380,7 @@ class OAuthLoopbackHandler(BaseHTTPRequestHandler):
             self.wfile.write(success_html.encode("utf-8"))
         elif "error" in params:
             OAuthLoopbackHandler.received_error = params["error"][0]
+            log(f"OAuth loopback received error: {OAuthLoopbackHandler.received_error}", "ERROR")
             self.send_response(400)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -370,13 +412,15 @@ def run_oauth_browser_flow():
     OAuthLoopbackHandler.received_code = None
     OAuthLoopbackHandler.received_error = None
 
+    log(f"Starting ephemeral OAuth loopback listener on port {port}", "AUTH")
     server = HTTPServer(("127.0.0.1", port), OAuthLoopbackHandler)
     server.timeout = 180  # 3 minute timeout
 
     try:
+        log(f"Opening system browser for Google OAuth2 login URL: {auth_url}", "AUTH")
         webbrowser.open(auth_url)
     except Exception as e:
-        sys.stderr.write(f"[Antigravity] Could not open browser: {e}\n")
+        log(f"Could not open system browser: {e}", "WARN")
 
     server.handle_request()
     server.server_close()
@@ -384,11 +428,12 @@ def run_oauth_browser_flow():
     code = OAuthLoopbackHandler.received_code
     if not code:
         err = OAuthLoopbackHandler.received_error or "OAuth sign-in cancelled or timed out."
-        sys.stderr.write(f"[Antigravity] OAuth error: {err}\n")
+        log(f"OAuth flow aborted: {err}", "ERROR")
         return {"error": err, "success": False}
 
     # Exchange authorization code for tokens
     try:
+        log("Exchanging authorization code with Google token endpoint...", "AUTH")
         token_data = urllib.parse.urlencode({
             "code": code,
             "client_id": GOOGLE_OAUTH_CLIENT_ID,
@@ -421,9 +466,10 @@ def run_oauth_browser_flow():
                     "expiresAt": int(time.time()) + res_json.get("expires_in", 3600),
                 }
                 session_manager.save_session(new_session)
+                log(f"OAuth login successful for Google account: {new_session['email']}", "AUTH")
                 return {"session": new_session, "success": True}
     except Exception as e:
-        sys.stderr.write(f"[Antigravity] Token exchange error: {e}\n")
+        log(f"Token exchange error: {e}", "ERROR")
         return {"error": f"Failed to complete Google OAuth exchange: {str(e)}", "success": False}
 
 
@@ -481,6 +527,12 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
         elif path == "/v1/quota":
             self._send_json_response(200, session_manager.get_quota_info())
 
+        elif path == "/debug/logs":
+            self._send_json_response(200, {
+                "logFile": str(LOG_FILE),
+                "logs": get_recent_logs(150),
+            })
+
         else:
             self.send_response(404)
             self._send_cors_headers()
@@ -499,13 +551,29 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
                 pass
 
         if path == "/auth/login":
+            log("Received /auth/login request from editor client", "API")
             result = run_oauth_browser_flow()
             status_code = 200 if result.get("success") else 400
             self._send_json_response(status_code, result)
 
         elif path == "/auth/logout":
+            log("Received /auth/logout request", "API")
             session_manager.clear_session()
             self._send_json_response(200, {"success": True})
+
+        elif path == "/v1/tokenize":
+            # Token counting helper endpoint
+            text = req_json.get("text", "")
+            messages = req_json.get("messages", [])
+            total_chars = len(text) + sum(len(m.get("content", "")) for m in messages)
+            # Standard heuristic: ~4 chars per token for code & English text
+            est_tokens = max(1, total_chars // 4)
+            self._send_json_response(200, {
+                "characterCount": total_chars,
+                "estimatedTokens": est_tokens,
+                "contextLimit": 1048576,
+                "remainingContext": max(0, 1048576 - est_tokens),
+            })
 
         elif path == "/v1/chat/stream":
             self._handle_chat_stream(req_json)
@@ -529,6 +597,8 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
         system_instruction = req_json.get("systemInstruction", "")
         temperature = req_json.get("temperature", 0.7)
 
+        log(f"Initiating stream completion: model={model_name}, messages_count={len(messages)}, temp={temperature}", "STREAM")
+
         # Map internal Antigravity model names to standard Gemini model API IDs
         clean_model = model_name.replace("antigravity-", "")
         if "claude" in clean_model or "agent" in clean_model:
@@ -539,6 +609,7 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
         token = session_manager.get_valid_access_token()
 
         if not session or not token:
+            log("Stream rejected: No active authenticated Antigravity session", "WARN")
             self._write_sse_event({
                 "error": "No active Google Antigravity session. Please sign in with your Google Account using the button above."
             })
@@ -548,6 +619,7 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
 
         # Emit initial reasoning / thinking block
         user_email = session.get("email", "Google Personal Account")
+        log(f"Emitting reasoning envelope for user {user_email} (model={clean_model})", "STREAM")
         self._write_sse_event({
             "reasoning": f"Routing prompt through Google Antigravity Python SDK with personal credentials ({user_email})...\nModel: {model_name} (1M Token Context Active)\n"
         })
@@ -556,6 +628,7 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
         stream_success = False
         if HAS_GENAI_SDK:
             try:
+                log(f"Attempting stream with google.genai SDK (model={clean_model})", "STREAM")
                 client = genai.Client(http_options={"headers": {"Authorization": f"Bearer {token}"}})
                 formatted_contents = []
                 for msg in messages:
@@ -571,17 +644,21 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
                     )
                 )
 
+                chunk_count = 0
                 for chunk in response:
                     if chunk.text:
+                        chunk_count += 1
                         self._write_sse_event({"text": chunk.text})
+                log(f"google.genai SDK stream completed successfully ({chunk_count} chunks)", "STREAM")
                 stream_success = True
             except Exception as sdk_err:
-                sys.stderr.write(f"[Antigravity SDK] GenAI SDK error: {sdk_err}. Falling back to REST API.\n")
+                log(f"google.genai SDK stream error: {sdk_err}. Falling back to REST API SSE.", "WARN")
 
         # Direct REST API SSE streaming fallback with OAuth Bearer token
         if not stream_success:
             try:
                 api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:streamGenerateContent?alt=sse"
+                log(f"Streaming via REST API: {api_url}", "STREAM")
                 
                 formatted_contents = []
                 for msg in messages:
@@ -612,6 +689,7 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
                 api_req.add_header("Content-Type", "application/json")
                 api_req.add_header("X-Goog-Api-Client", "indoctrinated-antigravity/4.7.1")
 
+                chunks_received = 0
                 with urllib.request.urlopen(api_req, timeout=60) as api_res:
                     for line in api_res:
                         line_str = line.decode("utf-8")
@@ -626,13 +704,15 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
                                         for part in parts:
                                             text_delta = part.get("text", "")
                                             if text_delta:
+                                                chunks_received += 1
                                                 self._write_sse_event({"text": text_delta})
                                 except Exception:
                                     pass
+                log(f"REST SSE stream finished ({chunks_received} chunks emitted)", "STREAM")
                 stream_success = True
             except urllib.error.HTTPError as http_err:
                 err_body = http_err.read().decode("utf-8") if http_err.fp else str(http_err)
-                sys.stderr.write(f"[Antigravity REST] HTTP Error {http_err.code}: {err_body}\n")
+                log(f"Google API HTTP Error {http_err.code}: {err_body}", "ERROR")
                 
                 err_json = {}
                 try:
@@ -646,12 +726,14 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
                 })
 
             except Exception as gen_err:
+                log(f"Streaming error: {gen_err}", "ERROR")
                 self._write_sse_event({"error": f"Antigravity stream error: {str(gen_err)}"})
 
         # Send completion signal
         try:
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
+            log("Sent [DONE] signal to stream client", "STREAM")
         except Exception:
             pass
 
@@ -665,11 +747,13 @@ def main():
         if p_idx < len(sys.argv) and sys.argv[p_idx].isdigit():
             port = int(sys.argv[p_idx])
 
+    log(f"Starting Antigravity backend service on port {port} (PID {os.getpid()})", "INIT")
     try:
         server = HTTPServer((DEFAULT_HOST, port), AntigravityBackendHandler)
     except OSError:
         server = HTTPServer((DEFAULT_HOST, 0), AntigravityBackendHandler)
         port = server.server_address[1]
+        log(f"Port was busy; bound to ephemeral port {port}", "INIT")
 
     # Print readiness signal for Electron parent process
     sys.stdout.write(f"ANTIGRAVITY_BACKEND_READY:{port}\n")
@@ -678,9 +762,10 @@ def main():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        log("Server stopped via KeyboardInterrupt", "INIT")
     finally:
         server.server_close()
+        log("Antigravity backend server closed", "INIT")
 
 
 if __name__ == "__main__":
