@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { app } from 'electron'
 import {
   AntigravitySession,
@@ -8,6 +9,8 @@ import {
   AntigravitySidecarStatus,
   AiStreamChunk,
 } from '../packages/sdk/types'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 class AntigravityBackendService {
   private childProcess: ChildProcess | null = null
