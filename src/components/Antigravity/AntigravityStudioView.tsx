@@ -862,10 +862,10 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
 
               {/* Google AI Studio API Key Override */}
               <div className="drawer-section">
-                <span className="section-label">Google AI Studio Key / Antigravity Token</span>
+                <span className="section-label">Google AI Studio Key / Antigravity Token (Optional Fallback)</span>
                 <div className="api-key-box glass-panel">
                   <p className="api-key-desc">
-                    Direct API Key access enables full 1M-token Gemini 3.7 Flash generation without local gcloud scope limitations.
+                    Signing in with your personal Google account above is the primary method for monthly/yearly subscribers (no API key needed). This field is an optional override if you prefer using a dedicated API key.
                   </p>
                   <div className="api-key-input-row">
                     <input
