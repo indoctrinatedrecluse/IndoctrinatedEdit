@@ -92,7 +92,7 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
   )
 
   const activeStreamCancelRef = useRef<(() => void) | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -138,10 +138,12 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
     []
   )
 
-  // Auto-scroll on new messages
+  // Auto-scroll inside messages container strictly without moving window/viewport
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
+  }, [messages, isStreaming])
 
   // Sync auth & quota
   useEffect(() => {
@@ -525,7 +527,7 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
           )}
 
           {/* Messages List */}
-          <div className="messages-stream">
+          <div className="messages-stream" ref={messagesContainerRef}>
             {messages.map((msg) => {
               const isUser = msg.role === 'user'
               const isReasoningOpen = expandedReasoning[msg.id] !== false
@@ -584,7 +586,6 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
                 </div>
               )
             })}
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Quick Action Prompt Chips */}

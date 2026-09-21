@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process'
 import path from 'node:path'
+import fs from 'node:fs'
 import { app } from 'electron'
 import {
   AntigravitySession,
@@ -16,7 +17,58 @@ class AntigravityBackendService {
   private activeStreams: Map<string, AbortController> = new Map()
 
   /**
-   * Starts or attaches to the Python Antigravity Backend Sidecar.
+   * Resolves the absolute path to the Python backend sidecar script across dev & packaged modes.
+   */
+  private findScriptPath(): string {
+    const candidates = [
+      path.join(process.resourcesPath, 'sidecars', 'antigravity_backend.py'),
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'sidecars', 'antigravity_backend.py'),
+      path.join(app.getAppPath(), 'sidecars', 'antigravity_backend.py'),
+      path.join(process.cwd(), 'sidecars', 'antigravity_backend.py'),
+      path.join(__dirname, '..', 'sidecars', 'antigravity_backend.py'),
+      path.join(__dirname, 'sidecars', 'antigravity_backend.py'),
+    ]
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p
+    }
+    return candidates[0]
+  }
+
+  /**
+   * Resolves available Python interpreter executable path.
+   */
+  private findPythonCommand(): string {
+    if (process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)) {
+      return process.env.PYTHON_PATH
+    }
+
+    if (process.platform === 'win32') {
+      const localAppData = process.env.LOCALAPPDATA || ''
+      const progFiles = process.env.PROGRAMFILES || ''
+      const winCandidates = [
+        path.join(localAppData, 'Python', 'bin', 'python.exe'),
+        path.join(localAppData, 'Programs', 'Python', 'Python314', 'python.exe'),
+        path.join(localAppData, 'Programs', 'Python', 'Python313', 'python.exe'),
+        path.join(localAppData, 'Programs', 'Python', 'Python312', 'python.exe'),
+        path.join(localAppData, 'Programs', 'Python', 'Python311', 'python.exe'),
+        path.join(localAppData, 'Programs', 'Python', 'Python310', 'python.exe'),
+        path.join(progFiles, 'Python314', 'python.exe'),
+        path.join(progFiles, 'Python313', 'python.exe'),
+        path.join(progFiles, 'Python312', 'python.exe'),
+        path.join(progFiles, 'Python311', 'python.exe'),
+        path.join(progFiles, 'Python310', 'python.exe'),
+      ]
+      for (const p of winCandidates) {
+        if (fs.existsSync(p)) return p
+      }
+      return 'python'
+    }
+
+    return 'python3'
+  }
+
+  /**
+   * Starts or attaches to the Python Antigravity Backend Sidecar on-demand.
    */
   public async ensureStarted(): Promise<number> {
     if (this.isReady && this.childProcess) {
@@ -27,15 +79,11 @@ class AntigravityBackendService {
     }
 
     this.readyPromise = new Promise<number>((resolve) => {
-      const isDev = !app.isPackaged
-      const scriptPath = isDev
-        ? path.join(process.cwd(), 'sidecars', 'antigravity_backend.py')
-        : path.join(process.resourcesPath, 'sidecars', 'antigravity_backend.py')
-
-      const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
+      const scriptPath = this.findScriptPath()
+      const pythonCommand = this.findPythonCommand()
 
       try {
-        const proc = spawn(pythonCommand, [scriptPath], {
+        const proc = spawn(pythonCommand, [scriptPath, '--port', String(this.port)], {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...process.env, PYTHONUNBUFFERED: '1' },
           windowsHide: true,
@@ -60,7 +108,8 @@ class AntigravityBackendService {
         proc.on('error', (err) => {
           console.error('[AntigravityBackend] Process error:', err)
           this.isReady = false
-          // Fallback to default port in case process was already running externally
+          this.childProcess = null
+          this.readyPromise = null
           resolve(this.port)
         })
 
@@ -79,7 +128,9 @@ class AntigravityBackendService {
         }, 4000)
       } catch (err) {
         console.error('[AntigravityBackend] Spawn failed:', err)
-        this.isReady = true
+        this.isReady = false
+        this.childProcess = null
+        this.readyPromise = null
         resolve(this.port)
       }
     })
@@ -128,20 +179,29 @@ class AntigravityBackendService {
    */
   public async login(): Promise<AntigravitySession> {
     await this.ensureStarted()
-    const res = await fetch(`${this.getBaseUrl()}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-    
-    if (res.ok) {
-      const data = (await res.json()) as { success: boolean; session: AntigravitySession; error?: string }
-      if (data.session) {
-        return data.session
+    try {
+      const res = await fetch(`${this.getBaseUrl()}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      
+      if (res.ok) {
+        const data = (await res.json()) as { success: boolean; session: AntigravitySession; error?: string }
+        if (data.session) {
+          return data.session
+        }
+        throw new Error(data.error || 'Google OAuth login failed')
+      } else {
+        const errData = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(errData.error || `Google OAuth failed with status ${res.status}`)
       }
-      throw new Error(data.error || 'Google OAuth login failed')
-    } else {
-      const errData = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new Error(errData.error || `Google OAuth failed with status ${res.status}`)
+    } catch (err: any) {
+      console.error('[AntigravityBackend] Login failed:', err)
+      throw new Error(
+        err.message?.includes('fetch failed') || err.code === 'ECONNREFUSED'
+          ? 'Could not connect to Python Antigravity service. Please verify Python 3 is installed on your system.'
+          : err.message || 'Google OAuth2 login failed'
+      )
     }
   }
 
@@ -203,6 +263,7 @@ class AntigravityBackendService {
       activeModels: [
         'antigravity-personal-agent',
         'antigravity-gemini-2-5-pro',
+        'antigravity-gemini-2-5-flash',
         'antigravity-claude-3-7-sonnet',
         'gemini-2.5-pro',
         'gemini-2.5-flash',

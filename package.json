@@ -28,6 +28,12 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "sidecars",
+        "to": "sidecars"
+      }
+    ],
     "win": {
       "target": [
         "nsis",
