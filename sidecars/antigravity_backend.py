@@ -49,7 +49,8 @@ GOOGLE_SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/generative-language",
+    "https://www.googleapis.com/auth/generative-language.retriever",
+    "https://www.googleapis.com/auth/cloud-platform",
 ]
 
 DEFAULT_MODEL = "gemini-3.7-flash"
@@ -459,9 +460,14 @@ def run_oauth_browser_flow():
 
     try:
         log(f"Opening system browser for Google OAuth2 login URL: {auth_url}", "AUTH")
-        webbrowser.open(auth_url)
+        if sys.platform == "win32":
+            subprocess.Popen(["powershell", "-c", f"Start-Process '{auth_url}'"], shell=False)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", auth_url])
+        else:
+            subprocess.Popen(["xdg-open", auth_url])
     except Exception as e:
-        log(f"Could not open system browser: {e}", "WARN")
+        log(f"Could not open system browser automatically: {e}", "WARN")
 
     server.handle_request()
     server.server_close()
