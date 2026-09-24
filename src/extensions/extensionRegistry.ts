@@ -34,6 +34,7 @@ import { juliaExtensionManifest, registerJuliaExtension } from './juliaSupport/j
 import { mcpExtensionManifest, registerMcpExtension } from './mcpSupport/mcpExtension'
 import { antigravityExtensionManifest, registerAntigravityExtension } from './antigravitySupport/antigravityExtension'
 import { remoteProtocolExtensionManifest, registerRemoteProtocolExtension } from './remoteProtocolSupport/remoteProtocolExtension'
+import { jupyterExtensionManifest, registerJupyterExtension } from './jupyterSupport/jupyterExtension'
 import { prettierExtensionManifest, registerPrettierExtension } from './formatterSupport/prettierExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
@@ -143,6 +144,9 @@ class ExtensionRegistry {
 
     // 34. Remote Protocol Studio (SSH, SFTP, FTP & SMTP)
     this.register(remoteProtocolExtensionManifest)
+
+    // 35. Jupyter Notebooks & Live Kernel Studio
+    this.register(jupyterExtensionManifest)
 
     // 35. Cryptography & DevTools Studio
     this.register({
@@ -349,6 +353,7 @@ class ExtensionRegistry {
     safeInit('MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
     safeInit('Google Antigravity', () => registerAntigravityExtension(monacoInstance))
     safeInit('Remote Protocol Studio (SSH/SFTP/SMTP)', () => registerRemoteProtocolExtension(monacoInstance))
+    safeInit('Jupyter Notebooks & Live Kernel Studio', () => registerJupyterExtension(monacoInstance))
     safeInit('Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
   }
 }

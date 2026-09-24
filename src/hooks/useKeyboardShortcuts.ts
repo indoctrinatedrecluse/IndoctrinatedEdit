@@ -20,6 +20,7 @@ interface ShortcutHandlers {
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
   onToggleRemote?: () => void
+  onToggleJupyter?: () => void
   onToggleCrypto?: () => void
   onTogglePreview?: () => void
   onToggleDocker?: () => void
@@ -353,6 +354,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.altKey && key === 'e') {
         e.preventDefault()
         handlers.onToggleRemote?.()
+        return
+      }
+
+      // Ctrl+Alt+J -> Toggle Jupyter Notebooks & Kernel Studio
+      if (e.altKey && key === 'j') {
+        e.preventDefault()
+        handlers.onToggleJupyter?.()
         return
       }
 

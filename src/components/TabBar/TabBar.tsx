@@ -12,6 +12,7 @@ import {
   Rows2,
   Grid2X2,
   Eye,
+  BookOpen,
 } from 'lucide-react'
 import { runService } from '../../services/runService'
 
@@ -78,13 +79,18 @@ export const TabBar: React.FC<TabBarProps> = ({
       <div className="tab-scroll-container">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId
+          const isNotebook = tab.language === 'ipynb' || tab.name.endsWith('.ipynb') || tab.name.endsWith('.jupyter')
           return (
             <div
               key={tab.id}
               className={`tab-item glass-interactive ${isActive ? 'active' : ''}`}
               onClick={() => onSelectTab(tab.id)}
             >
-              <FileCode size={13} className="tab-icon" />
+              {isNotebook ? (
+                <BookOpen size={13} className="tab-icon" color="#FF9F0A" />
+              ) : (
+                <FileCode size={13} className="tab-icon" />
+              )}
               <span className="tab-title">{tab.name}</span>
               {tab.isDirty && <div className="dirty-bullet" title="Unsaved changes" />}
               <button

@@ -678,6 +678,8 @@ export class ConflictResolutionService {
       md: 'markdown',
       markdown: 'markdown',
       py: 'python',
+      ipynb: 'ipynb',
+      jupyter: 'ipynb',
       rs: 'rust',
       go: 'go',
       cs: 'csharp',

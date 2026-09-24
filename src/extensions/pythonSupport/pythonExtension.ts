@@ -18,7 +18,7 @@ export const pythonExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'python',
-      extensions: ['.py', '.pyi', '.pyw', '.ipynb', '.pyx', '.pyd'],
+      extensions: ['.py', '.pyi', '.pyw', '.pyx', '.pyd'],
       aliases: ['Python', 'python', 'py'],
       mimetypes: ['text/x-python', 'application/x-python-code'],
       snippets: pythonSnippets,

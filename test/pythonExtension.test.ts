@@ -46,7 +46,7 @@ describe('Python & AI Ecosystem Extension & Toolchain Detection', () => {
     expect(lang).toBeDefined()
     expect(lang?.extensions).toContain('.py')
     expect(lang?.extensions).toContain('.pyi')
-    expect(lang?.extensions).toContain('.ipynb')
+    expect(lang?.extensions).toContain('.pyw')
     expect(lang?.extensions).toContain('.pyx')
   })
 

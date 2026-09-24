@@ -36,9 +36,11 @@ import { globalSearchService } from './services/globalSearchService'
 import { formatterService } from './services/formatterService'
 import { testExplorerService } from './services/testExplorerService'
 import { lspService, LspRenameResult } from './services/lspService'
+import { jupyterKernelService } from './services/jupyterKernelService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
+  { name: 'DataScience_Pipeline.ipynb', path: 'DataScience_Pipeline.ipynb', isDirectory: false, lang: 'Jupyter' },
   { name: 'project-roadmap.textile', path: 'project-roadmap.textile', isDirectory: false, lang: 'Textile' },
   { name: 'defaultGlassTheme.ts', path: 'defaultGlassTheme.ts', isDirectory: false, lang: 'TypeScript' },
   { name: 'liquidObsidianTheme.ts', path: 'liquidObsidianTheme.ts', isDirectory: false, lang: 'TypeScript' },
@@ -47,6 +49,7 @@ const demoFiles: WorkspaceFileItem[] = [
 
 const initialTabs: TabItem[] = [
   { id: 'welcome.ts', name: 'welcome.ts', language: 'typescript' },
+  { id: 'DataScience_Pipeline.ipynb', name: 'DataScience_Pipeline.ipynb', language: 'ipynb' },
   { id: 'project-roadmap.textile', name: 'project-roadmap.textile', language: 'textile' },
   { id: 'defaultGlassTheme.ts', name: 'defaultGlassTheme.ts', language: 'typescript' },
   { id: 'README.md', name: 'README.md', language: 'markdown' },
@@ -227,6 +230,9 @@ Ultra-lightweight web-focused text editor for Windows built with WPF & .NET 10.
 IndoctrinatedEdit is the flashy, feature-packed general-purpose text editor for Linux & Windows,
 featuring an authentic iOS Liquid Glass aesthetic, Monaco core, and microservices architecture!
 `,
+  'DataScience_Pipeline.ipynb': jupyterKernelService.serializeNotebook(
+    jupyterKernelService.createSampleDataScienceNotebook()
+  ),
 }
 
 import { extensionRegistry } from './extensions/extensionRegistry'
@@ -413,6 +419,35 @@ export const App: React.FC = () => {
       return false
     })
   }, [rightPaneTab])
+
+  const handleToggleJupyter = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('jupyter')
+        return true
+      }
+      if (rightPaneTab !== 'jupyter') {
+        setRightPaneTab('jupyter')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
+  const handleCreateNotebook = useCallback((title = 'Untitled.ipynb', templateType = 'blank') => {
+    const nb =
+      templateType === 'eda' || templateType === 'ml'
+        ? jupyterKernelService.createSampleDataScienceNotebook()
+        : jupyterKernelService.createEmptyNotebook()
+    const content = jupyterKernelService.serializeNotebook(nb)
+    const tabId = title
+    setFileContents((prev) => ({ ...prev, [tabId]: content }))
+    setTabs((prevTabs) => {
+      if (prevTabs.some((t) => t.id === tabId)) return prevTabs
+      return [...prevTabs, { id: tabId, name: title, language: 'ipynb' }]
+    })
+    setActiveTabId(tabId)
+  }, [])
 
   const handleToggleCrypto = useCallback(() => {
     setIsRightPaneOpen((prev) => {
@@ -1264,6 +1299,8 @@ export const App: React.FC = () => {
       onToggleDiagram: handleToggleDiagram,
       onToggleBundle: handleToggleBundle,
       onToggleSvg: handleToggleSvg,
+      onToggleJupyter: handleToggleJupyter,
+      onCreateNotebook: handleCreateNotebook,
       onToggleSidebar: handleToggleSidebar,
       onOpenSettings: () => setActiveView('settings'),
       onToggleNotifications: handleToggleNotifications,
@@ -1329,6 +1366,8 @@ export const App: React.FC = () => {
       handleToggleTerminal,
       handleOpenTerminalConfig,
       handleOpenProblems,
+      handleToggleJupyter,
+      handleCreateNotebook,
       tabs,
       getActiveEditor,
     ]
@@ -1501,6 +1540,11 @@ export const App: React.FC = () => {
       // Task Runner & Cron Studio
       { id: 'tasks.toggle', title: 'Tasks: Toggle Task Runner & Cron Expression Studio', category: 'Tools', shortcut: 'Ctrl+Alt+T', description: 'Discover scripts, execute project tasks, and calculate Cron schedules', handler: handleToggleTasks },
 
+      // Jupyter Notebooks & Live Studio
+      { id: 'jupyter.toggle', title: 'Jupyter: Toggle Jupyter Notebooks & Live Kernel Studio', category: 'Tools', shortcut: 'Ctrl+Alt+J', description: 'Interactive multi-kernel notebook studio, live execution, and variable explorer', handler: handleToggleJupyter },
+      { id: 'jupyter.newNotebook', title: 'Jupyter: Create New Blank Notebook', category: 'File', description: 'Create an Untitled.ipynb interactive notebook', handler: () => handleCreateNotebook('Untitled.ipynb', 'blank') },
+      { id: 'jupyter.newEdaNotebook', title: 'Jupyter: Create Exploratory Data Analysis (EDA) Pipeline Notebook', category: 'File', description: 'Create pre-populated Data Science EDA notebook with DataFrame charts and statistical summary', handler: () => handleCreateNotebook('EDA_Pipeline.ipynb', 'eda') },
+
       // Database Studio & SQL Runner
       { id: 'db.toggle', title: 'Database: Toggle Database Studio & SQL Runner', category: 'Tools', shortcut: 'Ctrl+Shift+D', description: 'Open database schema explorer and query runner', handler: handleToggleDatabase },
       { id: 'db.sampleEcommerce', title: 'Database: Switch to E-Commerce SQLite DB', category: 'Tools', description: 'Explore orders, customers, and product inventory schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('ecommerce_db') } },
@@ -1528,7 +1572,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleSelectTheme, openPalette, tabs, setIsMcpStudioOpen])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleToggleJupyter, handleCreateNotebook, handleSelectTheme, openPalette, tabs, setIsMcpStudioOpen])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -1565,6 +1609,7 @@ export const App: React.FC = () => {
     onToggleDiagram: handleToggleDiagram,
     onToggleBundle: handleToggleBundle,
     onToggleSvg: handleToggleSvg,
+    onToggleJupyter: handleToggleJupyter,
     onToggleNotifications: handleToggleNotifications,
     onOpenShortcuts: () => setIsShortcutsOpen(true),
     onGoToLine: () => openPalette(':'),
@@ -1713,6 +1758,8 @@ export const App: React.FC = () => {
           onTogglePackages={handleTogglePackages}
           isTasksOpen={isRightPaneOpen && rightPaneTab === 'tasks'}
           onToggleTasks={handleToggleTasks}
+          isJupyterOpen={isRightPaneOpen && rightPaneTab === 'jupyter'}
+          onToggleJupyter={handleToggleJupyter}
         />
 
         {/* Collapsible Frosted Sidebar with Spring Animation & Resizer */}
@@ -1869,6 +1916,7 @@ export const App: React.FC = () => {
                 currentSelection={currentSelection}
                 onInsertAtCursor={handleInsertAtCursor}
                 onReplaceSelection={handleReplaceSelection}
+                onCreateNotebook={handleCreateNotebook}
               />
             </motion.div>
           )}

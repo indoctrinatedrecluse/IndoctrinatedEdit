@@ -396,7 +396,7 @@ class AntigravityBackendService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Antigravity-Client': 'IndoctrinatedEdit/4.8.0',
+          'X-Antigravity-Client': 'IndoctrinatedEdit/4.9.0',
         },
         body: JSON.stringify({ model, messages }),
         signal: controller.signal,

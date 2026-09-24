@@ -23,6 +23,7 @@ import {
   Layers,
   Shapes,
   FileCode2,
+  BookOpen,
 } from 'lucide-react'
 import { AiChatPanel } from '../AiChat/AiChatPanel'
 import { DatabaseStudio } from '../Database/DatabaseStudio'
@@ -49,10 +50,12 @@ import { SvgStudioView } from '../SvgStudio/SvgStudioView'
 import { JsonStudioView } from '../JsonStudio/JsonStudioView'
 import { AntigravityStudioView } from '../Antigravity/AntigravityStudioView'
 import { RemoteProtocolStudioView } from '../RemoteProtocolStudio/RemoteProtocolStudioView'
+import { JupyterStudioView } from '../Notebook/JupyterStudioView'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab =
+  | 'jupyter'
   | 'remote'
   | 'antigravity'
   | 'ai'
@@ -84,6 +87,7 @@ interface RightAuxiliaryPaneProps {
   activeTab: RightDockTab
   onSelectTab: (tab: RightDockTab) => void
   onClose: () => void
+  onCreateNotebook?: (title: string, templateType?: string) => void
   // AI / Preview Panel Props
   activeFileName?: string
   activeFileContent?: string
@@ -97,6 +101,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   activeTab,
   onSelectTab,
   onClose,
+  onCreateNotebook,
   activeFileName = 'untitled.ts',
   activeFileContent = '',
   currentSelection,
@@ -314,6 +319,15 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           </button>
 
           <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'jupyter' ? 'active' : ''}`}
+            onClick={() => onSelectTab('jupyter')}
+            title="Jupyter Notebooks & Live Kernel Studio (Ctrl+Alt+J)"
+          >
+            <BookOpen size={13} className="tab-icon jupyter" />
+            <span>Jupyter Studio</span>
+          </button>
+
+          <button
             className={`dock-tab-item glass-interactive ${activeTab === 'remote' ? 'active' : ''}`}
             onClick={() => onSelectTab('remote')}
             title="Remote Protocol Studio (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+S)"
@@ -350,6 +364,9 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
+        {activeTab === 'jupyter' && (
+          <JupyterStudioView onCreateNotebook={onCreateNotebook} />
+        )}
         {activeTab === 'remote' && (
           <RemoteProtocolStudioView
             isDocked={true}

@@ -38,7 +38,7 @@ export const antigravitySnippets: SnippetDefinition[] = [
 export const antigravityExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.antigravity',
   name: 'Google Antigravity Suite & Agent Subsystem',
-  version: '4.8.0',
+  version: '4.9.0',
   description:
     'Official Antigravity extension connecting personal Google accounts to Antigravity subscriptions with zero API keys, Python SDK backend sidecar, and multi-model agent intelligence.',
   author: 'indoctrinatedrecluse',

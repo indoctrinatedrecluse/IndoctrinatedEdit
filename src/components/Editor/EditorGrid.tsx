@@ -6,6 +6,7 @@ import {
   FileCode,
 } from 'lucide-react'
 import { EditorHost, EditorHostHandle, SelectionInfo } from './EditorHost'
+import { NotebookEditor } from '../Notebook/NotebookEditor'
 import { TabItem } from '../TabBar/TabBar'
 import { ThemeDefinition } from '@sdk/index'
 import { LspRenameResult } from '../../services/lspService'
@@ -246,6 +247,11 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
     const lang = activeTab
       ? activeTab.language
       : getLanguageForFilename(currentTabId, content)
+    const fileName = activeTab?.name || currentTabId
+    const isNotebook = Boolean(
+      (fileName && (fileName.endsWith('.ipynb') || fileName.endsWith('.jupyter'))) ||
+      lang === 'ipynb'
+    )
 
     return (
       <div
@@ -314,7 +320,13 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
 
         {/* Editor Instance inside Container Query Safe Zone */}
         <div className="pane-editor-viewport">
-          {activeTab || currentTabId ? (
+          {isNotebook ? (
+            <NotebookEditor
+              content={content}
+              filePath={currentTabId}
+              onChange={(val) => onEditorChange(currentTabId, val)}
+            />
+          ) : activeTab || currentTabId ? (
             <EditorHost
               ref={(instance) => {
                 editorHandlesRef.current[pane.id] = instance

@@ -25,6 +25,7 @@ import {
   Shapes,
   FlaskConical,
   Terminal,
+  BookOpen,
 } from 'lucide-react'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 
@@ -66,6 +67,8 @@ interface ActivityBarProps {
   onToggleMockLab?: () => void
   isRemoteOpen?: boolean
   onToggleRemote?: () => void
+  isJupyterOpen?: boolean
+  onToggleJupyter?: () => void
   isGraphQLOpen?: boolean
   onToggleGraphQL?: () => void
   isDiagramOpen?: boolean
@@ -90,6 +93,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   onToggleRestClient,
   isRemoteOpen = false,
   onToggleRemote,
+  isJupyterOpen = false,
+  onToggleJupyter,
   isCryptoOpen = false,
   onToggleCrypto,
   isPreviewOpen = false,
@@ -209,6 +214,17 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           >
             <Terminal size={18} color="#64D2FF" />
             {isRemoteOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleJupyter && (
+          <button
+            className={`activity-btn glass-interactive ${isJupyterOpen ? 'active' : ''}`}
+            onClick={onToggleJupyter}
+            title="Jupyter Notebooks & Live Kernel Studio (Ctrl+Alt+J)"
+          >
+            <BookOpen size={18} color="#FF9F0A" />
+            {isJupyterOpen && <div className="active-indicator" />}
           </button>
         )}
 

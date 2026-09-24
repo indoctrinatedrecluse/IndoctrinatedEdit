@@ -21,6 +21,7 @@ import {
   Box,
   Download,
   Wrench,
+  BookOpen,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
@@ -194,6 +195,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="file-list">
             {workspaceFiles.map((file) => {
               const isSelected = activeFilePath === file.path || activeFilePath === file.name
+              const isNotebook = file.name.endsWith('.ipynb') || file.name.endsWith('.jupyter')
               return (
                 <button
                   key={file.path || file.name}
@@ -202,6 +204,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   {file.isDirectory ? (
                     <Folder size={14} className="folder-icon" />
+                  ) : isNotebook ? (
+                    <BookOpen size={14} className="file-icon" color="#FF9F0A" />
                   ) : (
                     <FileCode size={14} className="file-icon" />
                   )}
@@ -409,7 +413,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="settings-list">
             <div className="settings-row">
               <span>Version</span>
-              <span className="font-mono text-violet-400 font-semibold">v4.8.0</span>
+              <span className="font-mono text-violet-400 font-semibold">v4.9.0</span>
             </div>
             <div className="settings-row">
               <span>Release Channel</span>

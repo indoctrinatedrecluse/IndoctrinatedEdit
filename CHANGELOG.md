@@ -5,6 +5,56 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2026-09-24
+
+### 🚀 Release — Jupyter Notebooks Studio, Live Multi-Kernel Engine, Rich Data Science Visualizers & Interactive Terminal Outputs
+
+IndoctrinatedEdit 4.9.0 introduces full-fledged Jupyter Notebook (`.ipynb`) support with live multi-kernel inline execution, interactive DataFrame tables, vector SVG plotters, slide-out variable explorer, and seamless notebook-to-script export capabilities:
+
+#### 📓 Visual Jupyter Notebook Editor
+- **Automatic File Recognition**: Opening any `.ipynb` or `.jupyter` notebook automatically launches the visual Notebook Editor instead of raw text, while preserving regular Monaco editing for Python scripts (`.py`).
+- **Interactive Multi-Cell Canvas**:
+  - Code Cells with left execution gutters `[ 1 ]` / `[ * ]`, execution timer pills (`⚡ 124ms`), and optional line numbers.
+  - Markdown Cells with rich live rendering (headers, badges, bullet lists, blockquotes, code blocks, math) and inline formatting toolbars.
+  - Dynamic cell insertion (`+ Code`, `+ Markdown`), reordering (<kbd>▲</kbd> / <kbd>▼</kbd>), type conversion (`Code` ⇄ `Markdown`), and cell duplication.
+  - Undo deletion stack to recover deleted cells instantly.
+- **Top Control & Execution Toolbar**:
+  - <kbd>▶ Run Cell</kbd> (<kbd>Shift+Enter</kbd> / <kbd>Ctrl+Enter</kbd>)
+  - <kbd>▶▶ Run All</kbd> with real-time animated execution progress bar.
+  - <kbd>⏹ Interrupt Kernel</kbd> & <kbd>🔄 Restart Kernel</kbd>.
+  - <kbd>🧹 Clear Outputs</kbd> from individual or all cells.
+  - <kbd>📤 Export .py</kbd> & <kbd>📄 Export .md</kbd> for exporting notebooks into standalone executable scripts or documentation.
+  - Dual Mode toggle between interactive visual cells and raw `.ipynb` JSON.
+
+#### 📊 Multi-View Rich Cell Outputs
+- **Interactive DataFrame Tables**: High-contrast glass table view with instant search/filter, dimension badges, and CSV clipboard export.
+- **Dynamic Visualization Studio**: Vector SVG chart viewer with on-the-fly chart switcher (Scatter Regression, Loss Curve, Feature Importance Bars, Correlation Matrix Heatmap) and SVG copy.
+- **Monospace Console Logs**: Stream output for `stdout` / `stderr` and formatted ANSI exception tracebacks.
+- **MIME Tree Inspector**: Raw output schema and metadata viewer.
+- **Output Action Toolbar**: Quick-copy output, collapse/expand toggle, and clear output button.
+
+#### ⌨️ Complete Jupyter Keyboard Shortcuts & Modes
+- **Command Mode (<kbd>Esc</kbd>) & Edit Mode (<kbd>Enter</kbd>)**:
+  - <kbd>Shift + Enter</kbd>: Run active cell and advance focus.
+  - <kbd>Ctrl + Enter</kbd>: Run active cell in place.
+  - <kbd>Alt + Enter</kbd>: Run active cell and insert new cell below.
+  - <kbd>A</kbd> / <kbd>B</kbd>: Insert cell Above / Below.
+  - <kbd>M</kbd> / <kbd>Y</kbd>: Convert to Markdown / Code.
+  - <kbd>D, D</kbd>: Delete selected cell.
+  - <kbd>Z</kbd>: Undo cell deletion.
+  - <kbd>C</kbd> / <kbd>V</kbd> / <kbd>X</kbd>: Copy, Paste, and Cut cell.
+  - <kbd>K</kbd> / <kbd>J</kbd>: Navigate cell selection up/down.
+  - <kbd>L</kbd>: Toggle line numbers.
+  - <kbd>0, 0</kbd> / <kbd>I, I</kbd>: Restart / Interrupt kernel.
+  - <kbd>H</kbd> or <kbd>?</kbd>: Open Interactive Keyboard Shortcuts Reference Modal.
+
+#### ⚙️ Multi-Kernel Execution Engine & Jupyter Studio Dock
+- **Kernel Environments**: Support for Python 3.12 (Native / VirtualEnv), DataScience & Pyodide (WASM Sandbox), and Node.js (V8 Engine).
+- **Live Telemetry Banner**: Real-time memory allocation gauge (e.g. `💾 37.8 MB / 16.0 GB`), active engine status, and active tasks.
+- **Variable Explorer**: Live in-memory variable inspector tracking variable names, types, memory footprints, and value previews.
+- **Pre-Built Notebook Templates**: 1-click generators for *Data Science & EDA Pipeline*, *Scikit-Learn ML Classifier*, *JavaScript / Node.js Scratchpad*, and *Blank Python Notebook*.
+- **Data Science Package Directory**: Integrated package catalog for `numpy`, `pandas`, `matplotlib`, `seaborn`, `scikit-learn`, `torch`, `scipy`, and `polars`.
+
 ## [4.8.0] - 2026-09-24
 
 ### 🚀 Release — Remote Protocol Studio Suite (MobaXTerm-Grade), Strengthened Terminal TUI Engine, Contextual Live Markdown Viewer & Docker/Kubernetes Cloud-Native Visualizer Studio
