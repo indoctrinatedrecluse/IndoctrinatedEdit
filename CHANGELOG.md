@@ -5,6 +5,41 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-09-24
+
+### 🚀 Release — Remote Protocol Studio Suite (MobaXTerm-Grade), Strengthened Terminal TUI Engine, Contextual Live Markdown Viewer & Docker/Kubernetes Cloud-Native Visualizer Studio
+
+IndoctrinatedEdit 4.8.0 delivers a major feature milestone with an integrated Remote Protocol Studio suite for SSH/SFTP/SMTP/Telnet, an ultra-strengthened VT100/ANSI terminal engine with full interactive TUI keypad and alternate screen buffer support, a contextual Live Markdown side-by-side preview system with Monaco context-menu triggers, and a unified Docker & Kubernetes Cloud-Native Management Studio:
+
+#### 🌐 Remote Protocol Studio (MobaXTerm-Grade Suite)
+- **SSH Interactive Terminal & Bookmarks**: Full-featured SSH terminal bookmark manager with custom ports, credentials, RSA/Ed25519 identity key selection, keepalive ping intervals, and active session connection states.
+- **SFTP Remote File Explorer**: Remote server file browser with double-click remote file opening directly into the Monaco editor, remote editing & saving, upload/download progress indicators, directory creation, and file deletion.
+- **SMTP Mail Handshake & Delivery Lab**: Interactive email protocol diagnostic tester with STARTTLS/SSL, custom SMTP port routing, auth handshake simulation, and raw SMTP wire protocol logging.
+- **Telnet & Raw TCP Socket Lab**: Interactive socket probe tool with hex/ASCII payloads, bidirectional communication inspector, and connection latency diagnostics.
+
+#### ⚡ Strengthened Terminal Engine & Interactive TUI Support
+- **Full VT100 / ANSI Screen Buffer Emulation**: Added complete support for ANSI escape codes, cursor positioning (`\x1b[H`, `\x1b[<row>;<col>H`), screen clear commands (`\x1b[2J`, `\x1b[3J`), erase in line (`\x1b[K`), and 256/TrueColor rendering.
+- **Alternate Screen Buffer Switching**: Native support for alternate screen mode switching (`\x1b[?1049h` / `\x1b[?1049l`), allowing full-screen interactive CLI/TUI tools (`ir pmon`, `ir monitor`, `ir edit`, `ir matrix`, `ir help`, `nano`, `htop`, `vim`) to execute flawlessly without corrupting standard scrollback.
+- **Raw Keystroke Capture & Interactive Navigation**: Interactive arrow keys (`ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`), `WASD` navigation, `Enter`, `Escape`, `q`, and `Ctrl+C` execution across both Windows (`conpty` unbuffered I/O) and Linux environments.
+- **On-Screen Clickable TUI Keypad**: Built-in glassmorphic interactive keypad dock (`▲`, `▼`, `◄`, `►`, `Enter`, `Esc`, `Q`, `WASD`, `Ctrl+C`) for one-touch navigation of terminal menus and interactive dashboard commands.
+
+#### 📝 Contextual Live Markdown Viewer
+- **Smart Dynamic TabBar Button**: Contextually displays a dedicated <kbd>Preview</kbd> button in the TabBar header *strictly* when a Markdown file (`.md`, `.markdown`, `.mdx`) is currently focused or active.
+- **Monaco Right-Click Context Menu**: Added "Open Live Markdown Preview" context action to Monaco editor right-click menus for instant access.
+- **Side-by-Side Synchronized Split View**: Automatically opens the rich HTML/GFM live previewer in a split editor grid pane alongside the source Markdown document with instant real-time keystroke rendering.
+
+#### 🐳 ☸️ Docker & Kubernetes Cloud-Native Visualizer Studio
+- **Kubernetes Cluster Visualizer**:
+  - **Cluster Health & Resource Metrics**: Live overview of cluster node count, total/running pods, server version, and real-time CPU & memory allocation gauges.
+  - **Namespace Filter**: Instant switching between `all-namespaces`, `default`, `production`, `staging`, `kube-system`, and `monitoring`.
+  - **Deployments Grid & Scaling Controls**: Visual deployment cards showing target vs. available replicas, rollout strategy (`RollingUpdate` / `Recreate`), image tags, and interactive scale up (`+`) / scale down (`-`) stepper controls.
+  - **Pods Topology & Management**: Interactive pod cards with status badges (🟢 `Running`, 🟡 `Pending`, 🔴 `CrashLoopBackOff`), resource telemetry (CPU %, RAM MB/limit), IP addresses, restart counters, and inline **Restart Pod** / **Delete Pod** actions.
+  - **Services & Ingress Map**: Routing visualizer for `ClusterIP`, `LoadBalancer`, and `NodePort` services with port mappings and Ingress host/path forwarding rules.
+  - **Node Cluster Health**: Hardware capacity visualizer displaying core allocations, RAM limits, and pod saturation gauges.
+  - **Live Pod Log Console**: Full-featured terminal log stream with keyword/regex search filtering, formatted line numbering, and one-click log copying.
+  - **K8s Manifest Lab**: Dynamic YAML generator for Deployments, Services, and Ingress with instant copy and editor insertion.
+- **Docker Engine Management**: Local container start/stop/restart controls, live CPU/RAM metrics, image inspect with dangling image pruning, persistent volume inspection, and Docker Compose generation.
+
 ## [4.7.1] - 2026-09-21
 
 ### 🚀 Release — Multi-Pane Grid Viewport Fix, Google Antigravity Studio & OAuth2 Integration, 5-Tier Project Context Arbiter & Developer GUI Extensions Suite

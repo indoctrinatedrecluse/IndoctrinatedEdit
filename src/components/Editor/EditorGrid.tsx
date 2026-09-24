@@ -45,6 +45,7 @@ interface EditorGridProps {
   getLanguageForFilename: (filename: string, content?: string) => string
   onNavigateFile?: (filePath: string, line: number, column?: number) => void
   onApplyWorkspaceRename?: (result: LspRenameResult) => void
+  onOpenMarkdownPreviewSide?: () => void
 }
 
 export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
@@ -62,6 +63,7 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
   getLanguageForFilename,
   onNavigateFile,
   onApplyWorkspaceRename,
+  onOpenMarkdownPreviewSide,
 }, ref) => {
   const [layoutMode, setLayoutMode] = useState<SplitLayoutMode>('single')
   const [activePaneId, setActivePaneId] = useState<string>('pane-1')
@@ -335,6 +337,7 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
               onEditorReady={index === 0 ? onEditorReady : undefined}
               onNavigateFile={onNavigateFile}
               onApplyWorkspaceRename={onApplyWorkspaceRename}
+              onOpenMarkdownPreviewSide={onOpenMarkdownPreviewSide}
             />
           ) : (
             <div className="empty-pane-state">

@@ -400,6 +400,20 @@ export const App: React.FC = () => {
     })
   }, [rightPaneTab])
 
+  const handleToggleRemote = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('remote')
+        return true
+      }
+      if (rightPaneTab !== 'remote') {
+        setRightPaneTab('remote')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
+
   const handleToggleCrypto = useCallback(() => {
     setIsRightPaneOpen((prev) => {
       if (!prev) {
@@ -665,6 +679,12 @@ export const App: React.FC = () => {
       return false
     })
   }, [rightPaneTab])
+
+  const handleOpenMarkdownPreviewSide = useCallback(() => {
+    setIsRightPaneOpen(true)
+    setRightPaneTab('preview')
+    setRightPaneWidth((prev) => Math.max(prev, 520))
+  }, [])
 
   const handleInsertAtCursor = useCallback((code: string) => {
     getActiveEditor()?.insertAtCursor(code)
@@ -1489,6 +1509,9 @@ export const App: React.FC = () => {
       // REST & GraphQL API Client
       { id: 'rest.toggle', title: 'REST Client: Toggle REST & GraphQL Client', category: 'Tools', shortcut: 'Ctrl+Alt+R', description: 'Open REST and GraphQL API runner dock', handler: handleToggleRestClient },
 
+      // Remote Protocol Studio (SSH, SFTP, FTP & SMTP)
+      { id: 'remote.toggle', title: 'Remote Protocol Studio: Toggle SSH, SFTP, FTP & SMTP Suite', category: 'Tools', shortcut: 'Ctrl+Alt+S', description: 'Open MobaXTerm-style remote protocol studio with SSH terminal, SFTP explorer & SMTP mail lab', handler: handleToggleRemote },
+
       // AI Multi-Model Assistant
       { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', description: 'Open AI chat and refactor dock', handler: handleToggleAi },
       { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: handleToggleAi },
@@ -1505,7 +1528,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleSelectTheme, openPalette, tabs, setIsMcpStudioOpen])
+  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleSelectTheme, openPalette, tabs, setIsMcpStudioOpen])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -1526,6 +1549,7 @@ export const App: React.FC = () => {
     onToggleAi: handleToggleAi,
     onToggleDatabase: handleToggleDatabase,
     onToggleRestClient: handleToggleRestClient,
+    onToggleRemote: handleToggleRemote,
     onToggleCrypto: handleToggleCrypto,
     onTogglePreview: handleTogglePreview,
     onToggleDocker: handleToggleDocker,
@@ -1657,6 +1681,8 @@ export const App: React.FC = () => {
           onToggleDatabase={handleToggleDatabase}
           isRestClientOpen={isRightPaneOpen && rightPaneTab === 'rest'}
           onToggleRestClient={handleToggleRestClient}
+          isRemoteOpen={isRightPaneOpen && rightPaneTab === 'remote'}
+          onToggleRemote={handleToggleRemote}
           isPortsOpen={isRightPaneOpen && rightPaneTab === 'ports'}
           onTogglePorts={handleTogglePorts}
           isRedisOpen={isRightPaneOpen && rightPaneTab === 'redis'}
@@ -1749,6 +1775,7 @@ export const App: React.FC = () => {
             onSplitVertical={() => editorGridRef.current?.splitVertical()}
             onSplitHorizontal={() => editorGridRef.current?.splitHorizontal()}
             onSplitGrid2x2={() => editorGridRef.current?.splitGrid2x2()}
+            onOpenMarkdownPreviewSide={handleOpenMarkdownPreviewSide}
           />
           {/* Floating Liquid Glass Execution Control Toolbar */}
           <DebugToolbar
@@ -1786,6 +1813,7 @@ export const App: React.FC = () => {
               getLanguageForFilename={getLanguageFromFilename}
               onNavigateFile={handleOpenFileWithPosition}
               onApplyWorkspaceRename={handleApplyRename}
+              onOpenMarkdownPreviewSide={handleOpenMarkdownPreviewSide}
             />
           ) : (
             <div className="empty-workspace">

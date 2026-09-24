@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Settings,
   CornerDownLeft,
+  Gamepad2,
 } from 'lucide-react'
 import { terminalService, TerminalTab, AnsiToken } from '../../services/terminalService'
 import { ShellProfile } from '../../../electron/preload'
@@ -26,6 +27,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState<number>(-1)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
+  const [isTuiMode, setIsTuiMode] = useState<boolean>(false)
+  const [showTuiControls, setShowTuiControls] = useState<boolean>(true)
 
   const viewportRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -147,10 +150,73 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     })
   }
 
+  const handleSendTuiAction = async (tabId: string, action: string) => {
+    await terminalService.sendTuiKey(tabId, action)
+    setTabs([...terminalService.getTabs()])
+    requestAnimationFrame(() => {
+      scrollToBottom(tabId)
+    })
+  }
+
+  const handleViewportKeyDown = (tabId: string, e: React.KeyboardEvent<HTMLDivElement>) => {
+    // If user presses keys while viewport is focused in TUI mode
+    if (isTuiMode) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'up')
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'down')
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'left')
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'right')
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'enter')
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'escape')
+      } else if (e.key === 'Tab') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'tab')
+      } else if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-c')
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault()
+        handleSendTuiAction(tabId, e.key)
+      }
+    }
+  }
+
   const handleKeyDown = (tabId: string, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isTuiMode) {
+      // In TUI mode, single-key commands, arrows, Esc, Enter immediately forward to CLI
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Tab'].includes(e.key)) {
+        e.preventDefault()
+        const map: Record<string, string> = {
+          ArrowUp: 'up',
+          ArrowDown: 'down',
+          ArrowLeft: 'left',
+          ArrowRight: 'right',
+          Escape: 'escape',
+          Tab: 'tab',
+        }
+        handleSendTuiAction(tabId, map[e.key])
+        return
+      }
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault()
-      handleCommandSubmit(tabId)
+      if (isTuiMode && !inputValues[tabId]) {
+        handleSendTuiAction(tabId, 'enter')
+      } else {
+        handleCommandSubmit(tabId)
+      }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       if (history.length > 0) {
@@ -204,8 +270,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           ref={(el) => {
             viewportRefs.current[tab.id] = el
           }}
-          className="terminal-output-viewport"
-          onClick={() => inputRefs.current[tab.id]?.focus({ preventScroll: true })}
+          tabIndex={0}
+          className={`terminal-output-viewport ${isTuiMode ? 'tui-active-viewport' : ''}`}
+          onKeyDown={(e) => handleViewportKeyDown(tab.id, e)}
+          onClick={() => {
+            if (!isTuiMode) {
+              inputRefs.current[tab.id]?.focus({ preventScroll: true })
+            }
+          }}
         >
           {tab.buffer.map((line, idx) => {
             const tokens: AnsiToken[] = terminalService.parseAnsi(line)
@@ -230,9 +302,36 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           })}
         </div>
 
+        {/* TUI Interactive On-Screen Quick Control Pad (for CLI graphical tools: ir pmon, ir edit, ir monitor, etc.) */}
+        {showTuiControls && (
+          <div className="tui-keypad-toolbar">
+            <div className="keypad-group d-pad">
+              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'up')} title="Send Up Arrow (↑)">▲</button>
+              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'down')} title="Send Down Arrow (↓)">▼</button>
+              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'left')} title="Send Left Arrow (←)">◄</button>
+              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'right')} title="Send Right Arrow (→)">►</button>
+            </div>
+
+            <div className="keypad-group wasd-group">
+              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 'w')} title="Send 'W'">W</button>
+              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 'a')} title="Send 'A'">A</button>
+              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 's')} title="Send 'S'">S</button>
+              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 'd')} title="Send 'D'">D</button>
+            </div>
+
+            <div className="keypad-group actions-group">
+              <button className="tui-key-btn action-key primary" onClick={() => handleSendTuiAction(tab.id, 'enter')} title="Send Enter (↵)">Enter ↵</button>
+              <button className="tui-key-btn action-key" onClick={() => handleSendTuiAction(tab.id, 'escape')} title="Send Escape (ESC)">Esc</button>
+              <button className="tui-key-btn action-key" onClick={() => handleSendTuiAction(tab.id, 'tab')} title="Send Tab (⇥)">Tab ⇥</button>
+              <button className="tui-key-btn action-key quit-key" onClick={() => handleSendTuiAction(tab.id, 'q')} title="Send 'q' to Quit TUI">Q (Quit)</button>
+              <button className="tui-key-btn action-key ctrl-c-key" onClick={() => handleSendTuiAction(tab.id, 'ctrl-c')} title="Send SIGINT (Ctrl+C)">Ctrl+C 🛑</button>
+            </div>
+          </div>
+        )}
+
         {/* Input Prompt Row */}
         <div className="terminal-prompt-bar">
-          <span className="prompt-arrow">❯</span>
+          <span className="prompt-arrow">{isTuiMode ? '🎮' : '❯'}</span>
           <input
             ref={(el) => {
               inputRefs.current[tab.id] = el
@@ -242,7 +341,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
             value={inputValues[tab.id] || ''}
             onChange={(e) => setInputValues({ ...inputValues, [tab.id]: e.target.value })}
             onKeyDown={(e) => handleKeyDown(tab.id, e)}
-            placeholder={`Execute command in ${tab.title}...`}
+            placeholder={isTuiMode ? "TUI Live Raw Key Mode (Type / Click keys to navigate)..." : `Execute command in ${tab.title} (e.g. ir help, ir pmon)...`}
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
@@ -328,6 +427,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
               </div>
             )}
           </div>
+
+          {/* TUI / CLI Graphical Mode Toggle */}
+          <button
+            className={`term-icon-btn tui-toggle-btn glass-interactive ${isTuiMode ? 'active-tui' : ''}`}
+            onClick={() => {
+              setIsTuiMode((prev) => !prev)
+              setShowTuiControls(true)
+            }}
+            title={isTuiMode ? "TUI Live Raw Key Mode Enabled (Arrows, WASD, single keys forward directly)" : "Enable TUI / CLI GUI Raw Key Navigation"}
+          >
+            <Gamepad2 size={13} />
+            <span className="tui-btn-label">TUI</span>
+          </button>
 
           {/* Split View Toggle */}
           <button
@@ -531,6 +643,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           color: #64D2FF;
         }
 
+        .term-icon-btn.tui-toggle-btn {
+          width: 52px;
+          gap: 4px;
+          padding: 0 6px;
+        }
+
+        .term-icon-btn.tui-toggle-btn .tui-btn-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.3px;
+        }
+
+        .term-icon-btn.tui-toggle-btn.active-tui {
+          background: rgba(48, 209, 88, 0.22);
+          border-color: rgba(48, 209, 88, 0.5);
+          color: #30D158;
+          box-shadow: 0 0 10px rgba(48, 209, 88, 0.35);
+        }
+
         .launch-dropdown-wrapper {
           position: relative;
         }
@@ -634,6 +765,73 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           color: #E6EDF3;
           user-select: text;
           scrollbar-width: thin;
+          outline: none;
+        }
+
+        .terminal-output-viewport.tui-active-viewport:focus {
+          box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.4);
+        }
+
+        .tui-keypad-toolbar {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 4px 12px;
+          background: rgba(0, 0, 0, 0.4);
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          overflow-x: auto;
+          scrollbar-width: none;
+          flex-shrink: 0;
+        }
+
+        .keypad-group {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+        }
+
+        .tui-key-btn {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: var(--text-primary);
+          padding: 2px 7px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+          font-family: inherit;
+          cursor: pointer;
+          transition: all 0.12s ease;
+          user-select: none;
+          white-space: nowrap;
+        }
+
+        .tui-key-btn:hover {
+          background: rgba(255, 255, 255, 0.14);
+          border-color: rgba(255, 255, 255, 0.25);
+          transform: translateY(-1px);
+        }
+
+        .tui-key-btn:active {
+          transform: translateY(1px);
+          background: rgba(48, 209, 88, 0.25);
+        }
+
+        .tui-key-btn.action-key.primary {
+          background: rgba(48, 209, 88, 0.18);
+          border-color: rgba(48, 209, 88, 0.4);
+          color: #30D158;
+        }
+
+        .tui-key-btn.action-key.quit-key {
+          background: rgba(255, 214, 10, 0.15);
+          border-color: rgba(255, 214, 10, 0.35);
+          color: #FFD60A;
+        }
+
+        .tui-key-btn.action-key.ctrl-c-key {
+          background: rgba(255, 69, 58, 0.15);
+          border-color: rgba(255, 69, 58, 0.35);
+          color: #FF453A;
         }
 
         .terminal-output-line {

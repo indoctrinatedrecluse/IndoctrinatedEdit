@@ -268,6 +268,9 @@ export class TerminalService {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       FORCE_COLOR: '1',
+      PYTHONUNBUFFERED: '1',
+      COLUMNS: '120',
+      LINES: '30',
       INDOCTRINATED_TERMINAL: '1',
     }
 

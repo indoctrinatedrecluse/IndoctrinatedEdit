@@ -4,7 +4,7 @@ import { jsonStudioService } from '../src/services/jsonStudioService'
 describe('JSON & Data Structure Studio Subsystem', () => {
   const sampleData = {
     app: 'IndoctrinatedEdit',
-    version: '4.7.1',
+    version: '4.8.0',
     users: [
       { id: 1, name: 'recluse', role: 'admin' },
       { id: 2, name: 'copilot', role: 'assistant' },

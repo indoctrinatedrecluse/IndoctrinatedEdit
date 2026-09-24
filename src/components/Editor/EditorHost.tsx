@@ -72,6 +72,7 @@ interface EditorHostProps {
   onEditorReady?: () => void
   onNavigateFile?: (filePath: string, line: number, column?: number) => void
   onApplyWorkspaceRename?: (result: LspRenameResult) => void
+  onOpenMarkdownPreviewSide?: () => void
 }
 
 export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
@@ -86,6 +87,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   onEditorReady,
   onNavigateFile,
   onApplyWorkspaceRename,
+  onOpenMarkdownPreviewSide,
 }, ref) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
@@ -777,6 +779,20 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     // Register Ctrl+K (Inline AI Copilot)
     editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyK, () => {
       setIsCopilotOpen(true)
+    })
+
+    // Register Context Menu & Keybinding Action: Open Live Markdown Preview to the Side
+    editor.addAction({
+      id: 'open-live-markdown-preview-side',
+      label: 'Open Live Markdown Preview to the Side',
+      keybindings: [
+        monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyMod.Shift | monacoInstance.KeyCode.KeyV,
+      ],
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 1.5,
+      run: () => {
+        onOpenMarkdownPreviewSide?.()
+      },
     })
 
     // Initial decorations update

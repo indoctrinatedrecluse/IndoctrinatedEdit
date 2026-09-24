@@ -33,6 +33,7 @@ import { shellScriptExtensionManifest, registerShellScriptExtension } from './sh
 import { juliaExtensionManifest, registerJuliaExtension } from './juliaSupport/juliaExtension'
 import { mcpExtensionManifest, registerMcpExtension } from './mcpSupport/mcpExtension'
 import { antigravityExtensionManifest, registerAntigravityExtension } from './antigravitySupport/antigravityExtension'
+import { remoteProtocolExtensionManifest, registerRemoteProtocolExtension } from './remoteProtocolSupport/remoteProtocolExtension'
 import { prettierExtensionManifest, registerPrettierExtension } from './formatterSupport/prettierExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
@@ -140,7 +141,10 @@ class ExtensionRegistry {
     // 33. Google Antigravity Suite & Agent Subsystem
     this.register(antigravityExtensionManifest)
 
-    // 34. Cryptography & DevTools Studio
+    // 34. Remote Protocol Studio (SSH, SFTP, FTP & SMTP)
+    this.register(remoteProtocolExtensionManifest)
+
+    // 35. Cryptography & DevTools Studio
     this.register({
       id: 'indoctrinated.ext.cryptolab',
       name: 'Cryptography & DevTools Studio',
@@ -344,6 +348,7 @@ class ExtensionRegistry {
     safeInit('Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
     safeInit('MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
     safeInit('Google Antigravity', () => registerAntigravityExtension(monacoInstance))
+    safeInit('Remote Protocol Studio (SSH/SFTP/SMTP)', () => registerRemoteProtocolExtension(monacoInstance))
     safeInit('Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
   }
 }

@@ -24,6 +24,7 @@ import {
   Layers,
   Shapes,
   FlaskConical,
+  Terminal,
 } from 'lucide-react'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 
@@ -63,6 +64,8 @@ interface ActivityBarProps {
   onToggleEnv?: () => void
   isMockLabOpen?: boolean
   onToggleMockLab?: () => void
+  isRemoteOpen?: boolean
+  onToggleRemote?: () => void
   isGraphQLOpen?: boolean
   onToggleGraphQL?: () => void
   isDiagramOpen?: boolean
@@ -85,6 +88,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
   onToggleDatabase,
   isRestClientOpen = false,
   onToggleRestClient,
+  isRemoteOpen = false,
+  onToggleRemote,
   isCryptoOpen = false,
   onToggleCrypto,
   isPreviewOpen = false,
@@ -193,6 +198,17 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           >
             <Server size={18} />
             {isMockLabOpen && <div className="active-indicator" />}
+          </button>
+        )}
+
+        {onToggleRemote && (
+          <button
+            className={`activity-btn glass-interactive ${isRemoteOpen ? 'active' : ''}`}
+            onClick={onToggleRemote}
+            title="Remote Protocol Studio (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+E)"
+          >
+            <Terminal size={18} color="#64D2FF" />
+            {isRemoteOpen && <div className="active-indicator" />}
           </button>
         )}
 

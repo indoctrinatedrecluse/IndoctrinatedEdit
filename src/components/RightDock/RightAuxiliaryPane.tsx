@@ -48,10 +48,12 @@ import { BundleAnalyzerView } from '../BundleAnalyzer/BundleAnalyzerView'
 import { SvgStudioView } from '../SvgStudio/SvgStudioView'
 import { JsonStudioView } from '../JsonStudio/JsonStudioView'
 import { AntigravityStudioView } from '../Antigravity/AntigravityStudioView'
+import { RemoteProtocolStudioView } from '../RemoteProtocolStudio/RemoteProtocolStudioView'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { SelectionInfo } from '../Editor/EditorHost'
 
 export type RightDockTab =
+  | 'remote'
   | 'antigravity'
   | 'ai'
   | 'database'
@@ -312,6 +314,15 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           </button>
 
           <button
+            className={`dock-tab-item glass-interactive ${activeTab === 'remote' ? 'active' : ''}`}
+            onClick={() => onSelectTab('remote')}
+            title="Remote Protocol Studio (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+S)"
+          >
+            <Server size={13} className="tab-icon remote" />
+            <span>Remote Studio</span>
+          </button>
+
+          <button
             className={`dock-tab-item glass-interactive ${activeTab === 'antigravity' ? 'active' : ''}`}
             onClick={() => onSelectTab('antigravity')}
             title="Google Antigravity Studio (Personal Account & Python SDK)"
@@ -339,6 +350,12 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
+        {activeTab === 'remote' && (
+          <RemoteProtocolStudioView
+            isDocked={true}
+            onClose={onClose}
+          />
+        )}
         {activeTab === 'antigravity' && (
           <AntigravityStudioView
             activeFileName={activeFileName}
@@ -532,6 +549,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
         .dock-tab-item .tab-icon.pkg { color: #FF453A; }
         .dock-tab-item .tab-icon.task { color: #30D158; }
         .dock-tab-item .tab-icon.antigravity { color: #64D2FF; filter: drop-shadow(0 0 6px rgba(100, 210, 255, 0.4)); }
+        .dock-tab-item .tab-icon.remote { color: #64D2FF; }
         .dock-tab-item .tab-icon.ai { color: #BF5AF2; }
         .dock-tab-item .tab-icon.db { color: #30D158; }
         .dock-tab-item .tab-icon.rest { color: #0A84FF; }

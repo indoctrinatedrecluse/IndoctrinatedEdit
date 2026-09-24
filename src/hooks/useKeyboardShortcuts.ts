@@ -19,6 +19,7 @@ interface ShortcutHandlers {
   onToggleAi?: () => void
   onToggleDatabase?: () => void
   onToggleRestClient?: () => void
+  onToggleRemote?: () => void
   onToggleCrypto?: () => void
   onTogglePreview?: () => void
   onToggleDocker?: () => void
@@ -345,6 +346,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.altKey && key === 'r') {
         e.preventDefault()
         handlers.onToggleRestClient?.()
+        return
+      }
+
+      // Ctrl+Alt+E -> Toggle Remote Protocol Studio (SSH, SFTP, FTP & SMTP)
+      if (e.altKey && key === 'e') {
+        e.preventDefault()
+        handlers.onToggleRemote?.()
         return
       }
 

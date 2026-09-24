@@ -25,7 +25,7 @@ class PreviewService {
     const ext = fileName.toLowerCase().split('.').pop() || ''
     const lang = (language || '').toLowerCase()
 
-    if (ext === 'md' || ext === 'markdown' || ext === 'mdown' || lang === 'markdown') {
+    if (ext === 'md' || ext === 'markdown' || ext === 'mdown' || ext === 'mkd' || ext === 'mdx' || lang === 'markdown' || lang === 'mdx') {
       return 'markdown'
     }
     if (ext === 'html' || ext === 'htm' || ext === 'xhtml' || lang === 'html') {

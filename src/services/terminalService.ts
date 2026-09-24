@@ -240,15 +240,140 @@ export class TerminalService {
     }
   }
 
+  /**
+   * Screen buffer line state for in-place cursor updates
+   */
+  private tabScreenStates: Map<string, {
+    cursorRow: number
+    cursorCol: number
+    inAltBuffer: boolean
+    savedBuffer: string[]
+  }> = new Map()
+
+  /**
+   * Processes incoming terminal stream with VT100 / ANSI escape sequences,
+   * in-place screen clearing, cursor repositioning, and alternate screen buffers for TUI apps.
+   */
   public appendOutput(tabId: string, text: string): void {
     const tab = this.tabs.find((t) => t.id === tabId)
-    if (tab) {
-      tab.buffer.push(text)
-      const maxScroll = this.config?.scrollback || 2000
-      if (tab.buffer.length > maxScroll) {
-        tab.buffer.splice(0, tab.buffer.length - maxScroll)
+    if (!tab) return
+
+    if (!this.tabScreenStates.has(tabId)) {
+      this.tabScreenStates.set(tabId, {
+        cursorRow: 0,
+        cursorCol: 0,
+        inAltBuffer: false,
+        savedBuffer: [],
+      })
+    }
+    const state = this.tabScreenStates.get(tabId)!
+
+    // 1. Alternate Screen Buffer Switching (\x1b[?1049h / \x1b[?1049l or \x1b[?47h / \x1b[?47l)
+    if (text.includes('\x1b[?1049h') || text.includes('\x1b[?47h')) {
+      if (!state.inAltBuffer) {
+        state.savedBuffer = [...tab.buffer]
+        state.inAltBuffer = true
+        tab.buffer = []
+      }
+      text = text.replace(/\x1b\[\?(1049|47)h/g, '')
+    }
+
+    if (text.includes('\x1b[?1049l') || text.includes('\x1b[?47l')) {
+      if (state.inAltBuffer) {
+        tab.buffer = [...state.savedBuffer]
+        state.inAltBuffer = false
+      }
+      text = text.replace(/\x1b\[\?(1049|47)l/g, '')
+    }
+
+    // 2. Full Screen Clear (\x1b[2J, \x1b[3J)
+    if (text.includes('\x1b[2J') || text.includes('\x1b[3J')) {
+      tab.buffer = []
+      text = text.replace(/\x1b\[[23]J/g, '')
+    }
+
+    // 3. Cursor Home (\x1b[H, \x1b[1;1H, \x1b[f)
+    if (/\x1b\[(\d+)?(?:;(\d+)?)?[Hf]/.test(text)) {
+      // If text starts with cursor home and screen clear, clear buffer to allow fresh TUI frame
+      if (text.startsWith('\x1b[H') || text.startsWith('\x1b[1;1H') || text.startsWith('\x1b[?25l\x1b[H')) {
+        tab.buffer = []
+      }
+      text = text.replace(/\x1b\[(\d+)?(?:;(\d+)?)?[Hf]/g, '')
+    }
+
+    // 4. Strip cursor visibility / mode sequences
+    text = text.replace(/\x1b\[\?25[lh]/g, '') // Hide/Show cursor
+    text = text.replace(/\x1b\[\?1[lh]/g, '')  // Cursor keys mode
+    text = text.replace(/\x1b\[\?2004[lh]/g, '') // Bracketed paste mode
+
+    // 5. Line clearing (\x1b[2K, \x1b[K, \x1b[0K, \x1b[1K)
+    // When a line clear occurs before new text, we can update the last line
+    if (text.includes('\x1b[2K') || text.includes('\x1b[K') || text.includes('\x1b[0K')) {
+      text = text.replace(/\x1b\[[012]?K/g, '')
+    }
+
+    // 6. Split lines while handling carriage returns
+    const chunks = text.split(/\r?\n/)
+
+    for (let i = 0; i < chunks.length; i++) {
+      let chunk = chunks[i]
+      if (chunk.includes('\r')) {
+        // Handle \r overwrite
+        const rParts = chunk.split('\r')
+        chunk = rParts[rParts.length - 1]
+      }
+
+      if (i === 0 && tab.buffer.length > 0 && !text.startsWith('\n') && !text.startsWith('\r\n')) {
+        // Append to current last line
+        const lastIdx = tab.buffer.length - 1
+        tab.buffer[lastIdx] = (tab.buffer[lastIdx] || '') + chunk
+      } else {
+        tab.buffer.push(chunk)
       }
     }
+
+    const maxScroll = this.config?.scrollback || 2500
+    if (tab.buffer.length > maxScroll) {
+      tab.buffer.splice(0, tab.buffer.length - maxScroll)
+    }
+  }
+
+  /**
+   * Dispatches raw TUI key sequences (Arrows, Enter, Esc, Q, WASD, Ctrl Combos) to terminal stdin.
+   */
+  public async sendTuiKey(tabId: string, action: string): Promise<boolean> {
+    const keyMap: Record<string, string> = {
+      up: '\x1b[A',
+      down: '\x1b[B',
+      right: '\x1b[C',
+      left: '\x1b[D',
+      enter: '\r',
+      escape: '\x1b',
+      tab: '\t',
+      backspace: '\x7f',
+      space: ' ',
+      q: 'q',
+      w: 'w',
+      a: 'a',
+      s: 's',
+      d: 'd',
+      r: 'r',
+      c: 'c',
+      x: 'x',
+      y: 'y',
+      n: 'n',
+      'ctrl-c': '\x03',
+      'ctrl-d': '\x04',
+      'ctrl-z': '\x1a',
+      'ctrl-l': '\x0c',
+      pageup: '\x1b[5~',
+      pagedown: '\x1b[6~',
+      home: '\x1b[H',
+      end: '\x1b[F',
+    }
+
+    const seq = keyMap[action.toLowerCase()] || action
+    return await this.write(tabId, seq)
   }
 
   public onData(tabId: string, callback: (data: string) => void): () => void {
@@ -322,7 +447,27 @@ export class TerminalService {
   }
 
   /**
-   * Parses text with standard ANSI color/style escape codes into styled tokens for React rendering.
+   * Helper to convert 256-color palette index (0-255) to Hex string
+   */
+  private get256ColorHex(code: number): string {
+    const standardColors = [
+      '#000000', '#CD0000', '#00CD00', '#CDCD00', '#0000EE', '#CD00CD', '#00CDCD', '#E5E5E5',
+      '#7F7F7F', '#FF0000', '#00FF00', '#FFFF00', '#5C5CFF', '#FF00FF', '#00FFFF', '#FFFFFF'
+    ]
+    if (code >= 0 && code < 16) return standardColors[code]
+    if (code >= 232 && code <= 255) {
+      const gray = Math.floor((code - 232) * 10 + 8)
+      return `rgb(${gray}, ${gray}, ${gray})`
+    }
+    const idx = code - 16
+    const r = Math.floor(idx / 36) * 51
+    const g = Math.floor((idx % 36) / 6) * 51
+    const b = (idx % 6) * 51
+    return `rgb(${r}, ${g}, ${b})`
+  }
+
+  /**
+   * Parses text with standard ANSI color/style, 256-color, and TrueColor RGB escape codes.
    */
   public parseAnsi(input: string): AnsiToken[] {
     const tokens: AnsiToken[] = []
@@ -368,11 +513,13 @@ export class TerminalService {
         })
       }
 
-      const codes = match[1] ? match[1].split(';').map(Number) : [0]
+      const rawCodes = match[1] ? match[1].split(';').map(Number) : [0]
 
-      for (const code of codes) {
+      let i = 0
+      while (i < rawCodes.length) {
+        const code = rawCodes[i]
+
         if (code === 0) {
-          // Reset
           currentColor = undefined
           currentBg = undefined
           isBold = false
@@ -388,11 +535,31 @@ export class TerminalService {
           currentColor = ansiColorMap[code]
         } else if (code >= 90 && code <= 97) {
           currentColor = ansiColorMap[code]
+        } else if (code === 38) {
+          // Extended foreground color: 38;5;n or 38;2;r;g;b
+          if (rawCodes[i + 1] === 5 && rawCodes[i + 2] !== undefined) {
+            currentColor = this.get256ColorHex(rawCodes[i + 2])
+            i += 2
+          } else if (rawCodes[i + 1] === 2 && rawCodes[i + 4] !== undefined) {
+            currentColor = `rgb(${rawCodes[i + 2]}, ${rawCodes[i + 3]}, ${rawCodes[i + 4]})`
+            i += 4
+          }
+        } else if (code === 48) {
+          // Extended background color: 48;5;n or 48;2;r;g;b
+          if (rawCodes[i + 1] === 5 && rawCodes[i + 2] !== undefined) {
+            currentBg = this.get256ColorHex(rawCodes[i + 2])
+            i += 2
+          } else if (rawCodes[i + 1] === 2 && rawCodes[i + 4] !== undefined) {
+            currentBg = `rgb(${rawCodes[i + 2]}, ${rawCodes[i + 3]}, ${rawCodes[i + 4]})`
+            i += 4
+          }
         } else if (code === 39) {
           currentColor = undefined
         } else if (code === 49) {
           currentBg = undefined
         }
+
+        i++
       }
 
       lastIndex = ansiRegex.lastIndex
@@ -414,3 +581,4 @@ export class TerminalService {
 }
 
 export const terminalService = TerminalService.getInstance()
+

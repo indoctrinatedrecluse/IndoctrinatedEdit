@@ -11,6 +11,7 @@ import {
   Columns2,
   Rows2,
   Grid2X2,
+  Eye,
 } from 'lucide-react'
 import { runService } from '../../services/runService'
 
@@ -34,6 +35,7 @@ interface TabBarProps {
   onSplitVertical?: () => void
   onSplitHorizontal?: () => void
   onSplitGrid2x2?: () => void
+  onOpenMarkdownPreviewSide?: () => void
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -49,10 +51,12 @@ export const TabBar: React.FC<TabBarProps> = ({
   onSplitVertical,
   onSplitHorizontal,
   onSplitGrid2x2,
+  onOpenMarkdownPreviewSide,
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const activeTab = tabs.find((t) => t.id === activeTabId)
+  const isMarkdownFile = activeTab ? /\.(md|markdown|mdown|mkd|mdx)$/i.test(activeTab.name) : false
 
   // Find active profile info
   const activeProfile = activeTab ? runService.getProfileForLanguage(activeTab.language) : null
@@ -111,6 +115,18 @@ export const TabBar: React.FC<TabBarProps> = ({
         <div className="tab-actions-bar" ref={dropdownRef}>
           {/* Split Editor Panes Quick Action Buttons */}
           <div className="tab-split-controls-group">
+            {/* Contextual Live Markdown Preview Button (Active ONLY for markdown files) */}
+            {isMarkdownFile && (
+              <button
+                className="tab-split-btn md-preview-btn glass-interactive"
+                onClick={onOpenMarkdownPreviewSide}
+                title="Open Live Markdown Preview to the Side (Ctrl+Shift+V)"
+              >
+                <Eye size={13} className="md-preview-icon" />
+                <span className="md-preview-tag">Preview</span>
+              </button>
+            )}
+
             <button
               className="tab-split-btn glass-interactive"
               onClick={onSplitVertical}
@@ -612,6 +628,30 @@ export const TabBar: React.FC<TabBarProps> = ({
         .tab-split-btn:hover {
           color: #fff;
           background: rgba(191, 90, 242, 0.2);
+        }
+
+        .tab-split-btn.md-preview-btn {
+          gap: 4px;
+          padding: 3px 7px;
+          color: #64D2FF;
+          background: rgba(10, 132, 255, 0.15);
+          border: 1px solid rgba(10, 132, 255, 0.35);
+        }
+
+        .tab-split-btn.md-preview-btn:hover {
+          background: rgba(10, 132, 255, 0.28);
+          color: #FFF;
+          box-shadow: 0 0 10px rgba(10, 132, 255, 0.35);
+        }
+
+        .md-preview-icon {
+          color: #64D2FF;
+        }
+
+        .md-preview-tag {
+          font-size: 10.5px;
+          font-weight: 700;
+          letter-spacing: 0.3px;
         }
       `}</style>
     </div>
