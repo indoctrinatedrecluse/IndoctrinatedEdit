@@ -80,6 +80,12 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
+    // Write any stream buffer received before component mount
+    const initialBuffer = terminalService.getRawBuffer(tab.id)
+    if (initialBuffer) {
+      term.write(initialBuffer)
+    }
+
     // Initial resize sync
     terminalService.resize(tab.id, term.cols, term.rows)
 

@@ -77,9 +77,18 @@ export class TerminalService {
     const profiles: ShellProfile[] = []
 
     if (isWin) {
+      const sysRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows'
+      const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+
       // 1. PowerShell 7 (pwsh)
-      const pwshPath = this.findExecutableInPath('pwsh.exe') || 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-      if (this.checkExists(pwshPath)) {
+      const pwshLocations = [
+        this.findExecutableInPath('pwsh.exe'),
+        'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        'C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe',
+        path.join(localAppData, 'Programs', 'PowerShell', 'pwsh.exe'),
+      ]
+      const pwshPath = pwshLocations.find((p) => p && this.checkExists(p))
+      if (pwshPath) {
         profiles.push({
           id: 'pwsh',
           name: 'PowerShell 7',
@@ -91,8 +100,12 @@ export class TerminalService {
       }
 
       // 2. Windows PowerShell
-      const sysPowerShell = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-      if (this.checkExists(sysPowerShell)) {
+      const sysPowerShellLocations = [
+        path.join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ]
+      const sysPowerShell = sysPowerShellLocations.find((p) => this.checkExists(p))
+      if (sysPowerShell) {
         profiles.push({
           id: 'powershell',
           name: 'Windows PowerShell',
@@ -106,11 +119,14 @@ export class TerminalService {
       // 3. Git Bash
       const gitBashLocations = [
         'C:\\Program Files\\Git\\bin\\bash.exe',
+        'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
         'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
-        path.join(os.homedir(), 'AppData\\Local\\Programs\\Git\\bin\\bash.exe'),
+        path.join(localAppData, 'Programs', 'Git', 'bin', 'bash.exe'),
+        path.join(localAppData, 'Programs', 'Git', 'usr', 'bin', 'bash.exe'),
+        this.findExecutableInPath('bash.exe'),
       ]
-      const gitBashPath = gitBashLocations.find((p) => this.checkExists(p)) || this.findExecutableInPath('bash.exe')
-      if (gitBashPath && this.checkExists(gitBashPath)) {
+      const gitBashPath = gitBashLocations.find((p) => p && this.checkExists(p))
+      if (gitBashPath) {
         profiles.push({
           id: 'gitbash',
           name: 'Git Bash',
@@ -125,9 +141,11 @@ export class TerminalService {
         'C:\\cygwin64\\bin\\bash.exe',
         'C:\\cygwin\\bin\\bash.exe',
         'D:\\cygwin64\\bin\\bash.exe',
+        'D:\\cygwin\\bin\\bash.exe',
+        'E:\\cygwin64\\bin\\bash.exe',
       ]
       const cygwinPath = cygwinLocations.find((p) => this.checkExists(p))
-      if (cygwinPath && this.checkExists(cygwinPath)) {
+      if (cygwinPath) {
         profiles.push({
           id: 'cygwin',
           name: 'Cygwin',
@@ -138,8 +156,12 @@ export class TerminalService {
       }
 
       // 5. WSL (Windows Subsystem for Linux)
-      const wslPath = 'C:\\Windows\\System32\\wsl.exe'
-      if (this.checkExists(wslPath)) {
+      const wslLocations = [
+        path.join(sysRoot, 'System32', 'wsl.exe'),
+        'C:\\Windows\\System32\\wsl.exe',
+      ]
+      const wslPath = wslLocations.find((p) => this.checkExists(p))
+      if (wslPath) {
         profiles.push({
           id: 'wsl',
           name: 'WSL (Linux)',
@@ -149,13 +171,18 @@ export class TerminalService {
       }
 
       // 6. Command Prompt (cmd.exe)
-      const cmdPath = 'C:\\Windows\\System32\\cmd.exe'
-      if (this.checkExists(cmdPath)) {
+      const cmdLocations = [
+        path.join(sysRoot, 'System32', 'cmd.exe'),
+        'C:\\Windows\\System32\\cmd.exe',
+      ]
+      const cmdPath = cmdLocations.find((p) => this.checkExists(p))
+      if (cmdPath) {
         profiles.push({
           id: 'cmd',
           name: 'Command Prompt',
           path: cmdPath,
           icon: 'cmd',
+          isDefault: profiles.length === 0,
         })
       }
     } else {
@@ -192,7 +219,7 @@ export class TerminalService {
   }
 
   private findExecutableInPath(exeName: string): string | null {
-    const envPath = process.env.PATH || ''
+    const envPath = process.env.PATH || process.env.Path || ''
     const parts = envPath.split(path.delimiter)
     for (const part of parts) {
       const full = path.join(part, exeName)
@@ -304,6 +331,7 @@ export class TerminalService {
           rows,
           cwd: targetCwd,
           env: env as Record<string, string>,
+          useConpty: false,
         })
 
         const sessionInfo: TerminalSessionInfo = {

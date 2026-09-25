@@ -28,6 +28,7 @@ export class TerminalService {
   private config: TerminalConfig | null = null
   private tabs: TerminalTab[] = []
   private activeTabId: string | null = null
+  private rawStreamBuffers: Map<string, string> = new Map()
   private dataListeners: Map<string, Array<(data: string) => void>> = new Map()
   private exitListeners: Map<string, Array<(code: number | null) => void>> = new Map()
   private cleanupIpcDataListener: (() => void) | null = null
@@ -256,7 +257,12 @@ export class TerminalService {
     }
   }
 
+  public getRawBuffer(tabId: string): string {
+    return this.rawStreamBuffers.get(tabId) || ''
+  }
+
   public clearBuffer(tabId: string): void {
+    this.rawStreamBuffers.set(tabId, '')
     const tab = this.tabs.find((t) => t.id === tabId)
     if (tab) {
       tab.buffer = []
@@ -291,6 +297,9 @@ export class TerminalService {
    * in-place screen clearing, cursor repositioning, and alternate screen buffers for TUI apps.
    */
   public appendOutput(tabId: string, text: string): void {
+    const currentRaw = this.rawStreamBuffers.get(tabId) || ''
+    this.rawStreamBuffers.set(tabId, (currentRaw + text).slice(-500000))
+
     const tab = this.tabs.find((t) => t.id === tabId)
     if (!tab) return
 
