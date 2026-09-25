@@ -240,24 +240,6 @@ export class TerminalService {
   }
 
   /**
-   * Resolves the path to the Windows ConPTY runner script.
-   */
-  private findConPtyRunnerPath(): string | null {
-    if (process.platform !== 'win32') return null
-
-    const candidates = [
-      path.join((process as any).resourcesPath || '', 'sidecars', 'conpty_runner.ps1'),
-      path.join(process.cwd(), 'sidecars', 'conpty_runner.ps1'),
-      path.join(__dirname, '..', 'sidecars', 'conpty_runner.ps1'),
-      path.join(__dirname, 'sidecars', 'conpty_runner.ps1'),
-    ]
-    for (const p of candidates) {
-      if (fs.existsSync(p)) return p
-    }
-    return null
-  }
-
-  /**
    * Creates an interactive child process session for a given shell profile.
    */
   public createSession(
@@ -278,7 +260,9 @@ export class TerminalService {
     }
 
     const sessionId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-    const targetCwd = options.cwd && fs.existsSync(options.cwd) ? options.cwd : os.homedir()
+    const targetCwd = options.cwd && options.cwd !== '.' && fs.existsSync(options.cwd)
+      ? path.resolve(options.cwd)
+      : (process.env.INIT_CWD ? path.resolve(process.env.INIT_CWD) : process.cwd() || os.homedir())
 
     // Environment variables with ANSI color and terminal capabilities
     const env: NodeJS.ProcessEnv = {
@@ -296,40 +280,12 @@ export class TerminalService {
     }
 
     const args = profile.args || []
-    const conptyRunner = this.findConPtyRunnerPath()
-    let proc: ChildProcessWithoutNullStreams
-
-    if (conptyRunner && process.platform === 'win32') {
-      const fullCmd = args.length > 0 ? `"${profile.path}" ${args.join(' ')}` : `"${profile.path}"`
-      proc = spawn('powershell.exe', [
-        '-NoLogo',
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        conptyRunner,
-        '-CommandLine',
-        fullCmd,
-        '-CurrentDirectory',
-        targetCwd,
-        '-Cols',
-        String(options.cols || 120),
-        '-Rows',
-        String(options.rows || 30),
-      ], {
-        cwd: targetCwd,
-        env,
-        shell: false,
-        windowsHide: true,
-      })
-    } else {
-      proc = spawn(profile.path, args, {
-        cwd: targetCwd,
-        env,
-        shell: false,
-        windowsHide: true,
-      })
-    }
+    const proc = spawn(profile.path, args, {
+      cwd: targetCwd,
+      env,
+      shell: false,
+      windowsHide: true,
+    })
 
     const sessionInfo: TerminalSessionInfo = {
       id: sessionId,

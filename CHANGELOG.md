@@ -7,15 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.9.1] - 2026-09-25
 
-### 🩹 Hotfix — Native Windows ConPTY Engine, Kill Terminal Button, Interactive TUI Quick Controls & Editor Viewport Scroll Stabilization
+### 🩹 Hotfix — Native Terminal Stream Pipeline, Full Absolute Working Directory Display, Kill Terminal Button, Interactive TUI Keypad Dock & Editor Viewport Scroll Stabilization
 
-IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix activating genuine Windows PseudoConsole (ConPTY) stream forwarding for all native CLI/TUI applications, adding a one-click "Kill Terminal" session control, expanding the on-screen TUI Keypad dock, and stabilizing editor scrolling:
+IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix restoring zero-overhead direct native process streaming across all shell environments, full absolute working directory path resolution, a one-click "Kill Terminal" session control, expanded TUI quick keypad controls, and editor scroll stabilization:
 
-#### 🎮 Native Windows ConPTY Engine & Raw Keystroke Pipeline
-- **Genuine Windows PseudoConsole (`CreatePseudoConsole`) Integration**:
-  - Implemented `sidecars/conpty_runner.ps1` attaching authentic Windows Console input (`CONIN$`) and output (`CONOUT$`) buffers to backend shell processes via `CreatePseudoConsole` and `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`.
-  - Full bidirectional raw stream handling for native `crossterm` / `ratatui` interactive utilities (`ir pmon`, `ir nettop`, `ir dua`, `ir fm`, `ir edit`, `ir matrix`, `ir help`, `nano`, `htop`, `vim`, etc.) with zero mocked data or hardcoding.
+#### 🎮 Direct Native Terminal Stream Pipeline & Raw Keystroke Forwarding
+- **Unbuffered Native Child Process Streaming**:
+  - Direct native execution and unbuffered standard stream piping across all shell environments (PowerShell 7, Windows PowerShell, Git Bash, Cygwin, WSL, CMD, Linux/macOS shells) for immediate prompt output and command execution.
+  - Native raw input forwarding for all interactive CLI tools and TUI applications (`ir pmon`, `ir nettop`, `ir dua`, `ir fm`, `ir edit`, `ir matrix`, `ir help`, `nano`, `htop`, `vim`, etc.) without mocked data or hardcoding.
   - VT100 / ANSI sequence processing for alternate screen buffers (`\x1b[?1049h` / `\x1b[?1049l`), in-place cursor updates, and screen clears (`\x1b[2J`).
+- **Full Absolute Working Directory Path Resolution**:
+  - Replaced relative `.` directory placeholders with full resolved absolute filesystem paths (`info.cwd` / `path.resolve`) in both the backend session manager and the terminal initial greeting banner.
 
 #### 🔴 "Kill Terminal" Header Action & Enhanced Terminal Controls
 - **One-Click "Kill Terminal" Button**:
@@ -23,7 +25,7 @@ IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix activating genuine Windo
 - **Expanded TUI Quick Action Keypad**:
   - Added quick process management keys: <kbd>C (CPU)</kbd>, <kbd>M (Mem)</kbd>, <kbd>N (Name)</kbd>, <kbd>P (PID)</kbd>, <kbd>K (Kill)</kbd>, <kbd>Y (Confirm)</kbd>, <kbd>R (Redraw)</kbd>, and <kbd>Q (Quit)</kbd>.
   - Full keyboard capture for <kbd>PageUp</kbd>, <kbd>PageDown</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, <kbd>Tab</kbd>, <kbd>Escape</kbd>, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+Z</kbd>, and <kbd>Ctrl+L</kbd>.
-  - Single keystrokes and on-screen button presses dispatch unbuffered directly into the ConPTY console stream.
+  - Single keystrokes and on-screen button presses dispatch unbuffered directly into the active terminal stdin stream.
 
 #### 🛡️ Editor Viewport Scroll Stabilization & Layout Protection
 - **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or navigation keys in the text editor pane could cause the parent window viewport to scroll vertically, displacing the top titlebar off-screen and leaving a blank void at the bottom.

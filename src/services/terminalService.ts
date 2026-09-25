@@ -152,7 +152,7 @@ export class TerminalService {
     const profile = this.getProfiles().find((p) => p.id === targetShellId) || this.getProfiles()[0]
 
     let tabId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
-    let targetCwd = options?.cwd || '.'
+    let targetCwd = (options?.cwd && options.cwd !== '.') ? options.cwd : (typeof process !== 'undefined' && process.cwd ? process.cwd() : '.')
 
     if (electron?.terminal?.create) {
       try {
@@ -161,7 +161,9 @@ export class TerminalService {
           cwd: options?.cwd,
         })
         tabId = info.id
-        targetCwd = info.cwd
+        if (info.cwd) {
+          targetCwd = info.cwd
+        }
       } catch (err) {
         console.warn('[TerminalService] Failed to spawn native terminal, falling back to browser shell:', err)
       }
@@ -174,7 +176,7 @@ export class TerminalService {
       icon: profile.icon,
       cwd: targetCwd,
       buffer: [
-        `\x1b[36m╭── IndoctrinatedEdit Terminal Subsystem [v4.0.0]\x1b[0m`,
+        `\x1b[36m╭── IndoctrinatedEdit Terminal Subsystem [v4.9.1]\x1b[0m`,
         `\x1b[90m│ Shell: ${profile.name} (${profile.path})\x1b[0m`,
         `\x1b[90m│ Working Directory: ${targetCwd}\x1b[0m`,
         `\x1b[36m╰────────────────────────────────────────────────\x1b[0m\r\n`,
