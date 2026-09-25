@@ -67,7 +67,7 @@ describe('Remote Protocol Studio & Strengthened Terminal TUI Subsystem', () => {
       expect(tab.buffer).toBeDefined()
     })
 
-    it('should dispatch raw TUI key sequences (Arrows, WASD, Enter, Esc, Q, Ctrl+C, Space, Tab) directly to terminal session', async () => {
+    it('should dispatch raw TUI key sequences (Arrows, Nav, WASD, Enter, Esc, Q, Ctrl+C, Space, Tab, Backspace) directly to terminal session', async () => {
       const tab = await terminalService.createTab()
       let writtenData = ''
       terminalService.setElectronAPI({
@@ -90,6 +90,18 @@ describe('Remote Protocol Studio & Strengthened Terminal TUI Subsystem', () => {
 
       await terminalService.sendTuiKey(tab.id, 'right')
       expect(writtenData).toBe('\x1b[C')
+
+      await terminalService.sendTuiKey(tab.id, 'pgup')
+      expect(writtenData).toBe('\x1b[5~')
+
+      await terminalService.sendTuiKey(tab.id, 'pgdn')
+      expect(writtenData).toBe('\x1b[6~')
+
+      await terminalService.sendTuiKey(tab.id, 'home')
+      expect(writtenData).toBe('\x1b[H')
+
+      await terminalService.sendTuiKey(tab.id, 'end')
+      expect(writtenData).toBe('\x1b[F')
 
       await terminalService.sendTuiKey(tab.id, 'w')
       expect(writtenData).toBe('w')
@@ -115,8 +127,26 @@ describe('Remote Protocol Studio & Strengthened Terminal TUI Subsystem', () => {
       await terminalService.sendTuiKey(tab.id, 'tab')
       expect(writtenData).toBe('\t')
 
+      await terminalService.sendTuiKey(tab.id, 'backspace')
+      expect(writtenData).toBe('\x7f')
+
+      await terminalService.sendTuiKey(tab.id, 'r')
+      expect(writtenData).toBe('r')
+
       await terminalService.sendTuiKey(tab.id, 'ctrl-c')
       expect(writtenData).toBe('\x03')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl+c')
+      expect(writtenData).toBe('\x03')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl-d')
+      expect(writtenData).toBe('\x04')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl-z')
+      expect(writtenData).toBe('\x1a')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl-l')
+      expect(writtenData).toBe('\x0c')
 
       await terminalService.sendTuiKey(tab.id, 'q')
       expect(writtenData).toBe('q')

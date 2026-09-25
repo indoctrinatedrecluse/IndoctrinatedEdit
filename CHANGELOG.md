@@ -7,24 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.9.1] - 2026-09-25
 
-### 🩹 Hotfix — Interactive Terminal TUI Subsystem, Live Key Navigation & Editor Viewport Scroll Stabilization
+### 🩹 Hotfix — Native Terminal ConPTY Key Forwarding, Interactive TUI Keypad Dock & Editor Viewport Scroll Stabilization
 
-IndoctrinatedEdit 4.9.1 delivers a critical hotfix resolving layout displacement upon editor keyboard navigation and activating full-fledged interactive terminal TUI application execution:
+IndoctrinatedEdit 4.9.1 delivers a critical hotfix resolving layout displacement upon editor keyboard navigation and activating full-fledged interactive terminal TUI application execution via ConPTY:
 
-#### 🎮 Interactive Terminal TUI & CLI Suite Engine
-- **Integrated `ir` TUI Applications**: Built-in native support for interactive CLI graphical applications directly in the terminal:
-  - `ir pmon`: Live process & system resource monitor with CPU/RAM utilization bars, interactive row cursor navigation (<kbd>▲</kbd>/<kbd>▼</kbd> or <kbd>W</kbd>/<kbd>S</kbd>), column sorting (<kbd>◄</kbd>/<kbd>►</kbd> or <kbd>A</kbd>/<kbd>D</kbd>), pause/resume (<kbd>Space</kbd>), process detail inspection (<kbd>Enter</kbd>), and instant graceful exit (<kbd>Q</kbd>, <kbd>Esc</kbd>, <kbd>Ctrl+C</kbd>).
-  - `ir monitor`: Real-time ASCII/ANSI waveform graphs for CPU utilization, memory bandwidth, disk activity, and network I/O.
-  - `ir matrix`: Cyberpunk falling matrix rain digital stream animation.
-  - `ir sysinfo`: Formatted system hardware, OS, kernel, and IndoctrinatedEdit runtime specifications.
-  - `ir help`: Complete command reference manual with keyboard shortcuts.
-- **Responsive TUI On-Screen Keypad & Key Interceptors**:
-  - Direct key forwarding in TUI mode: Single keystrokes (<kbd>Q</kbd>, <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>, arrows, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Esc</kbd>) now immediately dispatch to the active TUI session without getting stuck in the command input box.
-  - Interactive On-Screen D-Pad and Action buttons (<kbd>▲</kbd>, <kbd>▼</kbd>, <kbd>◄</kbd>, <kbd>►</kbd>, <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>, <kbd>Enter ↵</kbd>, <kbd>Esc</kbd>, <kbd>Tab ⇥</kbd>, <kbd>Q (Quit)</kbd>, <kbd>Ctrl+C 🛑</kbd>) now execute smoothly without losing focus or stalling.
-  - Automatic TUI mode synchronization: Opening a TUI application automatically engages TUI navigation mode and displays the control pad toolbar.
+#### 🎮 Native Terminal ConPTY Key Forwarding & Interactive TUI Controls
+- **Full ConPTY / PTY CLI GUI Application Support**:
+  - Native, unbuffered raw input forwarding for all interactive CLI tools and GUI commands (`ir pmon`, `ir nettop`, `ir files`, `ir edit`, `ir browse`, `nano`, `htop`, `vim`, etc.) without mocked or hardcoded displays.
+  - VT100 / ANSI sequence processing for alternate screen buffers (`\x1b[?1049h` / `\x1b[?1049l`), in-place cursor updates, and screen clears (`\x1b[2J`).
+- **Interactive On-Screen TUI Keypad Dock**:
+  - Built-in clickable on-screen keypad toolbar providing direct input for:
+    - **D-Pad Directional Arrows**: <kbd>▲</kbd> (`\x1b[A`), <kbd>▼</kbd> (`\x1b[B`), <kbd>◄</kbd> (`\x1b[D`), <kbd>►</kbd> (`\x1b[C`).
+    - **Page & Viewport Navigation**: <kbd>PgUp</kbd> (`\x1b[5~`), <kbd>PgDn</kbd> (`\x1b[6~`), <kbd>Home</kbd> (`\x1b[H`), <kbd>End</kbd> (`\x1b[F`).
+    - **WASD Gaming / Vim-Style Navigation**: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>.
+    - **Action & Control Keys**: <kbd>Enter ↵</kbd> (`\r`), <kbd>Space ␣</kbd> (` `), <kbd>Esc</kbd> (`\x1b`), <kbd>Tab ⇥</kbd> (`\t`), <kbd>Bksp ⌫</kbd> (`\x7f`), <kbd>R</kbd> (Refresh / Redraw), <kbd>Q (Quit)</kbd>, and <kbd>Ctrl+C 🛑</kbd> (`\x03`).
+  - Safe event dispatching (`e.preventDefault()`, `e.stopPropagation()`) prevents keyboard blur or unhandled form submissions while maintaining instant ConPTY responsiveness.
+- **Direct Keystroke Interceptors**:
+  - Single keystrokes (<kbd>Q</kbd>, <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>, arrows, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Esc</kbd>, <kbd>Tab</kbd>) in TUI mode dispatch immediately to ConPTY stdin without being trapped in the text prompt bar.
 
 #### 🛡️ Editor Viewport Scroll Stabilization & Layout Protection
-- **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or other navigation keys in the text editor pane could cause the parent viewport to scroll vertically, hiding the top titlebar and leaving a blank void at the bottom.
+- **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or navigation keys in the text editor pane could cause the parent window viewport to scroll vertically, displacing the top titlebar off-screen and leaving a blank void at the bottom.
 - **Global Viewport Scroll Lock**: Added root-level and document-level scroll guards, overscroll behavior locks (`overscroll-behavior: none !important`), and explicit Monaco editor key commands to ensure all scrolling remains strictly bounded within the active editor buffer.
 
 ## [4.9.0] - 2026-09-24

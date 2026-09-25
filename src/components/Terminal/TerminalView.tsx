@@ -353,9 +353,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           })}
         </div>
 
-        {/* TUI Interactive On-Screen Quick Control Pad (for CLI graphical tools: ir pmon, ir edit, ir monitor, etc.) */}
-        {showTuiControls && (
+        {/* TUI Interactive On-Screen Quick Control Pad (for CLI graphical tools: ir pmon, ir nettop, ir edit, nano, etc.) */}
+        {(isTuiMode || showTuiControls || tuiActive) && (
           <div className="tui-keypad-toolbar">
+            {/* D-Pad Arrows */}
             <div className="keypad-group d-pad">
               <button
                 type="button"
@@ -387,6 +388,39 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
               >►</button>
             </div>
 
+            {/* Navigation keys */}
+            <div className="keypad-group nav-group">
+              <button
+                type="button"
+                className="tui-key-btn nav-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'pgup') }}
+                title="Send Page Up"
+              >PgUp</button>
+              <button
+                type="button"
+                className="tui-key-btn nav-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'pgdn') }}
+                title="Send Page Down"
+              >PgDn</button>
+              <button
+                type="button"
+                className="tui-key-btn nav-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'home') }}
+                title="Send Home"
+              >Home</button>
+              <button
+                type="button"
+                className="tui-key-btn nav-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'end') }}
+                title="Send End"
+              >End</button>
+            </div>
+
+            {/* WASD Gaming/Vim-style nav */}
             <div className="keypad-group wasd-group">
               <button
                 type="button"
@@ -418,6 +452,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
               >D</button>
             </div>
 
+            {/* Action / Selector / Control Keys */}
             <div className="keypad-group actions-group">
               <button
                 type="button"
@@ -426,6 +461,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'enter') }}
                 title="Send Enter (↵)"
               >Enter ↵</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key space-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'space') }}
+                title="Send Space (␣)"
+              >Space ␣</button>
               <button
                 type="button"
                 className="tui-key-btn action-key"
@@ -440,6 +482,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'tab') }}
                 title="Send Tab (⇥)"
               >Tab ⇥</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'backspace') }}
+                title="Send Backspace (⌫)"
+              >Bksp ⌫</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'r') }}
+                title="Send 'R' (Refresh / Redraw)"
+              >R</button>
               <button
                 type="button"
                 className="tui-key-btn action-key quit-key"
@@ -561,8 +617,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           <button
             className={`term-icon-btn tui-toggle-btn glass-interactive ${isTuiMode ? 'active-tui' : ''}`}
             onClick={() => {
-              setIsTuiMode((prev) => !prev)
-              setShowTuiControls(true)
+              setIsTuiMode((prev) => {
+                const next = !prev
+                setShowTuiControls(next)
+                return next
+              })
             }}
             title={isTuiMode ? "TUI Live Raw Key Mode Enabled (Arrows, WASD, single keys forward directly)" : "Enable TUI / CLI GUI Raw Key Navigation"}
           >
