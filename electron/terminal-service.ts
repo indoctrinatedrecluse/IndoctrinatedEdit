@@ -314,14 +314,27 @@ export class TerminalService {
     // Prefer native node-pty PseudoConsole (ConPTY on Windows, openpty on POSIX)
     if (nodePty) {
       try {
-        const ptyProc = nodePty.spawn(profile.path, args, {
-          name: 'xterm-256color',
-          cols,
-          rows,
-          cwd: targetCwd,
-          env: env as Record<string, string>,
-          useConpty: false,
-        })
+        let ptyProc: IPty
+        try {
+          ptyProc = nodePty.spawn(profile.path, args, {
+            name: 'xterm-256color',
+            cols,
+            rows,
+            cwd: targetCwd,
+            env: env as Record<string, string>,
+            useConpty: true,
+          })
+        } catch (conptyErr) {
+          console.warn('[TerminalService] ConPTY spawn failed, falling back to WinPTY:', conptyErr)
+          ptyProc = nodePty.spawn(profile.path, args, {
+            name: 'xterm-256color',
+            cols,
+            rows,
+            cwd: targetCwd,
+            env: env as Record<string, string>,
+            useConpty: false,
+          })
+        }
 
         const sessionInfo: TerminalSessionInfo = {
           id: sessionId,

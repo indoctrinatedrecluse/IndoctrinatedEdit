@@ -69,6 +69,31 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
       allowTransparency: true,
       scrollback: 5000,
       convertEol: true,
+      windowsPty: {
+        backend: 'conpty',
+        buildNumber: 22000,
+      },
+    })
+
+    // Prevent browser focus trap on Tab and ensure Backspace & function keys are cleanly passed to terminal
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        if (event.type === 'keydown') {
+          event.preventDefault()
+          terminalService.write(tab.id, '\t')
+        }
+        return false
+      }
+
+      if (event.key === 'Backspace') {
+        if (event.type === 'keydown') {
+          event.preventDefault()
+          terminalService.write(tab.id, '\x7f')
+        }
+        return false
+      }
+
+      return true
     })
 
     const fitAddon = new FitAddon()
