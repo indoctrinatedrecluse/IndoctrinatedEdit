@@ -163,6 +163,18 @@ describe('Remote Protocol Studio & Strengthened Terminal TUI Subsystem', () => {
       await terminalService.sendTuiKey(tab.id, 'ctrl-z')
       expect(writtenData).toBe('\x1a')
 
+      await terminalService.sendTuiKey(tab.id, 'ctrl-s')
+      expect(writtenData).toBe('\x13')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl-o')
+      expect(writtenData).toBe('\x0f')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl-x')
+      expect(writtenData).toBe('\x18')
+
+      await terminalService.sendTuiKey(tab.id, 'ctrl-w')
+      expect(writtenData).toBe('\x17')
+
       await terminalService.sendTuiKey(tab.id, 'ctrl-l')
       expect(writtenData).toBe('\x0c')
 

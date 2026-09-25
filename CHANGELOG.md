@@ -7,14 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.9.1] - 2026-09-25
 
-### 🩹 Hotfix — Native Terminal Stream Pipeline, Full Absolute Working Directory Display, Kill Terminal Button, Interactive TUI Keypad Dock & Editor Viewport Scroll Stabilization
+### 🩹 Hotfix — Native Windows ConPTY PseudoConsole Engine, Full Absolute Working Directory Display, Kill Terminal Button, Interactive TUI Keypad Dock & Editor Viewport Scroll Stabilization
 
-IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix restoring zero-overhead direct native process streaming across all shell environments, full absolute working directory path resolution, a one-click "Kill Terminal" session control, expanded TUI quick keypad controls, and editor scroll stabilization:
+IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix introducing a dedicated native Windows ConPTY helper engine (`sidecars/conpty.exe`), full absolute working directory path resolution, a one-click "Kill Terminal" session control, expanded TUI keypad controls, and editor scroll stabilization:
 
-#### 🎮 Direct Native Terminal Stream Pipeline & Raw Keystroke Forwarding
-- **Unbuffered Native Child Process Streaming**:
-  - Direct native execution and unbuffered standard stream piping across all shell environments (PowerShell 7, Windows PowerShell, Git Bash, Cygwin, WSL, CMD, Linux/macOS shells) for immediate prompt output and command execution.
-  - Native raw input forwarding for all interactive CLI tools and TUI applications (`ir pmon`, `ir nettop`, `ir dua`, `ir fm`, `ir edit`, `ir matrix`, `ir help`, `nano`, `htop`, `vim`, etc.) without mocked data or hardcoding.
+#### 🎮 Native Windows ConPTY PseudoConsole Engine & Raw Key Forwarding
+- **Dedicated Windows PseudoConsole Engine (`sidecars/conpty.exe`)**:
+  - Pre-compiled standalone Win32 helper binary invoking `CreatePseudoConsole` and `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` to attach authentic Windows Console (`CONIN$` / `CONOUT$`) buffers to backend shell processes.
+  - Full unbuffered bidirectional stream piping for native `crossterm` / `ratatui` interactive utilities (`ir pmon`, `ir nettop`, `ir dua`, `ir fm`, `ir edit`, `ir matrix`, `ir help`, `nano`, `htop`, `vim`, etc.) allowing live navigation, sorting, saving, and exiting without mocked data or hardcoding.
   - VT100 / ANSI sequence processing for alternate screen buffers (`\x1b[?1049h` / `\x1b[?1049l`), in-place cursor updates, and screen clears (`\x1b[2J`).
 - **Full Absolute Working Directory Path Resolution**:
   - Replaced relative `.` directory placeholders with full resolved absolute filesystem paths (`info.cwd` / `path.resolve`) in both the backend session manager and the terminal initial greeting banner.
@@ -24,8 +24,8 @@ IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix restoring zero-overhead 
   - Added a dedicated <kbd>Kill Terminal</kbd> button (Power icon with ruby-red hover state) right beside the <kbd>Clear Terminal Output</kbd> button in the terminal header toolbar for closing and terminating the active session process immediately.
 - **Expanded TUI Quick Action Keypad**:
   - Added quick process management keys: <kbd>C (CPU)</kbd>, <kbd>M (Mem)</kbd>, <kbd>N (Name)</kbd>, <kbd>P (PID)</kbd>, <kbd>K (Kill)</kbd>, <kbd>Y (Confirm)</kbd>, <kbd>R (Redraw)</kbd>, and <kbd>Q (Quit)</kbd>.
-  - Full keyboard capture for <kbd>PageUp</kbd>, <kbd>PageDown</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, <kbd>Tab</kbd>, <kbd>Escape</kbd>, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+Z</kbd>, and <kbd>Ctrl+L</kbd>.
-  - Single keystrokes and on-screen button presses dispatch unbuffered directly into the active terminal stdin stream.
+  - Full keyboard capture for <kbd>PageUp</kbd>, <kbd>PageDown</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, <kbd>Tab</kbd>, <kbd>Escape</kbd>, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+Z</kbd>, <kbd>Ctrl+L</kbd>, <kbd>Ctrl+S</kbd> (Save), <kbd>Ctrl+O</kbd> (WriteOut), <kbd>Ctrl+X</kbd> (Exit), and <kbd>Ctrl+W</kbd> (WhereIs).
+  - Single keystrokes and on-screen button presses dispatch unbuffered directly into the active ConPTY console stream.
 
 #### 🛡️ Editor Viewport Scroll Stabilization & Layout Protection
 - **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or navigation keys in the text editor pane could cause the parent window viewport to scroll vertically, displacing the top titlebar off-screen and leaving a blank void at the bottom.

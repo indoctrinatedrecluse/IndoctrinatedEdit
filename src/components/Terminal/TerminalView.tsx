@@ -223,6 +223,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       } else if (e.ctrlKey && e.key.toLowerCase() === 'l') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'ctrl-l')
+      } else if (e.ctrlKey && ['s', 'o', 'x', 'w', 'k', 'u', 'a', 'e', 'g', 'r'].includes(e.key.toLowerCase())) {
+        e.preventDefault()
+        handleSendTuiAction(tabId, `ctrl-${e.key.toLowerCase()}`)
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault()
         handleSendTuiAction(tabId, e.key)
@@ -288,6 +291,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       if (e.ctrlKey && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'ctrl-z')
+        return
+      }
+
+      if (e.ctrlKey && ['s', 'o', 'x', 'w', 'k', 'u', 'a', 'e', 'g', 'r'].includes(e.key.toLowerCase())) {
+        e.preventDefault()
+        handleSendTuiAction(tabId, `ctrl-${e.key.toLowerCase()}`)
         return
       }
 

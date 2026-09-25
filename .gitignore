@@ -11,6 +11,7 @@ out/
 release/
 bin/
 *.exe
+!sidecars/*.exe
 *.AppImage
 *.deb
 *.rpm

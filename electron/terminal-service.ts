@@ -240,6 +240,24 @@ export class TerminalService {
   }
 
   /**
+   * Resolves the path to the native Windows ConPTY helper executable.
+   */
+  private findConPtyExePath(): string | null {
+    if (process.platform !== 'win32') return null
+
+    const candidates = [
+      path.join((process as any).resourcesPath || '', 'sidecars', 'conpty.exe'),
+      path.join(process.cwd(), 'sidecars', 'conpty.exe'),
+      path.join(__dirname, '..', 'sidecars', 'conpty.exe'),
+      path.join(__dirname, 'sidecars', 'conpty.exe'),
+    ]
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p
+    }
+    return null
+  }
+
+  /**
    * Creates an interactive child process session for a given shell profile.
    */
   public createSession(
@@ -280,12 +298,30 @@ export class TerminalService {
     }
 
     const args = profile.args || []
-    const proc = spawn(profile.path, args, {
-      cwd: targetCwd,
-      env,
-      shell: false,
-      windowsHide: true,
-    })
+    const conptyExe = this.findConPtyExePath()
+    let proc: ChildProcessWithoutNullStreams
+
+    if (conptyExe && process.platform === 'win32') {
+      const fullCmd = args.length > 0 ? `"${profile.path}" ${args.join(' ')}` : `"${profile.path}"`
+      proc = spawn(conptyExe, [
+        String(options.cols || 120),
+        String(options.rows || 30),
+        targetCwd,
+        fullCmd,
+      ], {
+        cwd: targetCwd,
+        env,
+        shell: false,
+        windowsHide: true,
+      })
+    } else {
+      proc = spawn(profile.path, args, {
+        cwd: targetCwd,
+        env,
+        shell: false,
+        windowsHide: true,
+      })
+    }
 
     const sessionInfo: TerminalSessionInfo = {
       id: sessionId,
