@@ -86,15 +86,17 @@ export class TerminalService {
         'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
         this.findExecutableInPath('powershell.exe'),
       ]
-      const sysPowerShell = sysPowerShellLocations.find((p) => p && this.checkExists(p)) || 'powershell.exe'
-      profiles.push({
-        id: 'powershell',
-        name: 'Windows PowerShell',
-        path: sysPowerShell,
-        icon: 'powershell',
-        args: ['-NoLogo'],
-        isDefault: true,
-      })
+      const sysPowerShell = sysPowerShellLocations.find((p) => p && this.checkExists(p))
+      if (sysPowerShell) {
+        profiles.push({
+          id: 'powershell',
+          name: 'Windows PowerShell',
+          path: sysPowerShell,
+          icon: 'powershell',
+          args: ['-NoLogo'],
+          isDefault: true,
+        })
+      }
 
       // 2. PowerShell 7 (pwsh)
       const pwshLocations = [
@@ -103,14 +105,17 @@ export class TerminalService {
         'C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe',
         path.join(localAppData, 'Programs', 'PowerShell', 'pwsh.exe'),
       ]
-      const pwshPath = pwshLocations.find((p) => p && this.checkExists(p)) || 'pwsh.exe'
-      profiles.push({
-        id: 'pwsh',
-        name: 'PowerShell 7',
-        path: pwshPath,
-        icon: 'powershell',
-        args: ['-NoLogo'],
-      })
+      const pwshPath = pwshLocations.find((p) => p && this.checkExists(p))
+      if (pwshPath) {
+        profiles.push({
+          id: 'pwsh',
+          name: 'PowerShell 7',
+          path: pwshPath,
+          icon: 'powershell',
+          args: ['-NoLogo'],
+          isDefault: profiles.length === 0,
+        })
+      }
 
       // 3. Git Bash
       const gitBashLocations = [
@@ -121,14 +126,17 @@ export class TerminalService {
         path.join(localAppData, 'Programs', 'Git', 'usr', 'bin', 'bash.exe'),
         this.findExecutableInPath('bash.exe'),
       ]
-      const gitBashPath = gitBashLocations.find((p) => p && this.checkExists(p)) || 'C:\\Program Files\\Git\\bin\\bash.exe'
-      profiles.push({
-        id: 'gitbash',
-        name: 'Git Bash',
-        path: gitBashPath,
-        icon: 'git',
-        args: ['--login', '-i'],
-      })
+      const gitBashPath = gitBashLocations.find((p) => p && this.checkExists(p))
+      if (gitBashPath) {
+        profiles.push({
+          id: 'gitbash',
+          name: 'Git Bash',
+          path: gitBashPath,
+          icon: 'git',
+          args: ['--login', '-i'],
+          isDefault: profiles.length === 0,
+        })
+      }
 
       // 4. Cygwin
       const cygwinLocations = [
@@ -138,14 +146,17 @@ export class TerminalService {
         'D:\\cygwin\\bin\\bash.exe',
         'E:\\cygwin64\\bin\\bash.exe',
       ]
-      const cygwinPath = cygwinLocations.find((p) => this.checkExists(p)) || 'C:\\cygwin64\\bin\\bash.exe'
-      profiles.push({
-        id: 'cygwin',
-        name: 'Cygwin',
-        path: cygwinPath,
-        icon: 'cygwin',
-        args: ['--login', '-i'],
-      })
+      const cygwinPath = cygwinLocations.find((p) => this.checkExists(p))
+      if (cygwinPath) {
+        profiles.push({
+          id: 'cygwin',
+          name: 'Cygwin',
+          path: cygwinPath,
+          icon: 'cygwin',
+          args: ['--login', '-i'],
+          isDefault: profiles.length === 0,
+        })
+      }
 
       // 5. WSL (Linux)
       const wslLocations = [
@@ -153,13 +164,16 @@ export class TerminalService {
         'C:\\Windows\\System32\\wsl.exe',
         this.findExecutableInPath('wsl.exe'),
       ]
-      const wslPath = wslLocations.find((p) => p && this.checkExists(p)) || 'wsl.exe'
-      profiles.push({
-        id: 'wsl',
-        name: 'WSL (Linux)',
-        path: wslPath,
-        icon: 'wsl',
-      })
+      const wslPath = wslLocations.find((p) => p && this.checkExists(p))
+      if (wslPath) {
+        profiles.push({
+          id: 'wsl',
+          name: 'WSL (Linux)',
+          path: wslPath,
+          icon: 'wsl',
+          isDefault: profiles.length === 0,
+        })
+      }
 
       // 6. Command Prompt (cmd.exe)
       const cmdLocations = [
@@ -167,13 +181,26 @@ export class TerminalService {
         'C:\\Windows\\System32\\cmd.exe',
         this.findExecutableInPath('cmd.exe'),
       ]
-      const cmdPath = cmdLocations.find((p) => p && this.checkExists(p)) || 'cmd.exe'
-      profiles.push({
-        id: 'cmd',
-        name: 'Command Prompt',
-        path: cmdPath,
-        icon: 'cmd',
-      })
+      const cmdPath = cmdLocations.find((p) => p && this.checkExists(p))
+      if (cmdPath) {
+        profiles.push({
+          id: 'cmd',
+          name: 'Command Prompt',
+          path: cmdPath,
+          icon: 'cmd',
+          isDefault: profiles.length === 0,
+        })
+      }
+
+      if (profiles.length === 0) {
+        profiles.push({
+          id: 'cmd',
+          name: 'Command Prompt',
+          path: process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe',
+          icon: 'cmd',
+          isDefault: true,
+        })
+      }
     } else {
       // Unix / macOS
       const standardShells = [
@@ -283,10 +310,19 @@ export class TerminalService {
   ): TerminalSessionInfo {
     const config = this.getConfig()
     const targetShellId = options.shellId || config.defaultShellId
-    const profile = config.profiles.find((p) => p.id === targetShellId) || config.profiles[0]
+    const detected = this.detectShells()
+    let profile = config.profiles.find((p) => p.id === targetShellId && this.checkExists(p.path)) ||
+                  detected.find((p) => p.id === targetShellId) ||
+                  detected[0] ||
+                  config.profiles.find((p) => this.checkExists(p.path))
 
     if (!profile) {
-      throw new Error(`No available shell profile found for ID: ${targetShellId}`)
+      profile = {
+        id: 'cmd',
+        name: 'Command Prompt',
+        path: process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe',
+        icon: 'cmd',
+      }
     }
 
     const sessionId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`

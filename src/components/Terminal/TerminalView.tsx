@@ -27,9 +27,10 @@ interface XTermPaneProps {
   isActive: boolean
   fontSize?: number
   fontFamily?: string
+  onTermReady?: (tabId: string, term: Terminal) => void
 }
 
-const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fontFamily }) => {
+const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fontFamily, onTermReady }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -75,24 +76,12 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
       },
     })
 
-    // Prevent browser focus trap on Tab and ensure Backspace & function keys are cleanly passed to terminal
+    // Prevent browser focus trap on Tab while allowing xterm to handle Tab and all terminal keys natively
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (event.key === 'Tab') {
-        if (event.type === 'keydown') {
-          event.preventDefault()
-          terminalService.write(tab.id, '\t')
-        }
-        return false
+        event.preventDefault()
+        return true
       }
-
-      if (event.key === 'Backspace') {
-        if (event.type === 'keydown') {
-          event.preventDefault()
-          terminalService.write(tab.id, '\x7f')
-        }
-        return false
-      }
-
       return true
     })
 
@@ -104,6 +93,10 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
 
     xtermRef.current = term
     fitAddonRef.current = fitAddon
+
+    if (onTermReady) {
+      onTermReady(tab.id, term)
+    }
 
     // Write any stream buffer received before component mount
     const initialBuffer = terminalService.getRawBuffer(tab.id)
@@ -242,8 +235,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     }
   }
 
+  const terminalInstancesRef = useRef<Map<string, Terminal>>(new Map())
+
+  const handleTermReady = (tabId: string, term: Terminal) => {
+    terminalInstancesRef.current.set(tabId, term)
+  }
+
   const handleSendTuiAction = async (tabId: string, action: string) => {
     await terminalService.sendTuiKey(tabId, action)
+    const term = terminalInstancesRef.current.get(tabId)
+    term?.focus()
   }
 
   const handleOpenExternal = async (shellId?: string) => {
@@ -408,7 +409,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       <div className={`terminal-viewport-container ${splitTab ? 'split-active' : ''}`}>
         {activeTab ? (
           <div className="terminal-pane">
-            <XTermPane tab={activeTab} isActive={true} />
+            <XTermPane tab={activeTab} isActive={true} onTermReady={handleTermReady} />
             {/* TUI Interactive On-Screen Quick Control Pad */}
             {isTuiMode && (
               <div className="tui-keypad-toolbar">
@@ -628,7 +629,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
 
         {splitTab && (
           <div className="terminal-pane">
-            <XTermPane tab={splitTab} isActive={false} />
+            <XTermPane tab={splitTab} isActive={false} onTermReady={handleTermReady} />
           </div>
         )}
       </div>
