@@ -28,7 +28,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   const [historyIndex, setHistoryIndex] = useState<number>(-1)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
   const [isTuiMode, setIsTuiMode] = useState<boolean>(false)
-  const [showTuiControls, setShowTuiControls] = useState<boolean>(true)
 
   const viewportRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -155,7 +154,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     const active = tabs.find((t) => t.id === activeTabId) || terminalService.getActiveTab()
     if (active?.isTuiActive) {
       setIsTuiMode(true)
-      setShowTuiControls(true)
     }
   }, [tabs, activeTabId])
 
@@ -353,8 +351,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           })}
         </div>
 
-        {/* TUI Interactive On-Screen Quick Control Pad (for CLI graphical tools: ir pmon, ir nettop, ir edit, nano, etc.) */}
-        {(isTuiMode || showTuiControls || tuiActive) && (
+        {/* TUI Interactive On-Screen Quick Control Pad (shown strictly when TUI mode is ON or alternate screen buffer is active) */}
+        {tuiActive && (
           <div className="tui-keypad-toolbar">
             {/* D-Pad Arrows */}
             <div className="keypad-group d-pad">
@@ -616,13 +614,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           {/* TUI / CLI Graphical Mode Toggle */}
           <button
             className={`term-icon-btn tui-toggle-btn glass-interactive ${isTuiMode ? 'active-tui' : ''}`}
-            onClick={() => {
-              setIsTuiMode((prev) => {
-                const next = !prev
-                setShowTuiControls(next)
-                return next
-              })
-            }}
+            onClick={() => setIsTuiMode((prev) => !prev)}
             title={isTuiMode ? "TUI Live Raw Key Mode Enabled (Arrows, WASD, single keys forward directly)" : "Enable TUI / CLI GUI Raw Key Navigation"}
           >
             <Gamepad2 size={13} />
