@@ -227,7 +227,7 @@ export class TerminalService {
   }
 
   public getTabs(): TerminalTab[] {
-    return [...this.tabs]
+    return this.tabs.map((t) => ({ ...t, buffer: [...t.buffer] }))
   }
 
   public getActiveTab(): TerminalTab | null {

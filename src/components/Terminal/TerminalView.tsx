@@ -70,11 +70,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
 
   // Subscribe to live terminal output streaming
   useEffect(() => {
-    const activeTab = terminalService.getActiveTab()
+    const activeTab = tabs.find((t) => t.id === activeTabId) || terminalService.getActiveTab()
     if (!activeTab) return
 
     const unsubscribe = terminalService.onData(activeTab.id, () => {
-      setTabs([...terminalService.getTabs()])
+      setTabs(terminalService.getTabs())
       // Auto-scroll directly within viewport without touching window scroll
       requestAnimationFrame(() => {
         scrollToBottom(activeTab.id)
@@ -84,7 +84,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     return () => {
       unsubscribe()
     }
-  }, [activeTabId])
+  }, [activeTabId, tabs.length])
 
   const handleCreateNewTab = async (shellId?: string) => {
     setIsDropdownOpen(false)
