@@ -9,6 +9,7 @@ import {
   Settings,
   CornerDownLeft,
   Gamepad2,
+  Power,
 } from 'lucide-react'
 import { terminalService, TerminalTab, AnsiToken } from '../../services/terminalService'
 import { ShellProfile } from '../../../electron/preload'
@@ -728,6 +729,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
             </button>
           )}
 
+          {/* Kill Active Terminal Session */}
+          {activeTab && (
+            <button
+              className="term-icon-btn kill-btn glass-interactive"
+              onClick={(e) => handleCloseTab(activeTab.id, e)}
+              title="Kill Terminal Session"
+            >
+              <Power size={13} />
+            </button>
+          )}
+
           {/* Configuration Settings */}
           {onOpenConfig && (
             <button
@@ -927,6 +939,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           border-color: rgba(48, 209, 88, 0.5);
           color: #30D158;
           box-shadow: 0 0 10px rgba(48, 209, 88, 0.35);
+        }
+
+        .term-icon-btn.kill-btn:hover {
+          background: rgba(255, 69, 58, 0.22);
+          border-color: rgba(255, 69, 58, 0.45);
+          color: #FF453A;
+          box-shadow: 0 0 10px rgba(255, 69, 58, 0.3);
         }
 
         .launch-dropdown-wrapper {

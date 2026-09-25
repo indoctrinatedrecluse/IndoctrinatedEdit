@@ -7,23 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.9.1] - 2026-09-25
 
-### 🩹 Hotfix — Native Terminal ConPTY Key Forwarding, Interactive TUI Keypad Dock & Editor Viewport Scroll Stabilization
+### 🩹 Hotfix — Native Windows ConPTY Engine, Kill Terminal Button, Interactive TUI Quick Controls & Editor Viewport Scroll Stabilization
 
-IndoctrinatedEdit 4.9.1 delivers a critical hotfix resolving layout displacement upon editor keyboard navigation and activating full-fledged interactive terminal TUI application execution via ConPTY:
+IndoctrinatedEdit 4.9.1 delivers a comprehensive hotfix activating genuine Windows PseudoConsole (ConPTY) stream forwarding for all native CLI/TUI applications, adding a one-click "Kill Terminal" session control, expanding the on-screen TUI Keypad dock, and stabilizing editor scrolling:
 
-#### 🎮 Native Terminal ConPTY Key Forwarding & Interactive TUI Controls
-- **Full ConPTY / PTY CLI GUI Application Support**:
-  - Native, unbuffered raw input forwarding for all interactive CLI tools and GUI commands (`ir pmon`, `ir nettop`, `ir files`, `ir edit`, `ir browse`, `nano`, `htop`, `vim`, etc.) without mocked or hardcoded displays.
+#### 🎮 Native Windows ConPTY Engine & Raw Keystroke Pipeline
+- **Genuine Windows PseudoConsole (`CreatePseudoConsole`) Integration**:
+  - Implemented `sidecars/conpty_runner.ps1` attaching authentic Windows Console input (`CONIN$`) and output (`CONOUT$`) buffers to backend shell processes via `CreatePseudoConsole` and `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`.
+  - Full bidirectional raw stream handling for native `crossterm` / `ratatui` interactive utilities (`ir pmon`, `ir nettop`, `ir dua`, `ir fm`, `ir edit`, `ir matrix`, `ir help`, `nano`, `htop`, `vim`, etc.) with zero mocked data or hardcoding.
   - VT100 / ANSI sequence processing for alternate screen buffers (`\x1b[?1049h` / `\x1b[?1049l`), in-place cursor updates, and screen clears (`\x1b[2J`).
-- **Interactive On-Screen TUI Keypad Dock**:
-  - Built-in clickable on-screen keypad toolbar providing direct input for:
-    - **D-Pad Directional Arrows**: <kbd>▲</kbd> (`\x1b[A`), <kbd>▼</kbd> (`\x1b[B`), <kbd>◄</kbd> (`\x1b[D`), <kbd>►</kbd> (`\x1b[C`).
-    - **Page & Viewport Navigation**: <kbd>PgUp</kbd> (`\x1b[5~`), <kbd>PgDn</kbd> (`\x1b[6~`), <kbd>Home</kbd> (`\x1b[H`), <kbd>End</kbd> (`\x1b[F`).
-    - **WASD Gaming / Vim-Style Navigation**: <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>.
-    - **Action & Control Keys**: <kbd>Enter ↵</kbd> (`\r`), <kbd>Space ␣</kbd> (` `), <kbd>Esc</kbd> (`\x1b`), <kbd>Tab ⇥</kbd> (`\t`), <kbd>Bksp ⌫</kbd> (`\x7f`), <kbd>R</kbd> (Refresh / Redraw), <kbd>Q (Quit)</kbd>, and <kbd>Ctrl+C 🛑</kbd> (`\x03`).
-  - Safe event dispatching (`e.preventDefault()`, `e.stopPropagation()`) prevents keyboard blur or unhandled form submissions while maintaining instant ConPTY responsiveness.
-- **Direct Keystroke Interceptors**:
-  - Single keystrokes (<kbd>Q</kbd>, <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>, arrows, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Esc</kbd>, <kbd>Tab</kbd>) in TUI mode dispatch immediately to ConPTY stdin without being trapped in the text prompt bar.
+
+#### 🔴 "Kill Terminal" Header Action & Enhanced Terminal Controls
+- **One-Click "Kill Terminal" Button**:
+  - Added a dedicated <kbd>Kill Terminal</kbd> button (Power icon with ruby-red hover state) right beside the <kbd>Clear Terminal Output</kbd> button in the terminal header toolbar for closing and terminating the active session process immediately.
+- **Expanded TUI Quick Action Keypad**:
+  - Added quick process management keys: <kbd>C (CPU)</kbd>, <kbd>M (Mem)</kbd>, <kbd>N (Name)</kbd>, <kbd>P (PID)</kbd>, <kbd>K (Kill)</kbd>, <kbd>Y (Confirm)</kbd>, <kbd>R (Redraw)</kbd>, and <kbd>Q (Quit)</kbd>.
+  - Full keyboard capture for <kbd>PageUp</kbd>, <kbd>PageDown</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, <kbd>Tab</kbd>, <kbd>Escape</kbd>, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+Z</kbd>, and <kbd>Ctrl+L</kbd>.
+  - Single keystrokes and on-screen button presses dispatch unbuffered directly into the ConPTY console stream.
 
 #### 🛡️ Editor Viewport Scroll Stabilization & Layout Protection
 - **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or navigation keys in the text editor pane could cause the parent window viewport to scroll vertically, displacing the top titlebar off-screen and leaving a blank void at the bottom.

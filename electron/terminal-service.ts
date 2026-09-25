@@ -240,6 +240,24 @@ export class TerminalService {
   }
 
   /**
+   * Resolves the path to the Windows ConPTY runner script.
+   */
+  private findConPtyRunnerPath(): string | null {
+    if (process.platform !== 'win32') return null
+
+    const candidates = [
+      path.join((process as any).resourcesPath || '', 'sidecars', 'conpty_runner.ps1'),
+      path.join(process.cwd(), 'sidecars', 'conpty_runner.ps1'),
+      path.join(__dirname, '..', 'sidecars', 'conpty_runner.ps1'),
+      path.join(__dirname, 'sidecars', 'conpty_runner.ps1'),
+    ]
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p
+    }
+    return null
+  }
+
+  /**
    * Creates an interactive child process session for a given shell profile.
    */
   public createSession(
@@ -272,19 +290,46 @@ export class TerminalService {
       CLICOLOR_FORCE: '1',
       TERM_PROGRAM: 'IndoctrinatedEdit',
       PYTHONUNBUFFERED: '1',
-      COLUMNS: '120',
-      LINES: '30',
+      COLUMNS: String(options.cols || 120),
+      LINES: String(options.rows || 30),
       INDOCTRINATED_TERMINAL: '1',
     }
 
     const args = profile.args || []
+    const conptyRunner = this.findConPtyRunnerPath()
+    let proc: ChildProcessWithoutNullStreams
 
-    const proc = spawn(profile.path, args, {
-      cwd: targetCwd,
-      env,
-      shell: false,
-      windowsHide: true,
-    })
+    if (conptyRunner && process.platform === 'win32') {
+      const fullCmd = args.length > 0 ? `"${profile.path}" ${args.join(' ')}` : `"${profile.path}"`
+      proc = spawn('powershell.exe', [
+        '-NoLogo',
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        conptyRunner,
+        '-CommandLine',
+        fullCmd,
+        '-CurrentDirectory',
+        targetCwd,
+        '-Cols',
+        String(options.cols || 120),
+        '-Rows',
+        String(options.rows || 30),
+      ], {
+        cwd: targetCwd,
+        env,
+        shell: false,
+        windowsHide: true,
+      })
+    } else {
+      proc = spawn(profile.path, args, {
+        cwd: targetCwd,
+        env,
+        shell: false,
+        windowsHide: true,
+      })
+    }
 
     const sessionInfo: TerminalSessionInfo = {
       id: sessionId,
