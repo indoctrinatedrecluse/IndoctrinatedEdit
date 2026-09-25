@@ -97,6 +97,52 @@ describe('Remote Protocol Studio & Strengthened Terminal TUI Subsystem', () => {
       await terminalService.sendTuiKey(tab.id, 'q')
       expect(writtenData).toBe('q')
     })
+
+    it('should launch interactive IR PMON TUI, navigate with keys, and exit on Q/Esc', async () => {
+      const tab = await terminalService.createTab()
+      expect(tab).toBeDefined()
+
+      // Launch ir pmon via write
+      await terminalService.write(tab.id, 'ir pmon')
+      expect(terminalService.isTuiActive(tab.id)).toBe(true)
+      expect(tab.buffer.some((l) => l.includes('[IR PMON] Indoctrinated Resource & Process Monitor'))).toBe(true)
+      expect(tab.buffer.some((l) => l.includes('indoctrinated-edit'))).toBe(true)
+
+      // Send Down arrow navigation
+      await terminalService.sendTuiKey(tab.id, 'down')
+      expect(terminalService.isTuiActive(tab.id)).toBe(true)
+
+      // Send Space to toggle pause
+      await terminalService.sendTuiKey(tab.id, 'space')
+      expect(tab.buffer.some((l) => l.includes('PAUSED'))).toBe(true)
+
+      // Send Enter to inspect process details
+      await terminalService.sendTuiKey(tab.id, 'enter')
+      expect(tab.buffer.some((l) => l.includes('Process Details Inspector'))).toBe(true)
+
+      // Send Q to quit TUI session
+      await terminalService.sendTuiKey(tab.id, 'q')
+      expect(terminalService.isTuiActive(tab.id)).toBe(false)
+      expect(tab.buffer.some((l) => l.includes('IR PMON session terminated'))).toBe(true)
+    })
+
+    it('should launch IR Monitor, IR Matrix, and IR Sysinfo tools', async () => {
+      const tab = await terminalService.createTab()
+
+      await terminalService.write(tab.id, 'ir monitor')
+      expect(terminalService.isTuiActive(tab.id)).toBe(true)
+      expect(tab.buffer.some((l) => l.includes('[IR MONITOR]'))).toBe(true)
+      await terminalService.sendTuiKey(tab.id, 'escape')
+      expect(terminalService.isTuiActive(tab.id)).toBe(false)
+
+      await terminalService.write(tab.id, 'ir matrix')
+      expect(terminalService.isTuiActive(tab.id)).toBe(true)
+      await terminalService.sendTuiKey(tab.id, 'q')
+      expect(terminalService.isTuiActive(tab.id)).toBe(false)
+
+      await terminalService.write(tab.id, 'ir sysinfo')
+      expect(tab.buffer.some((l) => l.includes('IndoctrinatedEdit System Specifications'))).toBe(true)
+    })
   })
 
   describe('Contextual Live Markdown Preview Subsystem', () => {

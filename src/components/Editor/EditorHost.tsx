@@ -795,6 +795,14 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       },
     })
 
+    // Explicitly handle PageDown / PageUp inside Monaco to scroll editor buffer without bubbling to parent layout
+    editor.addCommand(monacoInstance.KeyCode.PageDown, () => {
+      editor.trigger('keyboard', 'cursorPageDown', null)
+    })
+    editor.addCommand(monacoInstance.KeyCode.PageUp, () => {
+      editor.trigger('keyboard', 'cursorPageUp', null)
+    })
+
     // Initial decorations update
     updateDebugDecorations()
 
@@ -1007,7 +1015,8 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           height: 100%;
           position: relative;
           background: transparent;
-          overflow: hidden;
+          overflow: hidden !important;
+          overscroll-behavior: none !important;
         }
 
         .monaco-host-wrapper {
@@ -1019,7 +1028,8 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
           width: 100%;
           height: 100%;
           position: relative;
-          overflow: hidden;
+          overflow: hidden !important;
+          overscroll-behavior: none !important;
         }
 
         /* In-Editor Find & Replace Search Highlight Decorations */

@@ -5,6 +5,28 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.1] - 2026-09-25
+
+### 🩹 Hotfix — Interactive Terminal TUI Subsystem, Live Key Navigation & Editor Viewport Scroll Stabilization
+
+IndoctrinatedEdit 4.9.1 delivers a critical hotfix resolving layout displacement upon editor keyboard navigation and activating full-fledged interactive terminal TUI application execution:
+
+#### 🎮 Interactive Terminal TUI & CLI Suite Engine
+- **Integrated `ir` TUI Applications**: Built-in native support for interactive CLI graphical applications directly in the terminal:
+  - `ir pmon`: Live process & system resource monitor with CPU/RAM utilization bars, interactive row cursor navigation (<kbd>▲</kbd>/<kbd>▼</kbd> or <kbd>W</kbd>/<kbd>S</kbd>), column sorting (<kbd>◄</kbd>/<kbd>►</kbd> or <kbd>A</kbd>/<kbd>D</kbd>), pause/resume (<kbd>Space</kbd>), process detail inspection (<kbd>Enter</kbd>), and instant graceful exit (<kbd>Q</kbd>, <kbd>Esc</kbd>, <kbd>Ctrl+C</kbd>).
+  - `ir monitor`: Real-time ASCII/ANSI waveform graphs for CPU utilization, memory bandwidth, disk activity, and network I/O.
+  - `ir matrix`: Cyberpunk falling matrix rain digital stream animation.
+  - `ir sysinfo`: Formatted system hardware, OS, kernel, and IndoctrinatedEdit runtime specifications.
+  - `ir help`: Complete command reference manual with keyboard shortcuts.
+- **Responsive TUI On-Screen Keypad & Key Interceptors**:
+  - Direct key forwarding in TUI mode: Single keystrokes (<kbd>Q</kbd>, <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>, arrows, <kbd>Space</kbd>, <kbd>Enter</kbd>, <kbd>Esc</kbd>) now immediately dispatch to the active TUI session without getting stuck in the command input box.
+  - Interactive On-Screen D-Pad and Action buttons (<kbd>▲</kbd>, <kbd>▼</kbd>, <kbd>◄</kbd>, <kbd>►</kbd>, <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd>, <kbd>Enter ↵</kbd>, <kbd>Esc</kbd>, <kbd>Tab ⇥</kbd>, <kbd>Q (Quit)</kbd>, <kbd>Ctrl+C 🛑</kbd>) now execute smoothly without losing focus or stalling.
+  - Automatic TUI mode synchronization: Opening a TUI application automatically engages TUI navigation mode and displays the control pad toolbar.
+
+#### 🛡️ Editor Viewport Scroll Stabilization & Layout Protection
+- **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or other navigation keys in the text editor pane could cause the parent viewport to scroll vertically, hiding the top titlebar and leaving a blank void at the bottom.
+- **Global Viewport Scroll Lock**: Added root-level and document-level scroll guards, overscroll behavior locks (`overscroll-behavior: none !important`), and explicit Monaco editor key commands to ensure all scrolling remains strictly bounded within the active editor buffer.
+
 ## [4.9.0] - 2026-09-24
 
 ### 🚀 Release — Jupyter Notebooks Studio, Live Multi-Kernel Engine, Rich Data Science Visualizers & Interactive Terminal Outputs

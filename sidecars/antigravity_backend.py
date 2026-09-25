@@ -571,7 +571,7 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
         if path == "/health":
             self._send_json_response(200, {
                 "status": "ok",
-                "version": "4.9.0",
+                "version": "4.9.1",
                 "python": sys.version,
                 "defaultModel": DEFAULT_MODEL,
                 "hasAntigravitySdk": HAS_ANTIGRAVITY_SDK,
@@ -755,7 +755,7 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
                 api_req.add_header("Authorization", f"Bearer {token}")
 
             api_req.add_header("Content-Type", "application/json")
-            api_req.add_header("X-Goog-Api-Client", "indoctrinated-antigravity/4.9.0")
+            api_req.add_header("X-Goog-Api-Client", "indoctrinated-antigravity/4.9.1")
 
             chunks_received = 0
             with urllib.request.urlopen(api_req, timeout=60) as api_res:

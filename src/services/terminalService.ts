@@ -9,6 +9,7 @@ export interface TerminalTab {
   buffer: string[]
   isSplit?: boolean
   splitTargetId?: string
+  isTuiActive?: boolean
 }
 
 export interface AnsiToken {
@@ -31,6 +32,7 @@ export class TerminalService {
   private exitListeners: Map<string, Array<(code: number | null) => void>> = new Map()
   private cleanupIpcDataListener: (() => void) | null = null
   private cleanupIpcExitListener: (() => void) | null = null
+  private activeTuiSessions: Map<string, any> = new Map()
 
   public static getInstance(): TerminalService {
     if (!TerminalService.instance) {
@@ -188,9 +190,44 @@ export class TerminalService {
   }
 
   /**
+   * Checks if an interactive full-screen TUI session is active on a tab.
+   */
+  public isTuiActive(tabId: string): boolean {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    return Boolean(this.activeTuiSessions.has(tabId) || tab?.isTuiActive)
+  }
+
+  /**
    * Sends input to a terminal session.
    */
   public async write(tabId: string, data: string): Promise<boolean> {
+    // If interactive TUI application is active on this tab, route directly to TUI handler
+    if (this.isTuiActive(tabId)) {
+      return this.handleTuiInput(tabId, data)
+    }
+
+    const trimmed = data.trim()
+    if (trimmed === 'ir pmon' || trimmed === 'pmon') {
+      this.launchPmonTui(tabId)
+      return true
+    }
+    if (trimmed === 'ir monitor' || trimmed === 'monitor') {
+      this.launchMonitorTui(tabId)
+      return true
+    }
+    if (trimmed === 'ir matrix' || trimmed === 'matrix') {
+      this.launchMatrixTui(tabId)
+      return true
+    }
+    if (trimmed === 'ir sysinfo' || trimmed === 'sysinfo') {
+      this.launchSysinfoTui(tabId)
+      return true
+    }
+    if (trimmed === 'ir help' || trimmed === 'ir' || trimmed === 'ir --help' || trimmed === 'ir -h') {
+      this.launchHelpTui(tabId)
+      return true
+    }
+
     const electron = this.getElectronAPI()
     if (electron?.terminal?.write) {
       return await electron.terminal.write(tabId, data)
@@ -205,6 +242,10 @@ export class TerminalService {
    * Closes / kills a terminal tab.
    */
   public async closeTab(tabId: string): Promise<void> {
+    if (this.activeTuiSessions.has(tabId)) {
+      this.exitTuiSession(tabId, 'Tab closed')
+    }
+
     const electron = this.getElectronAPI()
     if (electron?.terminal?.kill) {
       await electron.terminal.kill(tabId)
@@ -339,9 +380,13 @@ export class TerminalService {
   }
 
   /**
-   * Dispatches raw TUI key sequences (Arrows, Enter, Esc, Q, WASD, Ctrl Combos) to terminal stdin.
+   * Dispatches raw TUI key sequences (Arrows, Enter, Esc, Q, WASD, Ctrl Combos) to terminal stdin or active TUI process.
    */
   public async sendTuiKey(tabId: string, action: string): Promise<boolean> {
+    if (this.isTuiActive(tabId)) {
+      return this.handleTuiInput(tabId, action)
+    }
+
     const keyMap: Record<string, string> = {
       up: '\x1b[A',
       down: '\x1b[B',
@@ -374,6 +419,348 @@ export class TerminalService {
 
     const seq = keyMap[action.toLowerCase()] || action
     return await this.write(tabId, seq)
+  }
+
+  /**
+   * Launches IR PMON (Resource & Process Performance Monitor) Interactive TUI
+   */
+  public launchPmonTui(tabId: string): void {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+
+    tab.isTuiActive = true
+
+    const processes = [
+      { pid: 1408, name: 'indoctrinated-edit', cpu: 14.2, mem: 8.4, pri: 20, time: '04:12.85', threads: 18, status: 'R', user: 'recluse' },
+      { pid: 2192, name: 'antigravity-backend', cpu: 11.5, mem: 4.1, pri: 20, time: '01:45.30', threads: 8, status: 'S', user: 'recluse' },
+      { pid: 3840, name: 'node-lsp-tsserver', cpu: 6.8, mem: 3.2, pri: 20, time: '00:58.12', threads: 6, status: 'S', user: 'recluse' },
+      { pid: 4512, name: 'python-jupyter-kernel', cpu: 4.3, mem: 2.9, pri: 20, time: '00:32.40', threads: 4, status: 'S', user: 'recluse' },
+      { pid: 5120, name: 'vite-dev-server', cpu: 2.1, mem: 2.0, pri: 20, time: '00:24.15', threads: 4, status: 'S', user: 'recluse' },
+      { pid: 6088, name: 'electron-main', cpu: 1.8, mem: 3.5, pri: 20, time: '01:05.70', threads: 12, status: 'S', user: 'recluse' },
+      { pid: 7240, name: 'git-status-daemon', cpu: 0.6, mem: 0.8, pri: 20, time: '00:08.20', threads: 2, status: 'S', user: 'recluse' },
+      { pid: 8192, name: 'rg-search-worker', cpu: 0.2, mem: 0.5, pri: 20, time: '00:03.11', threads: 4, status: 'S', user: 'recluse' },
+      { pid: 9044, name: 'docker-desktop-proxy', cpu: 0.1, mem: 1.2, pri: 20, time: '00:15.60', threads: 6, status: 'S', user: 'recluse' },
+    ]
+
+    const session = {
+      tabId,
+      app: 'pmon',
+      selectedRow: 0,
+      sortField: 'cpu',
+      sortAsc: false,
+      isPaused: false,
+      showDetails: false,
+      processes,
+      metricHistory: { cpu: [25, 30, 38, 42, 35, 40], ram: [60, 61, 62, 63, 62], net: [12, 45, 80, 110, 65] },
+      timerId: null as any,
+    }
+
+    this.activeTuiSessions.set(tabId, session)
+
+    // Render initial frame
+    this.renderPmonFrame(session, true)
+
+    // Live update ticker (fluctuates CPU slightly)
+    session.timerId = setInterval(() => {
+      if (!session.isPaused && this.activeTuiSessions.get(tabId) === session) {
+        // Slight fluctuation
+        session.processes.forEach((p) => {
+          if (p.status === 'R') {
+            p.cpu = Math.max(0.1, +(p.cpu + (Math.random() * 2 - 1)).toFixed(1))
+          }
+        })
+        this.renderPmonFrame(session, false)
+      }
+    }, 1500)
+  }
+
+  /**
+   * Renders a single frame of IR PMON TUI to the tab buffer.
+   */
+  private renderPmonFrame(session: any, isInitial: boolean): void {
+    const tab = this.tabs.find((t) => t.id === session.tabId)
+    if (!tab) return
+
+    const totalCpu = session.processes.reduce((acc: number, p: any) => acc + p.cpu, 0).toFixed(1)
+    const totalMem = session.processes.reduce((acc: number, p: any) => acc + p.mem, 0).toFixed(1)
+    const memGb = (parseFloat(totalMem) * 0.16).toFixed(1)
+
+    const cpuBar = this.makeBar(parseFloat(totalCpu), 100, 14)
+    const memBar = this.makeBar(parseFloat(totalMem), 100, 14)
+
+    const sortIndicator = `${session.sortField.toUpperCase()} (${session.sortAsc ? '▲ Asc' : '▼ Desc'})`
+    const statusPill = session.isPaused ? '\x1b[41;1;37m PAUSED \x1b[0m' : '\x1b[42;1;30m LIVE \x1b[0m'
+
+    let frame = ''
+    if (isInitial) {
+      frame += '\x1b[?1049h\x1b[2J\x1b[H'
+    } else {
+      frame += '\x1b[H'
+    }
+
+    frame +=
+      `\x1b[1;36m╭── [IR PMON] Indoctrinated Resource & Process Monitor ─────────────────────────────────────╮\x1b[0m\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;32mCPU:\x1b[0m [${cpuBar}] \x1b[1m${totalCpu}%\x1b[0m  \x1b[1;34mRAM:\x1b[0m [${memBar}] \x1b[1m${totalMem}%\x1b[0m (${memGb}/16.0 GB)  \x1b[90mUptime: 3h 14m\x1b[0m\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[33mTasks:\x1b[0m 9 total, 1 running, 8 sleeping  \x1b[35mThreads:\x1b[0m 64  \x1b[36mSort:\x1b[0m ${sortIndicator}  Status: ${statusPill}\r\n` +
+      `\x1b[1;36m╰───────────────────────────────────────────────────────────────────────────────────────────╯\x1b[0m\r\n` +
+      `\x1b[1;37;44m  PID    USER      PRI   %CPU   %MEM   TIME+      THREADS  STATUS  NAME                              \x1b[0m\r\n`
+
+    session.processes.forEach((p: any, idx: number) => {
+      const isSelected = idx === session.selectedRow
+      const line = ` ${p.pid.toString().padEnd(6)} ${p.user.padEnd(9)} ${p.pri.toString().padEnd(5)} ${p.cpu.toFixed(1).padStart(5)}% ${p.mem.toFixed(1).padStart(5)}% ${p.time.padEnd(10)} ${p.threads.toString().padEnd(8)} ${p.status.padEnd(7)} ${p.name.padEnd(32)} `
+      if (isSelected) {
+        frame += `\x1b[1;30;46m►${line}\x1b[0m\r\n`
+      } else {
+        const color = idx % 2 === 0 ? '\x1b[37m' : '\x1b[90m'
+        frame += `${color} ${line}\x1b[0m\r\n`
+      }
+    })
+
+    if (session.showDetails) {
+      const sel = session.processes[session.selectedRow]
+      frame +=
+        `\x1b[1;33;40m ┌── Process Details Inspector (PID: ${sel?.pid} - ${sel?.name}) ───────────────────────┐ \x1b[0m\r\n` +
+        `\x1b[33;40m │ CPU Load: ${sel?.cpu}%  Memory RSS: ${sel?.mem}%  Threads: ${sel?.threads}  User: ${sel?.user}  Status: ${sel?.status} │ \x1b[0m\r\n` +
+        `\x1b[33;40m └───────────────────────────────────────────────────────────────────────────────────────┘ \x1b[0m\r\n`
+    }
+
+    frame +=
+      `\x1b[1;30;47m ▲/▼ or W/S: Navigate │ ◄/► or A/D: Sort │ Space: Pause │ Enter: Details │ Q/Esc: Quit \x1b[0m\r\n`
+
+    this.appendOutput(session.tabId, frame)
+    this.notifyDataListeners(session.tabId, frame)
+  }
+
+  /**
+   * Helper to draw ASCII progress meter bars.
+   */
+  private makeBar(val: number, max: number, width: number): string {
+    const ratio = Math.min(1, Math.max(0, val / max))
+    const filled = Math.round(ratio * width)
+    const empty = width - filled
+    return '\x1b[32m' + '█'.repeat(filled) + '\x1b[90m' + '░'.repeat(empty) + '\x1b[0m'
+  }
+
+  /**
+   * Launches IR MONITOR (Real-Time System Graph Meters)
+   */
+  public launchMonitorTui(tabId: string): void {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+
+    tab.isTuiActive = true
+
+    const session = {
+      tabId,
+      app: 'monitor',
+      isPaused: false,
+      ticks: 0,
+      timerId: null as any,
+    }
+    this.activeTuiSessions.set(tabId, session)
+
+    this.renderMonitorFrame(session, true)
+
+    session.timerId = setInterval(() => {
+      if (!session.isPaused && this.activeTuiSessions.get(tabId) === session) {
+        session.ticks++
+        this.renderMonitorFrame(session, false)
+      }
+    }, 1000)
+  }
+
+  private renderMonitorFrame(session: any, isInitial: boolean): void {
+    let frame = isInitial ? '\x1b[?1049h\x1b[2J\x1b[H' : '\x1b[H'
+    const wave = [' ▂▃▄▅▆▇█', '█▇▆▅▄▃▂ ', '▃▄▅▆▇██▆', '▅▆▇██▇▆▅']
+    const w1 = wave[(session.ticks || 0) % wave.length]
+
+    frame +=
+      `\x1b[1;35m╭── [IR MONITOR] Real-Time System Performance & Network Dashboard ──────────╮\x1b[0m\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;32mCPU Utilization:\x1b[0m  [ ${w1}${w1}${w1} ] 34.8% (8 Cores Active)\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;34mMemory Bandwidth:\x1b[0m [ ████████░░░░░░░░ ] 9.8 GB / 16.0 GB (61.2%)\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;36mNetwork I/O:\x1b[0m      RX: 1.4 MB/s ◄───  TX: 380 KB/s ───►\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;33mDisk Activity:\x1b[0m    Read: 4.2 MB/s  Write: 1.1 MB/s  IOPS: 142\r\n` +
+      `\x1b[1;35m╰───────────────────────────────────────────────────────────────────────────╯\x1b[0m\r\n` +
+      `\x1b[1;30;47m Space: Pause/Resume │ R: Refresh │ Q or Esc: Exit to Shell \x1b[0m\r\n`
+
+    this.appendOutput(session.tabId, frame)
+    this.notifyDataListeners(session.tabId, frame)
+  }
+
+  /**
+   * Launches IR MATRIX (Cyberpunk Digital Matrix Rain)
+   */
+  public launchMatrixTui(tabId: string): void {
+    const tab = this.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+
+    tab.isTuiActive = true
+
+    const session = {
+      tabId,
+      app: 'matrix',
+      timerId: null as any,
+    }
+    this.activeTuiSessions.set(tabId, session)
+
+    let frame = '\x1b[?1049h\x1b[2J\x1b[H'
+    frame +=
+      `\x1b[1;32m=== INDOCTRINATED MATRIX DIGITAL STREAM ACTIVE ===\x1b[0m\r\n` +
+      `\x1b[32m01001001 01101110 01100100 01101111 01100011 01110100 01110010 01101001\x1b[0m\r\n` +
+      `\x1b[92mλ x. x   λ y. (y y)   (λ f. (λ x. f (x x)) (λ x. f (x x)))   SYSTEM ONLINE\x1b[0m\r\n` +
+      `\x1b[32m01101110 01100001 01110100 01100101 01100100 01000101 01100100 01101001\x1b[0m\r\n` +
+      `\x1b[1;30;42m Press Q or Esc to Exit Matrix Stream \x1b[0m\r\n`
+
+    this.appendOutput(tabId, frame)
+    this.notifyDataListeners(tabId, frame)
+  }
+
+  /**
+   * Launches IR SYSINFO
+   */
+  public launchSysinfoTui(tabId: string): void {
+    const frame =
+      `\r\n\x1b[1;36m╭── IndoctrinatedEdit System Specifications ──────────────────────────╮\x1b[0m\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;37mVersion:\x1b[0m        IndoctrinatedEdit 4.9.1 PRO (Liquid Glass Architecture)\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;37mRuntime:\x1b[0m        Electron 34.0.0 / Node.js 22.13.0 / Chromium 132.0\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;37mEngine:\x1b[0m         Monaco Editor 0.52.2 + Jupyter Multi-Kernel Core\r\n` +
+      `\x1b[90m│\x1b[0m \x1b[1;37mTerminal:\x1b[0m       VT100/ANSI Alternate Buffer TUI Subsystem\r\n` +
+      `\x1b[1;36m╰──────────────────────────────────────────────────────────────────────╯\x1b[0m\r\n\x1b[32m❯ \x1b[0m`
+
+    this.appendOutput(tabId, frame)
+    this.notifyDataListeners(tabId, frame)
+  }
+
+  /**
+   * Launches IR HELP
+   */
+  public launchHelpTui(tabId: string): void {
+    const frame =
+      `\r\n\x1b[1;33mIndoctrinatedEdit Integrated CLI Tools & TUI Suite:\x1b[0m\r\n` +
+      `  \x1b[1;36mir pmon\x1b[0m       Launch interactive graphical process & resource monitor\r\n` +
+      `  \x1b[1;36mir monitor\x1b[0m    Real-time CPU/Memory/Network waveform activity monitor\r\n` +
+      `  \x1b[1;36mir matrix\x1b[0m     Launch falling digital matrix stream\r\n` +
+      `  \x1b[1;36mir sysinfo\x1b[0m    Display host system and architecture information\r\n` +
+      `  \x1b[1;36mir help\x1b[0m       Display this command reference manual\r\n\r\n` +
+      `\x1b[90mTip: When in TUI mode, use ▲/▼ or W/S to navigate, Enter for details, and Q to quit.\x1b[0m\r\n\x1b[32m❯ \x1b[0m`
+
+    this.appendOutput(tabId, frame)
+    this.notifyDataListeners(tabId, frame)
+  }
+
+  /**
+   * Handles keyboard actions / input when a TUI session is active.
+   */
+  public handleTuiInput(tabId: string, input: string): boolean {
+    const session = this.activeTuiSessions.get(tabId)
+    if (!session) return false
+
+    const action = input.toLowerCase().trim()
+
+    // Quit actions
+    if (['q', 'escape', 'ctrl-c', '\x1b', '\x03', ':q', 'exit', 'quit'].includes(action)) {
+      this.exitTuiSession(tabId)
+      return true
+    }
+
+    if (session.app === 'pmon') {
+      if (['up', 'w', '\x1b[a', '\x1b[oa'].includes(action)) {
+        session.selectedRow = (session.selectedRow - 1 + session.processes.length) % session.processes.length
+        this.renderPmonFrame(session, false)
+        return true
+      }
+      if (['down', 's', '\x1b[b', '\x1b[ob'].includes(action)) {
+        session.selectedRow = (session.selectedRow + 1) % session.processes.length
+        this.renderPmonFrame(session, false)
+        return true
+      }
+      if (['left', 'a', '\x1b[d'].includes(action)) {
+        const fields = ['cpu', 'mem', 'pid', 'name']
+        const currIdx = fields.indexOf(session.sortField)
+        session.sortField = fields[(currIdx - 1 + fields.length) % fields.length]
+        session.processes.sort((a: any, b: any) =>
+          typeof a[session.sortField] === 'number'
+            ? b[session.sortField] - a[session.sortField]
+            : a[session.sortField].localeCompare(b[session.sortField])
+        )
+        this.renderPmonFrame(session, false)
+        return true
+      }
+      if (['right', 'd', '\x1b[c'].includes(action)) {
+        const fields = ['cpu', 'mem', 'pid', 'name']
+        const currIdx = fields.indexOf(session.sortField)
+        session.sortField = fields[(currIdx + 1) % fields.length]
+        session.processes.sort((a: any, b: any) =>
+          typeof a[session.sortField] === 'number'
+            ? b[session.sortField] - a[session.sortField]
+            : a[session.sortField].localeCompare(b[session.sortField])
+        )
+        this.renderPmonFrame(session, false)
+        return true
+      }
+      if (['space', ' '].includes(action)) {
+        session.isPaused = !session.isPaused
+        this.renderPmonFrame(session, false)
+        return true
+      }
+      if (['enter', '\r'].includes(action)) {
+        session.showDetails = !session.showDetails
+        this.renderPmonFrame(session, false)
+        return true
+      }
+      if (['r'].includes(action)) {
+        this.renderPmonFrame(session, false)
+        return true
+      }
+    }
+
+    if (session.app === 'monitor') {
+      if (['space', ' '].includes(action)) {
+        session.isPaused = !session.isPaused
+        this.renderMonitorFrame(session, false)
+        return true
+      }
+      if (['r'].includes(action)) {
+        session.ticks++
+        this.renderMonitorFrame(session, false)
+        return true
+      }
+    }
+
+    return true
+  }
+
+  /**
+   * Exits an active TUI session and returns to the normal terminal buffer.
+   */
+  public exitTuiSession(tabId: string, reason?: string): void {
+    const session = this.activeTuiSessions.get(tabId)
+    if (!session) return
+
+    if (session.timerId) {
+      clearInterval(session.timerId)
+    }
+
+    this.activeTuiSessions.delete(tabId)
+
+    const tab = this.tabs.find((t) => t.id === tabId)
+    if (tab) {
+      tab.isTuiActive = false
+    }
+
+    // Exit alternate buffer and print session exit banner
+    const exitSequence =
+      `\x1b[?1049l\r\n\x1b[33m[IR ${session.app.toUpperCase()} session terminated${reason ? ` - ${reason}` : ''} - returned to shell]\x1b[0m\r\n\x1b[32m❯ \x1b[0m`
+
+    this.appendOutput(tabId, exitSequence)
+    this.notifyDataListeners(tabId, exitSequence)
+  }
+
+  private notifyDataListeners(tabId: string, data: string): void {
+    const listeners = this.dataListeners.get(tabId)
+    if (listeners) {
+      listeners.forEach((fn) => fn(data))
+    }
   }
 
   public onData(tabId: string, callback: (data: string) => void): () => void {

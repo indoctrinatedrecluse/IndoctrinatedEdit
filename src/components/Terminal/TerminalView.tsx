@@ -150,6 +150,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     })
   }
 
+  // Sync TUI mode when active tab has active TUI process
+  useEffect(() => {
+    const active = tabs.find((t) => t.id === activeTabId) || terminalService.getActiveTab()
+    if (active?.isTuiActive) {
+      setIsTuiMode(true)
+      setShowTuiControls(true)
+    }
+  }, [tabs, activeTabId])
+
   const handleSendTuiAction = async (tabId: string, action: string) => {
     await terminalService.sendTuiKey(tabId, action)
     setTabs([...terminalService.getTabs()])
@@ -159,8 +168,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   }
 
   const handleViewportKeyDown = (tabId: string, e: React.KeyboardEvent<HTMLDivElement>) => {
-    // If user presses keys while viewport is focused in TUI mode
-    if (isTuiMode) {
+    const tuiActive = isTuiMode || terminalService.isTuiActive(tabId)
+    if (tuiActive) {
       if (e.key === 'ArrowUp') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'up')
@@ -182,20 +191,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       } else if (e.key === 'Tab') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'tab')
+      } else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'space')
       } else if (e.ctrlKey && e.key === 'c') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'ctrl-c')
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault()
-        handleSendTuiAction(tabId, e.key)
+        handleSendTuiAction(tabId, e.key.toLowerCase())
       }
     }
   }
 
   const handleKeyDown = (tabId: string, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (isTuiMode) {
-      // In TUI mode, single-key commands, arrows, Esc, Enter immediately forward to CLI
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Tab'].includes(e.key)) {
+    const tuiActive = isTuiMode || terminalService.isTuiActive(tabId)
+    if (tuiActive) {
+      // In TUI mode, single-key commands, arrows, Esc, Enter immediately forward to TUI
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Tab', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
         e.preventDefault()
         const map: Record<string, string> = {
           ArrowUp: 'up',
@@ -204,19 +217,54 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           ArrowRight: 'right',
           Escape: 'escape',
           Tab: 'tab',
+          PageUp: 'pageup',
+          PageDown: 'pagedown',
+          Home: 'home',
+          End: 'end',
         }
-        handleSendTuiAction(tabId, map[e.key])
+        handleSendTuiAction(tabId, map[e.key] || e.key)
         return
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (!inputValues[tabId]) {
+          handleSendTuiAction(tabId, 'enter')
+        } else {
+          handleCommandSubmit(tabId)
+        }
+        return
+      }
+
+      if (e.key === ' ' || e.code === 'Space') {
+        if (!inputValues[tabId]) {
+          e.preventDefault()
+          handleSendTuiAction(tabId, 'space')
+          return
+        }
+      }
+
+      if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-c')
+        setInputValues((prev) => ({ ...prev, [tabId]: '' }))
+        return
+      }
+
+      // Forward single-letter keys (w, a, s, d, q, r, k, etc.) immediately if input has no multichar command
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (!inputValues[tabId] || inputValues[tabId].length === 0) {
+          e.preventDefault()
+          handleSendTuiAction(tabId, e.key.toLowerCase())
+          setInputValues((prev) => ({ ...prev, [tabId]: '' }))
+          return
+        }
       }
     }
 
     if (e.key === 'Enter') {
       e.preventDefault()
-      if (isTuiMode && !inputValues[tabId]) {
-        handleSendTuiAction(tabId, 'enter')
-      } else {
-        handleCommandSubmit(tabId)
-      }
+      handleCommandSubmit(tabId)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       if (history.length > 0) {
@@ -263,6 +311,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   }
 
   const renderTerminalPane = (tab: TerminalTab) => {
+    const tuiActive = isTuiMode || terminalService.isTuiActive(tab.id)
     return (
       <div key={tab.id} className="terminal-pane">
         {/* Terminal Output Area */}
@@ -271,10 +320,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
             viewportRefs.current[tab.id] = el
           }}
           tabIndex={0}
-          className={`terminal-output-viewport ${isTuiMode ? 'tui-active-viewport' : ''}`}
+          className={`terminal-output-viewport ${tuiActive ? 'tui-active-viewport' : ''}`}
           onKeyDown={(e) => handleViewportKeyDown(tab.id, e)}
           onClick={() => {
-            if (!isTuiMode) {
+            if (tuiActive) {
+              viewportRefs.current[tab.id]?.focus({ preventScroll: true })
+            } else {
               inputRefs.current[tab.id]?.focus({ preventScroll: true })
             }
           }}
@@ -306,32 +357,110 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
         {showTuiControls && (
           <div className="tui-keypad-toolbar">
             <div className="keypad-group d-pad">
-              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'up')} title="Send Up Arrow (↑)">▲</button>
-              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'down')} title="Send Down Arrow (↓)">▼</button>
-              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'left')} title="Send Left Arrow (←)">◄</button>
-              <button className="tui-key-btn" onClick={() => handleSendTuiAction(tab.id, 'right')} title="Send Right Arrow (→)">►</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'up') }}
+                title="Send Up Arrow (↑)"
+              >▲</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'down') }}
+                title="Send Down Arrow (↓)"
+              >▼</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'left') }}
+                title="Send Left Arrow (←)"
+              >◄</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'right') }}
+                title="Send Right Arrow (→)"
+              >►</button>
             </div>
 
             <div className="keypad-group wasd-group">
-              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 'w')} title="Send 'W'">W</button>
-              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 'a')} title="Send 'A'">A</button>
-              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 's')} title="Send 'S'">S</button>
-              <button className="tui-key-btn letter-key" onClick={() => handleSendTuiAction(tab.id, 'd')} title="Send 'D'">D</button>
+              <button
+                type="button"
+                className="tui-key-btn letter-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'w') }}
+                title="Send 'W'"
+              >W</button>
+              <button
+                type="button"
+                className="tui-key-btn letter-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'a') }}
+                title="Send 'A'"
+              >A</button>
+              <button
+                type="button"
+                className="tui-key-btn letter-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 's') }}
+                title="Send 'S'"
+              >S</button>
+              <button
+                type="button"
+                className="tui-key-btn letter-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'd') }}
+                title="Send 'D'"
+              >D</button>
             </div>
 
             <div className="keypad-group actions-group">
-              <button className="tui-key-btn action-key primary" onClick={() => handleSendTuiAction(tab.id, 'enter')} title="Send Enter (↵)">Enter ↵</button>
-              <button className="tui-key-btn action-key" onClick={() => handleSendTuiAction(tab.id, 'escape')} title="Send Escape (ESC)">Esc</button>
-              <button className="tui-key-btn action-key" onClick={() => handleSendTuiAction(tab.id, 'tab')} title="Send Tab (⇥)">Tab ⇥</button>
-              <button className="tui-key-btn action-key quit-key" onClick={() => handleSendTuiAction(tab.id, 'q')} title="Send 'q' to Quit TUI">Q (Quit)</button>
-              <button className="tui-key-btn action-key ctrl-c-key" onClick={() => handleSendTuiAction(tab.id, 'ctrl-c')} title="Send SIGINT (Ctrl+C)">Ctrl+C 🛑</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key primary"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'enter') }}
+                title="Send Enter (↵)"
+              >Enter ↵</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'escape') }}
+                title="Send Escape (ESC)"
+              >Esc</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'tab') }}
+                title="Send Tab (⇥)"
+              >Tab ⇥</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key quit-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'q') }}
+                title="Send 'q' to Quit TUI"
+              >Q (Quit)</button>
+              <button
+                type="button"
+                className="tui-key-btn action-key ctrl-c-key"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'ctrl-c') }}
+                title="Send SIGINT (Ctrl+C)"
+              >Ctrl+C 🛑</button>
             </div>
           </div>
         )}
 
         {/* Input Prompt Row */}
         <div className="terminal-prompt-bar">
-          <span className="prompt-arrow">{isTuiMode ? '🎮' : '❯'}</span>
+          <span className="prompt-arrow">{tuiActive ? '🎮' : '❯'}</span>
           <input
             ref={(el) => {
               inputRefs.current[tab.id] = el
@@ -341,7 +470,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
             value={inputValues[tab.id] || ''}
             onChange={(e) => setInputValues({ ...inputValues, [tab.id]: e.target.value })}
             onKeyDown={(e) => handleKeyDown(tab.id, e)}
-            placeholder={isTuiMode ? "TUI Live Raw Key Mode (Type / Click keys to navigate)..." : `Execute command in ${tab.title} (e.g. ir help, ir pmon)...`}
+            placeholder={tuiActive ? "TUI Live Raw Key Mode (Type / Click keys to navigate)..." : `Execute command in ${tab.title} (e.g. ir help, ir pmon)...`}
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
