@@ -107,7 +107,15 @@ export class TerminalService {
   }
 
   public getFallbackProfiles(): ShellProfile[] {
-    const isWin = typeof window !== 'undefined' ? (window as any).electronAPI?.platform === 'win32' : true
+    const isWin =
+      typeof process !== 'undefined' && process.platform
+        ? process.platform === 'win32'
+        : typeof window !== 'undefined'
+          ? (window as any).electronAPI?.platform === 'win32' ||
+            navigator.userAgent?.toLowerCase().includes('windows') ||
+            navigator.platform?.toLowerCase().includes('win')
+          : true
+
     if (isWin) {
       return [
         { id: 'powershell', name: 'Windows PowerShell', path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', icon: 'powershell', isDefault: true, args: ['-NoLogo'] },
@@ -126,14 +134,15 @@ export class TerminalService {
   }
 
   public getDefaultConfig(): TerminalConfig {
+    const profiles = this.getProfiles()
     return {
-      defaultShellId: this.detectedShells.find((p) => p.isDefault)?.id || 'powershell',
+      defaultShellId: profiles.find((p) => p.isDefault)?.id || profiles[0]?.id || 'powershell',
       fontSize: 13,
       fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
       cursorStyle: 'block',
       cursorBlink: true,
-      scrollback: 2000,
-      profiles: this.detectedShells.length > 0 ? this.detectedShells : this.getFallbackProfiles(),
+      scrollback: 5000,
+      profiles,
     }
   }
 
