@@ -98,9 +98,11 @@ export interface ElectronTerminalAPI {
   detectShells: () => Promise<ShellProfile[]>
   getConfig: () => Promise<TerminalConfig>
   saveConfig: (config: Partial<TerminalConfig>) => Promise<boolean>
-  create: (options: { shellId?: string; cwd?: string }) => Promise<TerminalSessionInfo>
+  create: (options: { shellId?: string; cwd?: string; cols?: number; rows?: number }) => Promise<TerminalSessionInfo>
   write: (id: string, data: string) => Promise<boolean>
+  resize: (id: string, cols: number, rows: number) => Promise<boolean>
   kill: (id: string) => Promise<boolean>
+  openExternal: (shellId?: string, cwd?: string) => Promise<boolean>
   onData: (callback: (payload: { id: string; data: string }) => void) => () => void
   onExit: (callback: (payload: { id: string; code: number | null; signal: string | null }) => void) => () => void
 }
@@ -223,7 +225,9 @@ const api: ElectronAPI = {
     saveConfig: (config) => ipcRenderer.invoke('terminal:saveConfig', config),
     create: (options) => ipcRenderer.invoke('terminal:create', options),
     write: (id, data) => ipcRenderer.invoke('terminal:write', { id, data }),
+    resize: (id, cols, rows) => ipcRenderer.invoke('terminal:resize', { id, cols, rows }),
     kill: (id) => ipcRenderer.invoke('terminal:kill', id),
+    openExternal: (shellId, cwd) => ipcRenderer.invoke('terminal:openExternal', { shellId, cwd }),
     onData: (callback) => {
       const handler = (_: unknown, payload: { id: string; data: string }) => callback(payload)
       ipcRenderer.on('terminal:data', handler)

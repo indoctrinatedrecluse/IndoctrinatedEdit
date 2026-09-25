@@ -208,6 +208,22 @@ export class TerminalService {
     return true
   }
 
+  public async resize(tabId: string, cols: number, rows: number): Promise<boolean> {
+    const electron = this.getElectronAPI()
+    if (electron?.terminal?.resize) {
+      return await electron.terminal.resize(tabId, cols, rows)
+    }
+    return false
+  }
+
+  public async openExternal(shellId?: string, cwd?: string): Promise<boolean> {
+    const electron = this.getElectronAPI()
+    if (electron?.terminal?.openExternal) {
+      return await electron.terminal.openExternal(shellId, cwd)
+    }
+    return false
+  }
+
   /**
    * Closes / kills a terminal tab.
    */

@@ -3,6 +3,15 @@ import { IpcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import type { IPty } from 'node-pty'
+
+let nodePty: typeof import('node-pty') | null = null
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  nodePty = require('node-pty')
+} catch (e) {
+  console.warn('[TerminalService] node-pty not loaded, falling back to standard child_process:', e)
+}
 
 export interface ShellProfile {
   id: string
@@ -31,9 +40,14 @@ export interface TerminalSessionInfo {
   cwd: string
 }
 
+type ActiveTerminalProcess = IPty | ChildProcessWithoutNullStreams
+
 export class TerminalService {
   private static instance: TerminalService
-  private sessions: Map<string, { process: ChildProcessWithoutNullStreams; info: TerminalSessionInfo }> = new Map()
+  private sessions: Map<
+    string,
+    { process: ActiveTerminalProcess; isPty: boolean; info: TerminalSessionInfo }
+  > = new Map()
   private configPath: string
 
   private constructor() {
@@ -200,7 +214,7 @@ export class TerminalService {
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
       cursorStyle: 'block',
       cursorBlink: true,
-      scrollback: 2000,
+      scrollback: 5000,
       profiles: detected,
     }
 
@@ -240,25 +254,7 @@ export class TerminalService {
   }
 
   /**
-   * Resolves the path to the native Windows ConPTY helper executable.
-   */
-  private findConPtyExePath(): string | null {
-    if (process.platform !== 'win32') return null
-
-    const candidates = [
-      path.join((process as any).resourcesPath || '', 'sidecars', 'conpty.exe'),
-      path.join(process.cwd(), 'sidecars', 'conpty.exe'),
-      path.join(__dirname, '..', 'sidecars', 'conpty.exe'),
-      path.join(__dirname, 'sidecars', 'conpty.exe'),
-    ]
-    for (const p of candidates) {
-      if (fs.existsSync(p)) return p
-    }
-    return null
-  }
-
-  /**
-   * Creates an interactive child process session for a given shell profile.
+   * Creates an interactive PTY session for a given shell profile.
    */
   public createSession(
     options: {
@@ -282,7 +278,9 @@ export class TerminalService {
       ? path.resolve(options.cwd)
       : (process.env.INIT_CWD ? path.resolve(process.env.INIT_CWD) : process.cwd() || os.homedir())
 
-    // Environment variables with ANSI color and terminal capabilities
+    const cols = options.cols || 100
+    const rows = options.rows || 30
+
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       TERM: 'xterm-256color',
@@ -292,36 +290,65 @@ export class TerminalService {
       CLICOLOR_FORCE: '1',
       TERM_PROGRAM: 'IndoctrinatedEdit',
       PYTHONUNBUFFERED: '1',
-      COLUMNS: String(options.cols || 120),
-      LINES: String(options.rows || 30),
       INDOCTRINATED_TERMINAL: '1',
     }
 
     const args = profile.args || []
-    const conptyExe = this.findConPtyExePath()
-    let proc: ChildProcessWithoutNullStreams
 
-    if (conptyExe && process.platform === 'win32') {
-      const fullCmd = args.length > 0 ? `"${profile.path}" ${args.join(' ')}` : `"${profile.path}"`
-      proc = spawn(conptyExe, [
-        String(options.cols || 120),
-        String(options.rows || 30),
-        targetCwd,
-        fullCmd,
-      ], {
-        cwd: targetCwd,
-        env,
-        shell: false,
-        windowsHide: true,
-      })
-    } else {
-      proc = spawn(profile.path, args, {
-        cwd: targetCwd,
-        env,
-        shell: false,
-        windowsHide: true,
-      })
+    // Prefer native node-pty PseudoConsole (ConPTY on Windows, openpty on POSIX)
+    if (nodePty) {
+      try {
+        const ptyProc = nodePty.spawn(profile.path, args, {
+          name: 'xterm-256color',
+          cols,
+          rows,
+          cwd: targetCwd,
+          env: env as Record<string, string>,
+        })
+
+        const sessionInfo: TerminalSessionInfo = {
+          id: sessionId,
+          shellId: profile.id,
+          shellName: profile.name,
+          pid: ptyProc.pid,
+          cwd: targetCwd,
+        }
+
+        this.sessions.set(sessionId, { process: ptyProc, isPty: true, info: sessionInfo })
+
+        ptyProc.onData((data: string) => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('terminal:data', {
+              id: sessionId,
+              data,
+            })
+          }
+        })
+
+        ptyProc.onExit(({ exitCode, signal }) => {
+          this.sessions.delete(sessionId)
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('terminal:exit', {
+              id: sessionId,
+              code: exitCode,
+              signal: signal ? String(signal) : null,
+            })
+          }
+        })
+
+        return sessionInfo
+      } catch (err: any) {
+        console.warn('[TerminalService] nodePty.spawn failed, falling back to standard child_process.spawn:', err)
+      }
     }
+
+    // Fallback: standard child_process.spawn
+    const proc = spawn(profile.path, args, {
+      cwd: targetCwd,
+      env,
+      shell: false,
+      windowsHide: true,
+    })
 
     const sessionInfo: TerminalSessionInfo = {
       id: sessionId,
@@ -331,9 +358,8 @@ export class TerminalService {
       cwd: targetCwd,
     }
 
-    this.sessions.set(sessionId, { process: proc, info: sessionInfo })
+    this.sessions.set(sessionId, { process: proc, isPty: false, info: sessionInfo })
 
-    // Forward stdout & stderr to renderer via IPC
     proc.stdout.on('data', (chunk: Buffer) => {
       if (!mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:data', {
@@ -376,20 +402,45 @@ export class TerminalService {
   }
 
   /**
-   * Writes input keystrokes or commands into child process stdin.
+   * Writes input keystrokes or commands into terminal session.
    */
   public write(sessionId: string, data: string): boolean {
     const session = this.sessions.get(sessionId)
-    if (!session || !session.process.stdin.writable) {
-      return false
-    }
+    if (!session) return false
+
     try {
-      session.process.stdin.write(data, 'utf8')
-      return true
+      if (session.isPty) {
+        ;(session.process as IPty).write(data)
+        return true
+      } else {
+        const streamProc = session.process as ChildProcessWithoutNullStreams
+        if (streamProc.stdin.writable) {
+          streamProc.stdin.write(data, 'utf8')
+          return true
+        }
+      }
     } catch (e) {
       console.warn(`[TerminalService] Error writing to session ${sessionId}:`, e)
-      return false
     }
+    return false
+  }
+
+  /**
+   * Resizes the terminal PTY dimensions.
+   */
+  public resize(sessionId: string, cols: number, rows: number): boolean {
+    const session = this.sessions.get(sessionId)
+    if (!session) return false
+
+    if (session.isPty) {
+      try {
+        ;(session.process as IPty).resize(Math.max(10, cols), Math.max(5, rows))
+        return true
+      } catch (e) {
+        console.warn(`[TerminalService] Error resizing session ${sessionId}:`, e)
+      }
+    }
+    return false
   }
 
   /**
@@ -400,11 +451,83 @@ export class TerminalService {
     if (!session) return false
 
     try {
-      session.process.kill()
+      if (session.isPty) {
+        ;(session.process as IPty).kill()
+      } else {
+        ;(session.process as ChildProcessWithoutNullStreams).kill()
+      }
       this.sessions.delete(sessionId)
       return true
     } catch (e) {
       console.warn(`[TerminalService] Error killing session ${sessionId}:`, e)
+      return false
+    }
+  }
+
+  /**
+   * Opens the current workspace directory in an external system terminal window.
+   */
+  public openExternalTerminal(shellId?: string, cwd?: string): boolean {
+    const isWin = process.platform === 'win32'
+    const targetCwd = cwd && cwd !== '.' && fs.existsSync(cwd)
+      ? path.resolve(cwd)
+      : (process.cwd() || os.homedir())
+
+    try {
+      if (isWin) {
+        if (shellId === 'gitbash') {
+          const gitBash = 'C:\\Program Files\\Git\\git-bash.exe'
+          if (this.checkExists(gitBash)) {
+            spawn(gitBash, [`--cd=${targetCwd}`], { detached: true, stdio: 'ignore' }).unref()
+            return true
+          }
+        }
+        if (shellId === 'cygwin') {
+          const cygMintty = 'C:\\cygwin64\\bin\\mintty.exe'
+          if (this.checkExists(cygMintty)) {
+            spawn(cygMintty, ['-i', '/Cygwin-Terminal.ico', '-', '/bin/bash', '--login', '-i'], {
+              cwd: targetCwd,
+              detached: true,
+              stdio: 'ignore',
+            }).unref()
+            return true
+          }
+        }
+        if (shellId === 'wsl') {
+          spawn('wsl.exe', [], { cwd: targetCwd, detached: true, stdio: 'ignore' }).unref()
+          return true
+        }
+        if (shellId === 'pwsh') {
+          const pwsh = this.findExecutableInPath('pwsh.exe') || 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+          if (this.checkExists(pwsh)) {
+            spawn('cmd.exe', ['/c', 'start', '""', pwsh, '-NoExit', '-Command', `Set-Location -LiteralPath '${targetCwd}'`], {
+              detached: true,
+              stdio: 'ignore',
+            }).unref()
+            return true
+          }
+        }
+        // Try Windows Terminal (wt.exe)
+        const wt = this.findExecutableInPath('wt.exe')
+        if (wt) {
+          spawn('wt.exe', ['-d', targetCwd], { detached: true, stdio: 'ignore' }).unref()
+          return true
+        }
+        // Fallback to native Windows PowerShell window
+        spawn('cmd.exe', ['/c', 'start', 'powershell.exe', '-NoExit', '-Command', `Set-Location -LiteralPath '${targetCwd}'`], {
+          detached: true,
+          stdio: 'ignore',
+        }).unref()
+        return true
+      } else if (process.platform === 'darwin') {
+        spawn('open', ['-a', 'Terminal', targetCwd], { detached: true, stdio: 'ignore' }).unref()
+        return true
+      } else {
+        spawn('x-terminal-emulator', [], { cwd: targetCwd, detached: true, stdio: 'ignore' }).unref()
+        return true
+      }
+    } catch (err) {
+      console.error('[TerminalService] Failed to launch external terminal:', err)
       return false
     }
   }
@@ -425,7 +548,7 @@ export class TerminalService {
       return this.saveConfig(config)
     })
 
-    ipcMain.handle('terminal:create', async (_, options: { shellId?: string; cwd?: string }) => {
+    ipcMain.handle('terminal:create', async (_, options: { shellId?: string; cwd?: string; cols?: number; rows?: number }) => {
       const win = getWindow()
       if (!win) throw new Error('Main window not available')
       return this.createSession(options, win)
@@ -435,8 +558,16 @@ export class TerminalService {
       return this.write(id, data)
     })
 
+    ipcMain.handle('terminal:resize', async (_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+      return this.resize(id, cols, rows)
+    })
+
     ipcMain.handle('terminal:kill', async (_, id: string) => {
       return this.kill(id)
+    })
+
+    ipcMain.handle('terminal:openExternal', async (_, { shellId, cwd }: { shellId?: string; cwd?: string }) => {
+      return this.openExternalTerminal(shellId, cwd)
     })
   }
 }

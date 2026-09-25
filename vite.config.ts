@@ -10,16 +10,21 @@ export default defineConfig({
     electron({
       main: {
         entry: 'electron/main.ts',
+        vite: {
+          build: {
+            rollupOptions: {
+              external: ['node-pty'],
+            },
+          },
+        },
       },
       preload: {
         input: path.join(__dirname, 'electron/preload.ts'),
         vite: {
           build: {
             rollupOptions: {
-              output: {
-                format: 'cjs',
-                entryFileNames: '[name].cjs',
-              },
+              format: 'cjs',
+              entryFileNames: '[name].cjs',
             },
           },
         },
