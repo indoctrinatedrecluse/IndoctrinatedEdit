@@ -23,8 +23,10 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              format: 'cjs',
-              entryFileNames: '[name].cjs',
+              output: {
+                format: 'cjs',
+                entryFileNames: '[name].cjs',
+              },
             },
           },
         },

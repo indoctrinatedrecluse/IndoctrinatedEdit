@@ -80,6 +80,24 @@ function createSplashWindow() {
 }
 
 function createWindow() {
+  const candidatePreloadPaths = [
+    path.join(__dirname, 'preload.cjs'),
+    path.join(__dirname, 'preload.mjs'),
+    path.join(__dirname, 'preload.js'),
+    path.join(MAIN_DIST, 'preload.cjs'),
+    path.join(MAIN_DIST, 'preload.mjs'),
+    path.join(MAIN_DIST, 'preload.js'),
+  ]
+  let preloadPath = path.join(__dirname, 'preload.cjs')
+  for (const candidate of candidatePreloadPaths) {
+    try {
+      if (require('node:fs').existsSync(candidate)) {
+        preloadPath = candidate
+        break
+      }
+    } catch {}
+  }
+
   win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -92,7 +110,7 @@ function createWindow() {
     show: false,
     icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: preloadPath,
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
