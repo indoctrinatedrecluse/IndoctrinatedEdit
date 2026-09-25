@@ -80,41 +80,37 @@ export class TerminalService {
       const sysRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows'
       const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
 
-      // 1. PowerShell 7 (pwsh)
+      // 1. Windows PowerShell
+      const sysPowerShellLocations = [
+        path.join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        this.findExecutableInPath('powershell.exe'),
+      ]
+      const sysPowerShell = sysPowerShellLocations.find((p) => p && this.checkExists(p)) || 'powershell.exe'
+      profiles.push({
+        id: 'powershell',
+        name: 'Windows PowerShell',
+        path: sysPowerShell,
+        icon: 'powershell',
+        args: ['-NoLogo'],
+        isDefault: true,
+      })
+
+      // 2. PowerShell 7 (pwsh)
       const pwshLocations = [
         this.findExecutableInPath('pwsh.exe'),
         'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
         'C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe',
         path.join(localAppData, 'Programs', 'PowerShell', 'pwsh.exe'),
       ]
-      const pwshPath = pwshLocations.find((p) => p && this.checkExists(p))
-      if (pwshPath) {
-        profiles.push({
-          id: 'pwsh',
-          name: 'PowerShell 7',
-          path: pwshPath,
-          icon: 'powershell',
-          args: ['-NoLogo'],
-          isDefault: true,
-        })
-      }
-
-      // 2. Windows PowerShell
-      const sysPowerShellLocations = [
-        path.join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-        'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-      ]
-      const sysPowerShell = sysPowerShellLocations.find((p) => this.checkExists(p))
-      if (sysPowerShell) {
-        profiles.push({
-          id: 'powershell',
-          name: 'Windows PowerShell',
-          path: sysPowerShell,
-          icon: 'powershell',
-          args: ['-NoLogo'],
-          isDefault: profiles.length === 0,
-        })
-      }
+      const pwshPath = pwshLocations.find((p) => p && this.checkExists(p)) || 'pwsh.exe'
+      profiles.push({
+        id: 'pwsh',
+        name: 'PowerShell 7',
+        path: pwshPath,
+        icon: 'powershell',
+        args: ['-NoLogo'],
+      })
 
       // 3. Git Bash
       const gitBashLocations = [
@@ -125,16 +121,14 @@ export class TerminalService {
         path.join(localAppData, 'Programs', 'Git', 'usr', 'bin', 'bash.exe'),
         this.findExecutableInPath('bash.exe'),
       ]
-      const gitBashPath = gitBashLocations.find((p) => p && this.checkExists(p))
-      if (gitBashPath) {
-        profiles.push({
-          id: 'gitbash',
-          name: 'Git Bash',
-          path: gitBashPath,
-          icon: 'git',
-          args: ['--login', '-i'],
-        })
-      }
+      const gitBashPath = gitBashLocations.find((p) => p && this.checkExists(p)) || 'C:\\Program Files\\Git\\bin\\bash.exe'
+      profiles.push({
+        id: 'gitbash',
+        name: 'Git Bash',
+        path: gitBashPath,
+        icon: 'git',
+        args: ['--login', '-i'],
+      })
 
       // 4. Cygwin
       const cygwinLocations = [
@@ -144,47 +138,42 @@ export class TerminalService {
         'D:\\cygwin\\bin\\bash.exe',
         'E:\\cygwin64\\bin\\bash.exe',
       ]
-      const cygwinPath = cygwinLocations.find((p) => this.checkExists(p))
-      if (cygwinPath) {
-        profiles.push({
-          id: 'cygwin',
-          name: 'Cygwin',
-          path: cygwinPath,
-          icon: 'cygwin',
-          args: ['--login', '-i'],
-        })
-      }
+      const cygwinPath = cygwinLocations.find((p) => this.checkExists(p)) || 'C:\\cygwin64\\bin\\bash.exe'
+      profiles.push({
+        id: 'cygwin',
+        name: 'Cygwin',
+        path: cygwinPath,
+        icon: 'cygwin',
+        args: ['--login', '-i'],
+      })
 
-      // 5. WSL (Windows Subsystem for Linux)
+      // 5. WSL (Linux)
       const wslLocations = [
         path.join(sysRoot, 'System32', 'wsl.exe'),
         'C:\\Windows\\System32\\wsl.exe',
+        this.findExecutableInPath('wsl.exe'),
       ]
-      const wslPath = wslLocations.find((p) => this.checkExists(p))
-      if (wslPath) {
-        profiles.push({
-          id: 'wsl',
-          name: 'WSL (Linux)',
-          path: wslPath,
-          icon: 'wsl',
-        })
-      }
+      const wslPath = wslLocations.find((p) => p && this.checkExists(p)) || 'wsl.exe'
+      profiles.push({
+        id: 'wsl',
+        name: 'WSL (Linux)',
+        path: wslPath,
+        icon: 'wsl',
+      })
 
       // 6. Command Prompt (cmd.exe)
       const cmdLocations = [
         path.join(sysRoot, 'System32', 'cmd.exe'),
         'C:\\Windows\\System32\\cmd.exe',
+        this.findExecutableInPath('cmd.exe'),
       ]
-      const cmdPath = cmdLocations.find((p) => this.checkExists(p))
-      if (cmdPath) {
-        profiles.push({
-          id: 'cmd',
-          name: 'Command Prompt',
-          path: cmdPath,
-          icon: 'cmd',
-          isDefault: profiles.length === 0,
-        })
-      }
+      const cmdPath = cmdLocations.find((p) => p && this.checkExists(p)) || 'cmd.exe'
+      profiles.push({
+        id: 'cmd',
+        name: 'Command Prompt',
+        path: cmdPath,
+        icon: 'cmd',
+      })
     } else {
       // Unix / macOS
       const standardShells = [

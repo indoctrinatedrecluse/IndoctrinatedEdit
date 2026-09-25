@@ -107,10 +107,21 @@ export class TerminalService {
   }
 
   public getFallbackProfiles(): ShellProfile[] {
+    const isWin = typeof window !== 'undefined' ? (window as any).electronAPI?.platform === 'win32' : true
+    if (isWin) {
+      return [
+        { id: 'powershell', name: 'Windows PowerShell', path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', icon: 'powershell', isDefault: true, args: ['-NoLogo'] },
+        { id: 'pwsh', name: 'PowerShell 7', path: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', icon: 'powershell', args: ['-NoLogo'] },
+        { id: 'gitbash', name: 'Git Bash', path: 'C:\\Program Files\\Git\\bin\\bash.exe', icon: 'git', args: ['--login', '-i'] },
+        { id: 'cygwin', name: 'Cygwin', path: 'C:\\cygwin64\\bin\\bash.exe', icon: 'cygwin', args: ['--login', '-i'] },
+        { id: 'wsl', name: 'WSL (Linux)', path: 'C:\\Windows\\System32\\wsl.exe', icon: 'wsl' },
+        { id: 'cmd', name: 'Command Prompt', path: 'C:\\Windows\\System32\\cmd.exe', icon: 'cmd' },
+      ]
+    }
     return [
-      { id: 'powershell', name: 'PowerShell', path: 'powershell.exe', icon: 'powershell', isDefault: true },
-      { id: 'cmd', name: 'Command Prompt', path: 'cmd.exe', icon: 'cmd' },
-      { id: 'bash', name: 'Bash', path: '/bin/bash', icon: 'terminal' },
+      { id: 'bash', name: 'Bash', path: '/bin/bash', icon: 'terminal', isDefault: true },
+      { id: 'zsh', name: 'Zsh', path: '/bin/zsh', icon: 'terminal' },
+      { id: 'sh', name: 'Sh', path: '/bin/sh', icon: 'terminal' },
     ]
   }
 
