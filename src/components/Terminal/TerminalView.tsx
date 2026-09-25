@@ -180,6 +180,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'right')
+      } else if (e.key === 'PageUp') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'pageup')
+      } else if (e.key === 'PageDown') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'pagedown')
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'home')
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'end')
       } else if (e.key === 'Enter') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'enter')
@@ -189,15 +201,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       } else if (e.key === 'Tab') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'tab')
+      } else if (e.key === 'Backspace') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'backspace')
+      } else if (e.key === 'Delete') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'delete')
       } else if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'space')
-      } else if (e.ctrlKey && e.key === 'c') {
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'c') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'ctrl-c')
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-d')
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-z')
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-l')
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault()
-        handleSendTuiAction(tabId, e.key.toLowerCase())
+        handleSendTuiAction(tabId, e.key)
       }
     }
   }
@@ -206,7 +233,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
     const tuiActive = isTuiMode || terminalService.isTuiActive(tabId)
     if (tuiActive) {
       // In TUI mode, single-key commands, arrows, Esc, Enter immediately forward to TUI
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Tab', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Tab', 'PageUp', 'PageDown', 'Home', 'End', 'Backspace', 'Delete'].includes(e.key)) {
         e.preventDefault()
         const map: Record<string, string> = {
           ArrowUp: 'up',
@@ -219,6 +246,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           PageDown: 'pagedown',
           Home: 'home',
           End: 'end',
+          Backspace: 'backspace',
+          Delete: 'delete',
         }
         handleSendTuiAction(tabId, map[e.key] || e.key)
         return
@@ -242,18 +271,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
         }
       }
 
-      if (e.ctrlKey && e.key === 'c') {
+      if (e.ctrlKey && e.key.toLowerCase() === 'c') {
         e.preventDefault()
         handleSendTuiAction(tabId, 'ctrl-c')
         setInputValues((prev) => ({ ...prev, [tabId]: '' }))
         return
       }
 
-      // Forward single-letter keys (w, a, s, d, q, r, k, etc.) immediately if input has no multichar command
+      if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-d')
+        return
+      }
+
+      if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        handleSendTuiAction(tabId, 'ctrl-z')
+        return
+      }
+
+      // Forward single-letter keys (w, a, s, d, q, r, c, m, n, p, k, etc.) immediately if input has no multichar command
       if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (!inputValues[tabId] || inputValues[tabId].length === 0) {
           e.preventDefault()
-          handleSendTuiAction(tabId, e.key.toLowerCase())
+          handleSendTuiAction(tabId, e.key)
           setInputValues((prev) => ({ ...prev, [tabId]: '' }))
           return
         }
@@ -448,6 +489,52 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'd') }}
                 title="Send 'D'"
               >D</button>
+            </div>
+
+            {/* Common TUI App Controls (pmon / nettop / dual / fm) */}
+            <div className="keypad-group tui-app-controls">
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'c') }}
+                title="Send 'C' (Sort CPU)"
+              >C (CPU)</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'm') }}
+                title="Send 'M' (Sort Mem)"
+              >M (Mem)</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'n') }}
+                title="Send 'N' (Sort Name)"
+              >N (Name)</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'p') }}
+                title="Send 'P' (Sort PID)"
+              >P (PID)</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'k') }}
+                title="Send 'K' (Kill Process)"
+              >K (Kill)</button>
+              <button
+                type="button"
+                className="tui-key-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendTuiAction(tab.id, 'y') }}
+                title="Send 'Y' (Confirm / Yes)"
+              >Y</button>
             </div>
 
             {/* Action / Selector / Control Keys */}

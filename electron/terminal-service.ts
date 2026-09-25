@@ -268,6 +268,9 @@ export class TerminalService {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       FORCE_COLOR: '1',
+      CLICOLOR: '1',
+      CLICOLOR_FORCE: '1',
+      TERM_PROGRAM: 'IndoctrinatedEdit',
       PYTHONUNBUFFERED: '1',
       COLUMNS: '120',
       LINES: '30',
@@ -343,8 +346,13 @@ export class TerminalService {
     if (!session || !session.process.stdin.writable) {
       return false
     }
-    session.process.stdin.write(data)
-    return true
+    try {
+      session.process.stdin.write(data, 'utf8')
+      return true
+    } catch (e) {
+      console.warn(`[TerminalService] Error writing to session ${sessionId}:`, e)
+      return false
+    }
   }
 
   /**
