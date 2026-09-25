@@ -152,7 +152,7 @@ export class TerminalService {
     const profile = this.getProfiles().find((p) => p.id === targetShellId) || this.getProfiles()[0]
 
     let tabId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
-    let targetCwd = (options?.cwd && options.cwd !== '.') ? options.cwd : (typeof process !== 'undefined' && process.cwd ? process.cwd() : '.')
+    let targetCwd = (options?.cwd && options.cwd !== '.') ? options.cwd : ''
 
     if (electron?.terminal?.create) {
       try {
@@ -167,6 +167,10 @@ export class TerminalService {
       } catch (err) {
         console.warn('[TerminalService] Failed to spawn native terminal, falling back to browser shell:', err)
       }
+    }
+
+    if (!targetCwd || targetCwd === '.') {
+      targetCwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : (typeof window !== 'undefined' && (window as any).electronAPI?.platform === 'win32' ? 'D:\\Projects\\IndoctrinatedEdit' : '/workspace')
     }
 
     const newTab: TerminalTab = {
@@ -302,28 +306,29 @@ export class TerminalService {
       text = text.replace(/\x1b\[\?(1049|47)l/g, '')
     }
 
-    // 2. Full Screen Clear (\x1b[2J, \x1b[3J)
-    if (text.includes('\x1b[2J') || text.includes('\x1b[3J')) {
+    // 2. Full Screen Clear (\x1b[2J, \x1b[3J) - only clear buffer in alternate TUI mode
+    if (state.inAltBuffer && (text.includes('\x1b[2J') || text.includes('\x1b[3J'))) {
       tab.buffer = []
-      text = text.replace(/\x1b\[[23]J/g, '')
     }
+    text = text.replace(/\x1b\[[23]J/g, '')
 
-    // 3. Cursor Home (\x1b[H, \x1b[1;1H, \x1b[f)
-    if (/\x1b\[(\d+)?(?:;(\d+)?)?[Hf]/.test(text)) {
-      // If text starts with cursor home and screen clear, clear buffer to allow fresh TUI frame
+    // 3. Cursor Home (\x1b[H, \x1b[1;1H, \x1b[f) - only clear buffer in alternate TUI mode
+    if (state.inAltBuffer && /\x1b\[(\d+)?(?:;(\d+)?)?[Hf]/.test(text)) {
       if (text.startsWith('\x1b[H') || text.startsWith('\x1b[1;1H') || text.startsWith('\x1b[?25l\x1b[H')) {
         tab.buffer = []
       }
-      text = text.replace(/\x1b\[(\d+)?(?:;(\d+)?)?[Hf]/g, '')
     }
+    text = text.replace(/\x1b\[(\d+)?(?:;(\d+)?)?[Hf]/g, '')
 
     // 4. Strip cursor visibility / mode sequences
     text = text.replace(/\x1b\[\?25[lh]/g, '') // Hide/Show cursor
     text = text.replace(/\x1b\[\?1[lh]/g, '')  // Cursor keys mode
     text = text.replace(/\x1b\[\?2004[lh]/g, '') // Bracketed paste mode
+    text = text.replace(/\x1b\[\?9001[lh]/g, '')
+    text = text.replace(/\x1b\[\?1004[lh]/g, '')
+    text = text.replace(/\x1b\]0;[^\x07]+\x07/g, '') // Strip window title OSC sequences
 
     // 5. Line clearing (\x1b[2K, \x1b[K, \x1b[0K, \x1b[1K)
-    // When a line clear occurs before new text, we can update the last line
     if (text.includes('\x1b[2K') || text.includes('\x1b[K') || text.includes('\x1b[0K')) {
       text = text.replace(/\x1b\[[012]?K/g, '')
     }
