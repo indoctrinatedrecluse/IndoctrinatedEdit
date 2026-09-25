@@ -188,8 +188,16 @@ ipcMain.handle('window:maximize', (event) => {
 
 ipcMain.handle('window:close', (event) => {
   const target = BrowserWindow.fromWebContents(event.sender) || win
+  try {
+    terminalService.killAll()
+  } catch (e) {
+    console.warn('[Main] Error killing terminals on window close:', e)
+  }
   if (target && !target.isDestroyed()) {
-    target.close()
+    target.destroy()
+  }
+  if (process.platform !== 'darwin') {
+    app.exit(0)
   }
 })
 
@@ -420,10 +428,24 @@ app.on('second-instance', () => {
   }
 })
 
+app.on('before-quit', () => {
+  try {
+    terminalService.killAll()
+  } catch {}
+})
+
+app.on('will-quit', () => {
+  try {
+    terminalService.killAll()
+  } catch {}
+})
+
 app.on('window-all-closed', () => {
+  try {
+    terminalService.killAll()
+  } catch {}
   if (process.platform !== 'darwin') {
-    app.quit()
-    win = null
+    app.exit(0)
   }
 })
 

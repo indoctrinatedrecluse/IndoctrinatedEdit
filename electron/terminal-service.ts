@@ -461,24 +461,49 @@ export class TerminalService {
   }
 
   /**
-   * Terminates an active terminal session.
+   * Terminates an active terminal session and all child processes.
    */
   public kill(sessionId: string): boolean {
     const session = this.sessions.get(sessionId)
     if (!session) return false
 
     try {
+      const pid = session.info.pid
       if (session.isPty) {
-        ;(session.process as IPty).kill()
+        try {
+          ;(session.process as IPty).kill()
+        } catch {}
       } else {
-        ;(session.process as ChildProcessWithoutNullStreams).kill()
+        try {
+          ;(session.process as ChildProcessWithoutNullStreams).kill()
+        } catch {}
       }
+
+      // Force-terminate process tree on Windows to ensure winpty-agent/conhost don't hang
+      if (process.platform === 'win32' && pid) {
+        try {
+          spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' }).unref()
+        } catch {}
+      }
+
       this.sessions.delete(sessionId)
       return true
     } catch (e) {
       console.warn(`[TerminalService] Error killing session ${sessionId}:`, e)
+      this.sessions.delete(sessionId)
       return false
     }
+  }
+
+  /**
+   * Terminates all active terminal sessions on window close / app quit.
+   */
+  public killAll(): void {
+    const sessionIds = Array.from(this.sessions.keys())
+    for (const id of sessionIds) {
+      this.kill(id)
+    }
+    this.sessions.clear()
   }
 
   /**
