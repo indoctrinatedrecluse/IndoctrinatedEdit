@@ -136,11 +136,11 @@ describe('Licensing & Node-Locking Subsystem', () => {
   })
 
   describe('Pro Extensions & Gated Microservices Subsystem', () => {
-    it('should correctly flag the 9 designated extensions as isPro in ExtensionRegistry', async () => {
+    it('should correctly flag exactly the 9 designated extensions as isPro and leave all other extensions free', async () => {
       // Dynamic import to avoid circular references
       const { extensionRegistry } = await import('../src/extensions/extensionRegistry')
 
-      const proExtensionIds = [
+      const proExtensionIds = new Set([
         'indoctrinated.ext.mocklab',
         'indoctrinated.ext.remote-protocol-studio',
         'indoctrinated.ext.graphql',
@@ -150,28 +150,30 @@ describe('Licensing & Node-Locking Subsystem', () => {
         'indoctrinated.ext.websocket',
         'indoctrinated.ext.antigravity',
         'indoctrinated.ext.aiassistant',
-      ]
+      ])
 
-      for (const id of proExtensionIds) {
-        const ext = extensionRegistry.get(id)
-        expect(ext, `Extension ${id} should be registered`).toBeDefined()
-        expect(ext?.isPro, `Extension ${id} should have isPro: true`).toBe(true)
+      const allExtensions = extensionRegistry.getAll()
+      expect(allExtensions.length).toBeGreaterThanOrEqual(35)
+
+      let proCount = 0
+      let freeCount = 0
+
+      for (const ext of allExtensions) {
+        if (proExtensionIds.has(ext.id)) {
+          expect(ext.isPro, `Pro extension ${ext.id} must have isPro: true`).toBe(true)
+          proCount++
+        } else {
+          expect(
+            ext.isPro,
+            `Standard extension "${ext.name}" (${ext.id}) must NOT be Pro-locked (must remain available in Trial mode)`
+          ).toBeFalsy()
+          freeCount++
+        }
       }
 
-      // Non-pro extensions remain free under trial
-      const freeExtensionIds = [
-        'indoctrinated.ext.jupyter-notebook-engine',
-        'indoctrinated.ext.python-pack',
-        'indoctrinated.ext.go-pack',
-        'indoctrinated.ext.rust-pack',
-        'indoctrinated.ext.jsonstudio',
-      ]
-
-      for (const id of freeExtensionIds) {
-        const ext = extensionRegistry.get(id)
-        expect(ext, `Extension ${id} should be registered`).toBeDefined()
-        expect(ext?.isPro, `Extension ${id} should not be Pro-locked`).toBeFalsy()
-      }
+      // Assert that exactly the 9 requested extensions are marked Pro
+      expect(proCount).toBe(9)
+      expect(freeCount).toBe(allExtensions.length - 9)
     })
   })
 })
