@@ -33,4 +33,5 @@ export interface ExtensionManifest {
   type: 'Built-in' | 'Microservice' | 'Community'
   languages?: LanguageContribution[]
   snippetsCount?: number
+  isPro?: boolean
 }

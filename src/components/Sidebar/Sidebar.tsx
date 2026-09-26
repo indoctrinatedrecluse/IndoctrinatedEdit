@@ -264,6 +264,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="ext-title-col">
                     <div className="ext-name-row">
                       <span className="ext-name">{ext.name}</span>
+                      {ext.isPro && <span className="ext-pro-badge">PRO</span>}
                       <span className="ext-version-badge">v{ext.version}</span>
                     </div>
                     <span className="ext-author">by {ext.author}</span>
@@ -809,6 +810,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+
+        .ext-pro-badge {
+          font-size: 8px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          padding: 1px 4px;
+          border-radius: 3px;
+          background: linear-gradient(135deg, #BF5AF2 0%, #0A84FF 100%);
+          color: #FFF;
+          box-shadow: 0 0 6px rgba(191, 90, 242, 0.4);
+          line-height: 10px;
+          flex-shrink: 0;
         }
 
         .ext-version-badge {

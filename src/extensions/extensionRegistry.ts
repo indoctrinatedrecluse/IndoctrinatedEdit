@@ -148,7 +148,7 @@ class ExtensionRegistry {
     // 35. Jupyter Notebooks & Live Kernel Studio
     this.register(jupyterExtensionManifest)
 
-    // 35. Cryptography & DevTools Studio
+    // 35. Cryptography & DevTools Studio (PRO)
     this.register({
       id: 'indoctrinated.ext.cryptolab',
       name: 'Cryptography & DevTools Studio',
@@ -159,6 +159,63 @@ class ExtensionRegistry {
       iconName: 'ShieldCheck',
       status: 'Active',
       type: 'Built-in',
+      isPro: true,
+    })
+
+    // MockLab API Mock Server (PRO)
+    this.register({
+      id: 'indoctrinated.ext.mocklab',
+      name: 'MockLab API Mock Server',
+      version: '1.0.0',
+      description: 'Zero-config local HTTP mock server, endpoint route builder, response latency simulator, and real-time traffic audit logs.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Server',
+      status: 'Active',
+      type: 'Built-in',
+      isPro: true,
+    })
+
+    // GraphQL & gRPC Studio (PRO)
+    this.register({
+      id: 'indoctrinated.ext.graphql',
+      name: 'GraphQL and gRPC Studio',
+      version: '1.0.0',
+      description: 'Interactive GraphQL query runner with schema visualizer, gRPC proto explorer, variable composer, and introspection engine.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Globe',
+      status: 'Active',
+      type: 'Built-in',
+      isPro: true,
+    })
+
+    // SVG & Asset Studio (PRO)
+    this.register({
+      id: 'indoctrinated.ext.svgstudio',
+      name: 'SVG & Asset Studio',
+      version: '1.0.0',
+      description: 'Vector graphics visual canvas, path bezier handles, SVG optimizer/minifier, code generator, and multi-format raster exporter.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Shapes',
+      status: 'Active',
+      type: 'Built-in',
+      isPro: true,
+    })
+
+    // AI Multi-Model Assistant (PRO)
+    this.register({
+      id: 'indoctrinated.ext.aiassistant',
+      name: 'AI Multi-Model Assistant',
+      version: '1.0.0',
+      description: 'Context-aware AI coding copilot supporting Google Gemini 2.5 Pro/Flash, OpenAI GPT-4o, Claude 3.5 Sonnet, Local Ollama, and inline refactoring.',
+      author: 'indoctrinatedrecluse',
+      category: 'AI',
+      iconName: 'Bot',
+      status: 'Active',
+      type: 'Built-in',
+      isPro: true,
     })
 
     // JSON & JQ Structure Studio
@@ -187,7 +244,7 @@ class ExtensionRegistry {
       type: 'Built-in',
     })
 
-    // 34. Docker & Container Studio
+    // 34. Docker & Container Studio (PRO)
     this.register({
       id: 'indoctrinated.ext.docker',
       name: 'Docker & Container Studio',
@@ -198,12 +255,13 @@ class ExtensionRegistry {
       iconName: 'Container',
       status: 'Active',
       type: 'Built-in',
+      isPro: true,
     })
 
-    // 35. WebSocket & Event Streams Workbench
+    // 35. WebSocket & Event Streams Workbench (PRO)
     this.register({
       id: 'indoctrinated.ext.websocket',
-      name: 'WebSocket & Event Streams Workbench',
+      name: 'WebSocket & Event Streams Worklab',
       version: '1.0.0',
       description: 'Real-time bidirectional WebSocket and event stream testing client with interactive packet composer and message waterfall.',
       author: 'indoctrinatedrecluse',
@@ -211,6 +269,7 @@ class ExtensionRegistry {
       iconName: 'Radio',
       status: 'Active',
       type: 'Built-in',
+      isPro: true,
     })
 
     // 36. Visual Regex & Pattern Lab

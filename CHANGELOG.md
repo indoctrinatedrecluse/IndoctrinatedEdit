@@ -5,6 +5,36 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] - 2026-09-26
+
+### 💎 Hotfix & Feature Release — Pro Extensions Gating Subsystem, Visual Badging, and Trial Tier Governance
+
+IndoctrinatedEdit 5.0.1 introduces our dedicated **Pro Extensions Gating Subsystem**, locking select advanced studios and microservices behind active non-trial licenses (`ADM`, `DEV`, `USER`), while keeping all language engines, Monaco runtimes, and Jupyter Notebooks fully accessible during the 30-day evaluation trial:
+
+#### 🔒 Pro Extensions Licensing & Gating
+- **9 Gated Pro Extensions**:
+  - **MockLab API Mock Server** (`indoctrinated.ext.mocklab`)
+  - **Remote Protocol Studio** (SSH, SFTP, FTP & SMTP) (`indoctrinated.ext.remote-protocol-studio`)
+  - **GraphQL and gRPC Studio** (`indoctrinated.ext.graphql`)
+  - **SVG & Asset Studio** (`indoctrinated.ext.svgstudio`)
+  - **Cryptography & DevTools Lab** (`indoctrinated.ext.cryptolab`)
+  - **Docker & Container Studio** (`indoctrinated.ext.docker`)
+  - **WebSocket & Event Streams Worklab** (`indoctrinated.ext.websocket`)
+  - **Google Antigravity Studio** (`indoctrinated.ext.antigravity`)
+  - **AI Multi-Model Assistant** (`indoctrinated.ext.aiassistant`)
+- **Trial Protection & Liquid Glass Lockout View**:
+  - When opening any of the 9 Pro tools while on a Trial License, a frosted Liquid Glass **Locked Extension** overlay is presented explaining license requirements, showing the machine's HWID, and offering a 1-click **"Enter License Key"** button to unlock immediately.
+- **Reactive Instant Unlocking & Relocking**:
+  - Activating a valid `ADM`, `DEV`, or `USER` license reactively unlocks all 9 Pro extensions across all panels without requiring an app restart.
+  - Removing a license seamlessly locks the 9 Pro tools back down.
+
+#### 🎨 Visual Badging & Pro Indicators
+- **Left Activity Bar**: Superimposed miniature glowing **`PRO`** tags on the bottom-right corner of the icons for all 9 Pro extensions.
+- **Installed Extensions List**: Stylized gradient **`PRO`** badges next to extension titles in the Sidebar manager view.
+- **Right Auxiliary Dock Tabs**: Miniature **`PRO`** badges on the dock tab bar headers for each gated studio.
+
+---
+
 ## [5.0.0] - 2026-09-26
 
 ### 🚀 Major Release — Live Cloud Licensing, Node-Locked Hardware ID (HWID) Engine, 30-Day Persistent Trial, Ultra-Stylized Admin & Pro Editions, Windows Registry Storage, and Seat Management

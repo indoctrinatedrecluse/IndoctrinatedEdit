@@ -29,6 +29,7 @@ export const remoteProtocolExtensionManifest: ExtensionManifest = {
   iconName: 'Server',
   status: 'Active',
   type: 'Built-in',
+  isPro: true,
   snippetsCount: remoteSnippets.length,
   languages: [
     {

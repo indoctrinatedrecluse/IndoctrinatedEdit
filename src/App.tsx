@@ -1912,6 +1912,7 @@ export const App: React.FC = () => {
                 activeTab={rightPaneTab}
                 onSelectTab={(tab) => setRightPaneTab(tab)}
                 onClose={() => setIsRightPaneOpen(false)}
+                onOpenLicense={() => setIsLicenseOpen(true)}
                 activeFileName={activeTab?.name || 'untitled.ts'}
                 activeFileContent={currentContent}
                 currentSelection={currentSelection}

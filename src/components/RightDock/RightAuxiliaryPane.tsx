@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Bot,
   Database,
@@ -53,6 +53,8 @@ import { RemoteProtocolStudioView } from '../RemoteProtocolStudio/RemoteProtocol
 import { JupyterStudioView } from '../Notebook/JupyterStudioView'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { SelectionInfo } from '../Editor/EditorHost'
+import { LockedExtensionView } from '../Common/LockedExtensionView'
+import { licenseService, LicenseInfo } from '../../services/licenseService'
 
 export type RightDockTab =
   | 'jupyter'
@@ -87,6 +89,7 @@ interface RightAuxiliaryPaneProps {
   activeTab: RightDockTab
   onSelectTab: (tab: RightDockTab) => void
   onClose: () => void
+  onOpenLicense?: () => void
   onCreateNotebook?: (title: string, templateType?: string) => void
   // AI / Preview Panel Props
   activeFileName?: string
@@ -101,6 +104,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   activeTab,
   onSelectTab,
   onClose,
+  onOpenLicense,
   onCreateNotebook,
   activeFileName = 'untitled.ts',
   activeFileContent = '',
@@ -108,6 +112,15 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   onInsertAtCursor,
   onReplaceSelection,
 }) => {
+  const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null)
+
+  useEffect(() => {
+    licenseService.getInfo().then(setLicenseInfo)
+    return licenseService.subscribe(setLicenseInfo)
+  }, [])
+
+  const isUnlocked = Boolean(licenseInfo && !licenseInfo.isTrial && licenseInfo.isValid)
+
   if (!isOpen) return null
 
   return (
@@ -154,6 +167,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Server size={13} className="tab-icon mocklab" />
             <span>MockLab Server</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -163,6 +177,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Globe size={13} className="tab-icon graphql" />
             <span>GraphQL Studio</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -190,6 +205,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Shapes size={13} className="tab-icon svg" />
             <span>SVG Studio</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -199,6 +215,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <ShieldCheck size={13} className="tab-icon crypto" />
             <span>Crypto Lab</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -226,6 +243,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Container size={13} className="tab-icon docker" />
             <span>Docker</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -235,6 +253,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Wifi size={13} className="tab-icon socket" />
             <span>WebSocket</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -334,6 +353,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Server size={13} className="tab-icon remote" />
             <span>Remote Studio</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -343,6 +363,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <AntigravityIcon size={14} className="tab-icon antigravity" />
             <span>Antigravity Studio</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
 
           <button
@@ -352,6 +373,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           >
             <Bot size={13} className="tab-icon ai" />
             <span>AI Assistant</span>
+            <span className="dock-tab-pro-tag">PRO</span>
           </button>
         </div>
 
@@ -368,26 +390,58 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <JupyterStudioView onCreateNotebook={onCreateNotebook} />
         )}
         {activeTab === 'remote' && (
-          <RemoteProtocolStudioView
-            isDocked={true}
-            onClose={onClose}
-          />
+          isUnlocked ? (
+            <RemoteProtocolStudioView
+              isDocked={true}
+              onClose={onClose}
+            />
+          ) : (
+            <LockedExtensionView
+              extensionName="Remote Protocol Studio"
+              onOpenLicense={onOpenLicense}
+            />
+          )
         )}
         {activeTab === 'antigravity' && (
-          <AntigravityStudioView
-            activeFileName={activeFileName}
-            activeFileContent={activeFileContent}
-            currentSelection={currentSelection}
-            onInsertAtCursor={onInsertAtCursor}
-            onReplaceSelection={onReplaceSelection}
-            onClose={onClose}
-          />
+          isUnlocked ? (
+            <AntigravityStudioView
+              activeFileName={activeFileName}
+              activeFileContent={activeFileContent}
+              currentSelection={currentSelection}
+              onInsertAtCursor={onInsertAtCursor}
+              onReplaceSelection={onReplaceSelection}
+              onClose={onClose}
+            />
+          ) : (
+            <LockedExtensionView
+              extensionName="Google Antigravity Studio"
+              onOpenLicense={onOpenLicense}
+            />
+          )
         )}
         {activeTab === 'ports' && <PortSentinelView />}
         {activeTab === 'redis' && <RedisStudioView />}
         {activeTab === 'env' && <EnvVaultView />}
-        {activeTab === 'mocklab' && <MockLabView />}
-        {activeTab === 'graphql' && <GraphQLStudioView />}
+        {activeTab === 'mocklab' && (
+          isUnlocked ? (
+            <MockLabView />
+          ) : (
+            <LockedExtensionView
+              extensionName="MockLab API Mock Server"
+              onOpenLicense={onOpenLicense}
+            />
+          )
+        )}
+        {activeTab === 'graphql' && (
+          isUnlocked ? (
+            <GraphQLStudioView />
+          ) : (
+            <LockedExtensionView
+              extensionName="GraphQL and gRPC Studio"
+              onOpenLicense={onOpenLicense}
+            />
+          )
+        )}
         {activeTab === 'diagram' && (
           <DiagramStudioView
             activeFileName={activeFileName}
@@ -395,9 +449,27 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           />
         )}
         {activeTab === 'bundle' && <BundleAnalyzerView />}
-        {activeTab === 'svg' && <SvgStudioView />}
+        {activeTab === 'svg' && (
+          isUnlocked ? (
+            <SvgStudioView />
+          ) : (
+            <LockedExtensionView
+              extensionName="SVG & Asset Studio"
+              onOpenLicense={onOpenLicense}
+            />
+          )
+        )}
 
-        {activeTab === 'crypto' && <CryptoDevToolsView isDocked={true} />}
+        {activeTab === 'crypto' && (
+          isUnlocked ? (
+            <CryptoDevToolsView isDocked={true} />
+          ) : (
+            <LockedExtensionView
+              extensionName="Cryptography & DevTools Lab"
+              onOpenLicense={onOpenLicense}
+            />
+          )
+        )}
         {activeTab === 'json' && <JsonStudioView />}
 
         {activeTab === 'preview' && (
@@ -432,9 +504,27 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         {activeTab === 'colors' && <ColorStudioView />}
 
-        {activeTab === 'docker' && <DockerStudioView />}
+        {activeTab === 'docker' && (
+          isUnlocked ? (
+            <DockerStudioView />
+          ) : (
+            <LockedExtensionView
+              extensionName="Docker & Container Studio"
+              onOpenLicense={onOpenLicense}
+            />
+          )
+        )}
 
-        {activeTab === 'socket' && <WebSocketView />}
+        {activeTab === 'socket' && (
+          isUnlocked ? (
+            <WebSocketView />
+          ) : (
+            <LockedExtensionView
+              extensionName="WebSocket & Event Streams Worklab"
+              onOpenLicense={onOpenLicense}
+            />
+          )
+        )}
 
         {activeTab === 'regex' && <RegexLabView />}
 
@@ -448,15 +538,22 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
         {activeTab === 'tasks' && <TaskRunnerView />}
 
         {activeTab === 'ai' && (
-          <AiChatPanel
-            isOpen={isOpen}
-            onClose={onClose}
-            activeFileName={activeFileName}
-            activeFileContent={activeFileContent}
-            currentSelection={currentSelection}
-            onInsertAtCursor={onInsertAtCursor}
-            onReplaceSelection={onReplaceSelection}
-          />
+          isUnlocked ? (
+            <AiChatPanel
+              isOpen={isOpen}
+              onClose={onClose}
+              activeFileName={activeFileName}
+              activeFileContent={activeFileContent}
+              currentSelection={currentSelection}
+              onInsertAtCursor={onInsertAtCursor}
+              onReplaceSelection={onReplaceSelection}
+            />
+          ) : (
+            <LockedExtensionView
+              extensionName="AI Multi-Model Assistant"
+              onOpenLicense={onOpenLicense}
+            />
+          )
         )}
 
         {activeTab === 'database' && (
@@ -544,6 +641,19 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           border-color: rgba(255, 255, 255, 0.14);
           color: #FFFFFF;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .dock-tab-pro-tag {
+          font-size: 7.5px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          padding: 1px 4px;
+          border-radius: 3px;
+          background: linear-gradient(135deg, #BF5AF2 0%, #0A84FF 100%);
+          color: #FFF;
+          margin-left: 2px;
+          line-height: 9px;
+          box-shadow: 0 0 6px rgba(191, 90, 242, 0.35);
         }
 
         .dock-tab-item .tab-icon.ports { color: #30D158; }

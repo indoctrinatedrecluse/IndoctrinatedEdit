@@ -199,9 +199,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isMockLabOpen ? 'active' : ''}`}
             onClick={onToggleMockLab}
-            title="MockLab API Mock Server (Ctrl+Alt+4)"
+            title="MockLab API Mock Server (PRO) (Ctrl+Alt+4)"
           >
             <Server size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isMockLabOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -210,9 +211,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isRemoteOpen ? 'active' : ''}`}
             onClick={onToggleRemote}
-            title="Remote Protocol Studio (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+E)"
+            title="Remote Protocol Studio (PRO) (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+E)"
           >
             <Terminal size={18} color="#64D2FF" />
+            <span className="activity-pro-tag">PRO</span>
             {isRemoteOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -232,9 +234,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isGraphQLOpen ? 'active' : ''}`}
             onClick={onToggleGraphQL}
-            title="GraphQL & gRPC Studio (Ctrl+Alt+5)"
+            title="GraphQL & gRPC Studio (PRO) (Ctrl+Alt+5)"
           >
             <Globe size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isGraphQLOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -265,9 +268,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isSvgOpen ? 'active' : ''}`}
             onClick={onToggleSvg}
-            title="SVG & Asset Studio (Ctrl+Alt+8)"
+            title="SVG & Asset Studio (PRO) (Ctrl+Alt+8)"
           >
             <Shapes size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isSvgOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -276,9 +280,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isCryptoOpen ? 'active' : ''}`}
             onClick={onToggleCrypto}
-            title="Cryptography & DevTools Lab (Ctrl+Alt+C)"
+            title="Cryptography & DevTools Lab (PRO) (Ctrl+Alt+C)"
           >
             <ShieldCheck size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isCryptoOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -298,9 +303,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isDockerOpen ? 'active' : ''}`}
             onClick={onToggleDocker}
-            title="Docker & Container Studio (Ctrl+Alt+K)"
+            title="Docker & Container Studio (PRO) (Ctrl+Alt+K)"
           >
             <Container size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isDockerOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -309,9 +315,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ${isSocketOpen ? 'active' : ''}`}
             onClick={onToggleSocket}
-            title="WebSocket & Event Streams Workbench (Ctrl+Alt+W)"
+            title="WebSocket & Event Streams Workbench (PRO) (Ctrl+Alt+W)"
           >
             <Wifi size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isSocketOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -375,9 +382,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive antigravity-bar-btn ${isAntigravityOpen ? 'active' : ''}`}
             onClick={onToggleAntigravity}
-            title="Google Antigravity Studio (Personal Account & Python SDK)"
+            title="Google Antigravity Studio (PRO) (Personal Account & Python SDK)"
           >
             <AntigravityIcon size={20} className="antigravity-activity-icon" />
+            <span className="activity-pro-tag">PRO</span>
             {isAntigravityOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -386,9 +394,10 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive ai-bar-btn ${isAiOpen ? 'active' : ''}`}
             onClick={onToggleAi}
-            title="AI Multi-Model Assistant (Ctrl+Alt+A)"
+            title="AI Multi-Model Assistant (PRO) (Ctrl+Alt+A)"
           >
             <Bot size={18} />
+            <span className="activity-pro-tag">PRO</span>
             {isAiOpen && <div className="active-indicator" />}
           </button>
         )}
@@ -500,6 +509,22 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           align-items: center;
           justify-content: center;
           box-shadow: 0 0 8px var(--accent-primary);
+        }
+
+        .activity-pro-tag {
+          position: absolute;
+          bottom: 2px;
+          right: 3px;
+          font-size: 7px;
+          font-weight: 900;
+          letter-spacing: 0.4px;
+          line-height: 8px;
+          padding: 0.5px 2.5px;
+          border-radius: 2.5px;
+          background: linear-gradient(135deg, #BF5AF2 0%, #0A84FF 100%);
+          color: #FFF;
+          box-shadow: 0 0 6px rgba(191, 90, 242, 0.45);
+          pointer-events: none;
         }
 
         .active-indicator {

@@ -134,4 +134,44 @@ describe('Licensing & Node-Locking Subsystem', () => {
       expect(clientExpired).toBe(false)
     })
   })
+
+  describe('Pro Extensions & Gated Microservices Subsystem', () => {
+    it('should correctly flag the 9 designated extensions as isPro in ExtensionRegistry', async () => {
+      // Dynamic import to avoid circular references
+      const { extensionRegistry } = await import('../src/extensions/extensionRegistry')
+
+      const proExtensionIds = [
+        'indoctrinated.ext.mocklab',
+        'indoctrinated.ext.remote-protocol-studio',
+        'indoctrinated.ext.graphql',
+        'indoctrinated.ext.svgstudio',
+        'indoctrinated.ext.cryptolab',
+        'indoctrinated.ext.docker',
+        'indoctrinated.ext.websocket',
+        'indoctrinated.ext.antigravity',
+        'indoctrinated.ext.aiassistant',
+      ]
+
+      for (const id of proExtensionIds) {
+        const ext = extensionRegistry.get(id)
+        expect(ext, `Extension ${id} should be registered`).toBeDefined()
+        expect(ext?.isPro, `Extension ${id} should have isPro: true`).toBe(true)
+      }
+
+      // Non-pro extensions remain free under trial
+      const freeExtensionIds = [
+        'indoctrinated.ext.jupyter-notebook-engine',
+        'indoctrinated.ext.python-pack',
+        'indoctrinated.ext.go-pack',
+        'indoctrinated.ext.rust-pack',
+        'indoctrinated.ext.jsonstudio',
+      ]
+
+      for (const id of freeExtensionIds) {
+        const ext = extensionRegistry.get(id)
+        expect(ext, `Extension ${id} should be registered`).toBeDefined()
+        expect(ext?.isPro, `Extension ${id} should not be Pro-locked`).toBeFalsy()
+      }
+    })
+  })
 })

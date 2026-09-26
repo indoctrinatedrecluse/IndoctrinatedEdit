@@ -46,6 +46,7 @@ export const antigravityExtensionManifest: ExtensionManifest = {
   iconName: 'Sparkles',
   status: 'Active',
   type: 'Built-in',
+  isPro: true,
   languages: [
     {
       id: 'python',
