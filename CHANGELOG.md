@@ -24,6 +24,11 @@ IndoctrinatedEdit 5.0.0 marks a major milestone with the launch of our enterpris
   - Installations without an active `ADM`, `DEV`, or `USER` license automatically initialize a 30-day evaluation trial with remaining days countdown tracked across app restarts.
 - **Dynamic Masking & Key Reveal**:
   - Displayed license keys preserve tier prefixes while masking middle and trailing digits (e.g. `ADM-xxxx-xxxx-xxxx`), with a 1-click **Reveal / Hide** toggle button.
+- **Automated Expiration Lockout Enforcement (Trial & Subscriptions)**:
+  - When a 30-day evaluation Trial License expires (or when a standard `USER` or `DEV` subscription license reaches its expiration date without renewal), IndoctrinatedEdit immediately enforces an un-dismissible Lockout screen upon launch.
+  - Interactivity across workspaces, Monaco editors, AI models, and terminal sessions is restricted until a valid, non-trial license key is activated.
+  - Features an un-closable Liquid Glass modal with animated ruby/crimson alert pulsing, direct inline license activation form, and instant app unlocking upon activating an authentic key.
+  - **`ADM` (Administrator) Exemption**: Admin licenses are perpetually lifetime valid and never subject to expiration or lockout.
 - **Seat Management & Clean Deactivation**:
   - Active licenses feature a **Remove License** button that calls `POST /api/v1/license/deactivate` on the Licensor server, frees the machine's seat quota, clears local registry keys, and resets cleanly to a fresh 30-day Trial License.
 - **Pre-Locked Purchase License Gateway**:

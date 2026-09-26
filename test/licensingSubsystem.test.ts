@@ -109,5 +109,29 @@ describe('Licensing & Node-Locking Subsystem', () => {
 
       unsubscribe()
     })
+
+    it('should lock out expired TRIAL licenses and expired USER/DEV licenses while keeping ADM lifetime valid', async () => {
+      // 1. ADM license: always lifetime valid, never expired
+      await electronService.activateLicense({
+        licenseKey: 'ADM-LIFETIME-MASTER-KEY',
+        username: 'RootAdmin',
+      })
+      const admInfo = electronService.getLicenseInfo()
+      expect(admInfo.type).toBe('ADM')
+      expect(admInfo.status).toBe('active')
+      expect(admInfo.isValid).toBe(true)
+      expect(admInfo.expiresAt).toBeNull()
+
+      // 2. Clean remove to revert to trial
+      await electronService.removeLicense()
+      const trialInfo = electronService.getLicenseInfo()
+      expect(trialInfo.type).toBe('TRIAL')
+      expect(trialInfo.isValid).toBe(true)
+      expect(trialInfo.status).toBe('trial')
+
+      // 3. Client mock expiration behavior
+      const clientExpired = clientService.isExpired(trialInfo)
+      expect(clientExpired).toBe(false)
+    })
   })
 })

@@ -234,7 +234,25 @@ export class LicenseService {
     const expiresAt = this.readRegistryValue('LicenseExpiresAt') || null
 
     // Check if an authentic ADM, DEV, or USER license is saved
-    if (savedKey && savedType && savedType !== 'TRIAL' && savedStatus === 'active') {
+    if (savedKey && savedType && savedType !== 'TRIAL') {
+      let isExpired = false
+      if (savedType === 'ADM') {
+        // ADM (Admin) licenses are always lifetime valid
+        isExpired = false
+      } else if (expiresAt) {
+        // Check if expiration timestamp has passed for USER/DEV
+        const expMs = new Date(expiresAt).getTime()
+        if (!isNaN(expMs) && Date.now() > expMs) {
+          isExpired = true
+        }
+      }
+
+      if (savedStatus === 'expired') {
+        isExpired = true
+      }
+
+      const activeStatus: LicenseStatus = isExpired ? 'expired' : 'active'
+
       return {
         type: savedType,
         typeName: this.getLicenseTypeName(savedType),
@@ -242,10 +260,10 @@ export class LicenseService {
         maskedKey: this.maskLicenseKey(savedKey),
         username: savedUsername || (savedType === 'ADM' ? 'System Administrator' : 'Authorized User'),
         hwid,
-        status: 'active',
+        status: activeStatus,
         activatedAt,
         expiresAt,
-        isValid: true,
+        isValid: !isExpired,
         isTrial: false,
         machineName,
       }

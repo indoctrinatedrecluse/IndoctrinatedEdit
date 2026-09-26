@@ -78,17 +78,20 @@ export class ClientLicenseService {
 
   private getFallbackInfo(): LicenseInfo {
     if (this.mockState.key && this.mockState.type !== 'TRIAL') {
+      const isAdm = this.mockState.type === 'ADM'
+      const isExpired = !isAdm && this.mockState.status === 'expired'
+
       return {
         type: this.mockState.type,
         typeName: this.getLicenseTypeName(this.mockState.type),
         licenseKey: this.mockState.key,
         maskedKey: this.maskKey(this.mockState.key),
-        username: this.mockState.username || (this.mockState.type === 'ADM' ? 'Administrator' : 'User'),
+        username: this.mockState.username || (isAdm ? 'Administrator' : 'User'),
         hwid: 'HWID-BROWSER-SANDBOX-001',
-        status: 'active',
+        status: isExpired ? 'expired' : 'active',
         activatedAt: new Date().toISOString(),
         expiresAt: null,
-        isValid: true,
+        isValid: !isExpired,
         isTrial: false,
         machineName: 'Web Browser Environment',
       }
@@ -246,6 +249,22 @@ export class ClientLicenseService {
       message: 'License removed. Reverted to a 30-day Trial License.',
       info,
     }
+  }
+
+  /**
+   * Evaluates if a given license is expired and requires lockout.
+   * ADM licenses are lifetime valid and never expire.
+   */
+  public isExpired(info: LicenseInfo | null): boolean {
+    if (!info) return false
+    if (info.type === 'ADM') return false
+    if (info.status === 'expired' || !info.isValid) return true
+    if (info.isTrial && (info.trialDaysRemaining ?? 0) <= 0) return true
+    if (info.expiresAt) {
+      const exp = new Date(info.expiresAt).getTime()
+      if (!isNaN(exp) && Date.now() > exp) return true
+    }
+    return false
   }
 
   public subscribe(listener: LicenseChangeListener): () => void {

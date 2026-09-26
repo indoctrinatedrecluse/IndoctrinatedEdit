@@ -37,6 +37,7 @@ import { formatterService } from './services/formatterService'
 import { testExplorerService } from './services/testExplorerService'
 import { lspService, LspRenameResult } from './services/lspService'
 import { jupyterKernelService } from './services/jupyterKernelService'
+import { licenseService } from './services/licenseService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -1143,6 +1144,7 @@ export const App: React.FC = () => {
 
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false)
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false)
+  const [isLicenseLockout, setIsLicenseLockout] = useState<boolean>(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false)
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false)
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState<boolean>(false)
@@ -1151,6 +1153,26 @@ export const App: React.FC = () => {
   const [isRunConfigOpen, setIsRunConfigOpen] = useState<boolean>(false)
   const [isRunWithArgsOpen, setIsRunWithArgsOpen] = useState<boolean>(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => notificationService.getNotifications())
+
+  // Enforce license validation & lockout on mount and on license state changes
+  useEffect(() => {
+    const evaluateLockout = (info: any) => {
+      const isExpired = Boolean(
+        info && info.type !== 'ADM' && (
+          info.status === 'expired' ||
+          !info.isValid ||
+          (info.isTrial && (info.trialDaysRemaining ?? 0) <= 0)
+        )
+      )
+      setIsLicenseLockout(isExpired)
+      if (isExpired) {
+        setIsLicenseOpen(true)
+      }
+    }
+
+    licenseService.getInfo().then(evaluateLockout)
+    return licenseService.subscribe(evaluateLockout)
+  }, [])
 
   const handleRunActiveFile = useCallback(
     async (customArgs?: string, _customEnv?: Record<string, string>) => {
@@ -1670,27 +1692,6 @@ export const App: React.FC = () => {
         activeTabName={activeTab?.name}
       />
 
-      {/* About & License & Shortcuts Modals */}
-      <AboutModal
-        isOpen={isAboutOpen}
-        onClose={() => setIsAboutOpen(false)}
-        version="4.0.0"
-      />
-      <LicenseModal
-        isOpen={isLicenseOpen}
-        onClose={() => setIsLicenseOpen(false)}
-        version="4.0.0"
-      />
-      <ShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-        onExecuteCommand={(id) => commandRegistry.execute(id)}
-      />
-      <TerminalConfigModal
-        isOpen={isTerminalConfigOpen}
-        onClose={() => setIsTerminalConfigOpen(false)}
-      />
-
       {/* Notification Center Popover */}
       <NotificationCenter
         isOpen={isNotificationCenterOpen}
@@ -2002,10 +2003,16 @@ export const App: React.FC = () => {
         onClose={() => setIsAboutOpen(false)}
       />
 
-      {/* License & Subscription Modal */}
+      {/* License & Subscription Modal with Lockout Enforcement */}
       <LicenseModal
-        isOpen={isLicenseOpen}
-        onClose={() => setIsLicenseOpen(false)}
+        isOpen={isLicenseOpen || isLicenseLockout}
+        onClose={() => {
+          if (!isLicenseLockout) {
+            setIsLicenseOpen(false)
+          }
+        }}
+        version="5.0.0"
+        isForceLockout={isLicenseLockout}
       />
 
       {/* Keyboard Shortcuts Modal */}
