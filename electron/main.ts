@@ -24,6 +24,7 @@ import {
 import { terminalService } from './terminal-service'
 import { updateService } from './update-service'
 import { antigravityBackendService } from './antigravity-backend-service'
+import { licenseService } from './license-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -453,6 +454,11 @@ terminalService.setupIPC(ipcMain, () => win)
 // Auto-Updater Subsystem IPC Handlers
 // ==========================================
 updateService.setupIPC(ipcMain, () => win)
+
+// ==========================================
+// Licensing & Activation IPC Handlers
+// ==========================================
+licenseService.setupIPC(ipcMain)
 
 app.on('second-instance', () => {
   if (win && !win.isDestroyed()) {

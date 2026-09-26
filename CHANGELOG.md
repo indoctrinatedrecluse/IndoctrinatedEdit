@@ -5,6 +5,40 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-09-26
+
+### 🚀 Major Release — Live Cloud Licensing, Node-Locked Hardware ID (HWID) Engine, 30-Day Persistent Trial, Ultra-Stylized Admin & Pro Editions, Windows Registry Storage, and Seat Management
+
+IndoctrinatedEdit 5.0.0 marks a major milestone with the launch of our enterprise-grade, node-locked licensing subsystem integrated with the live Licensor cloud platform (`https://licensor-h5zdysrkqa-uc.a.run.app`). The release introduces automated hardware fingerprinting, Windows Registry credential persistence, 30-day trial countdowns, license activation & deactivation, and ultra-stylized UI editions (including the vanity "Admin Edition" and "Pro Edition"):
+
+#### 🔑 Live Cloud Licensing & Multi-Tier License Governance
+- **Three Supported License Tiers**:
+  - **`ADM` (Administrator Edition)**: Unrestricted master license with automatic instant activation, bypassing all username/password checks and HWID seat limits.
+  - **`DEV` (Developer Pro Edition)**: Full developer tier backed by cloud seat activation and hardware lock validation.
+  - **`USER` (Pro Edition)**: Standard licensed edition with cloud validation, seat quotas, and credential verification.
+- **Hardware-Locked Machine Fingerprint (HWID)**:
+  - Generates a deterministic, node-locked machine fingerprint formatted as `HWID-XXXXXXXXXXXXXXXX` (24 characters) derived from SHA-256 hashes of the machine hostname, CPU architecture, core parameters, and host platform.
+- **Persistent Windows Registry & Storage Engine**:
+  - Automatically reads and synchronizes license credentials, status, and activation timestamps from `HKCU\Software\Indoctrinated\IndoctrinatedEdit` on Windows (using native `reg.exe` commands) with cross-platform JSON fallback under `%USERPROFILE%\.indoctrinated\license.json`.
+- **Persistent 30-Day Trial License**:
+  - Installations without an active `ADM`, `DEV`, or `USER` license automatically initialize a 30-day evaluation trial with remaining days countdown tracked across app restarts.
+- **Dynamic Masking & Key Reveal**:
+  - Displayed license keys preserve tier prefixes while masking middle and trailing digits (e.g. `ADM-xxxx-xxxx-xxxx`), with a 1-click **Reveal / Hide** toggle button.
+- **Seat Management & Clean Deactivation**:
+  - Active licenses feature a **Remove License** button that calls `POST /api/v1/license/deactivate` on the Licensor server, frees the machine's seat quota, clears local registry keys, and resets cleanly to a fresh 30-day Trial License.
+- **Pre-Locked Purchase License Gateway**:
+  - Added a disabled "Purchase License" button equipped with a "Coming Soon" indicator for upcoming web store integration.
+
+#### 👑 Ultra-Stylized UI Editions & Visual Vanity Badges
+- **Ultra-Stylized "Admin Edition" Badge**:
+  - Features an animated 24k liquid gold and imperial amethyst crystal gradient with shimmering highlights (`adminGoldShimmer`), floating crown icon, sparkling stars, and iridescent violet glow.
+- **"Pro Edition" & "Developer Pro Edition" Badges**:
+  - Sleek electric-azure and neon-violet glass badges for verified `USER` and `DEV` license holders.
+- **Preserved Legal & Permission Agreement**:
+  - Fully maintained comprehensive Terms & Conditions, copyright ownership notices, prior authorization requirements for forks/modifications, DMCA notices, and full collapsible license agreement text.
+
+---
+
 ## [4.9.1] - 2026-09-26
 
 ### 🩹 Hotfix — Industry-Standard xterm.js + node-pty Pseudoconsole (ConPTY) Subsystem, Working Interactive Keyboard Input, Clean Session Teardown (Zero Orphaned Processes), Full Path Resolution, Kill Terminal Button & System Terminal Launcher

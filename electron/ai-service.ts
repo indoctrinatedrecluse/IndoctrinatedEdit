@@ -135,7 +135,7 @@ async function streamOpenAiCompatible(
   }
   if (isAntigravity) {
     headers['X-Antigravity-Subscription-Tier'] = 'personal'
-    headers['X-Antigravity-Client'] = 'IndoctrinatedEdit/4.9.1'
+    headers['X-Antigravity-Client'] = 'IndoctrinatedEdit/5.0.0'
   }
 
   const res = await fetch(url, {

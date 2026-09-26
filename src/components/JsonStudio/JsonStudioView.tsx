@@ -23,7 +23,7 @@ export const JsonStudioView: React.FC = () => {
     JSON.stringify(
       {
         appName: 'IndoctrinatedEdit',
-        version: '4.9.1',
+        version: '5.0.0',
         activeProfile: 'Liquid Glass Dark Velvet',
         telemetry: { enabled: true, heartbeatMs: 5000 },
         users: [

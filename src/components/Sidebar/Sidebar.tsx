@@ -413,7 +413,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="settings-list">
             <div className="settings-row">
               <span>Version</span>
-              <span className="font-mono text-violet-400 font-semibold">v4.9.1</span>
+              <span className="font-mono text-violet-400 font-semibold">v5.0.0</span>
             </div>
             <div className="settings-row">
               <span>Release Channel</span>

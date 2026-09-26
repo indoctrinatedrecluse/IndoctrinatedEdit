@@ -9,8 +9,22 @@ import {
   ShieldCheck,
   FileText,
   GitFork,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Clock,
+  Laptop,
+  User,
+  Lock,
+  Trash2,
+  Sparkles,
+  AlertCircle,
+  Loader2,
+  Crown,
 } from 'lucide-react'
 import { AppIcon } from '../Brand/AppIcon'
+import { licenseService } from '../../services/licenseService'
+import { LicenseInfo } from '../../../electron/preload'
 
 interface LicenseModalProps {
   isOpen: boolean
@@ -72,22 +86,70 @@ THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`
 export const LicenseModal: React.FC<LicenseModalProps> = ({
   isOpen,
   onClose,
-  version = '4.9.1',
+  version = '5.0.0',
 }) => {
+  const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null)
+  const [isRevealed, setIsRevealed] = useState(false)
+  const [isEnterLicenseOpen, setIsEnterLicenseOpen] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+
+  // Activation form fields
+  const [keyInput, setKeyInput] = useState('')
+  const [userInput, setUserInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [isActivating, setIsActivating] = useState(false)
+  const [activationError, setActivationError] = useState<string | null>(null)
+  const [activationSuccess, setActivationSuccess] = useState<string | null>(null)
+
+  // Copy feedback states
+  const [copiedKey, setCopiedKey] = useState(false)
+  const [copiedHwid, setCopiedHwid] = useState(false)
   const [copiedEmail, setCopiedEmail] = useState(false)
   const [copiedLicense, setCopiedLicense] = useState(false)
   const [showFullText, setShowFullText] = useState(false)
+
+  // Load license info on modal open and subscribe to changes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsEnterLicenseOpen(false)
+      setConfirmRemove(false)
+      setActivationError(null)
+      setActivationSuccess(null)
+      return
+    }
+
+    const load = async () => {
+      const info = await licenseService.getInfo()
+      setLicenseInfo(info)
+    }
+
+    load()
+    const unsubscribe = licenseService.subscribe((info) => {
+      setLicenseInfo(info)
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [isOpen])
 
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose()
+        if (isEnterLicenseOpen) {
+          setIsEnterLicenseOpen(false)
+          setActivationError(null)
+        } else if (confirmRemove) {
+          setConfirmRemove(false)
+        } else {
+          onClose()
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
+  }, [isOpen, isEnterLicenseOpen, confirmRemove, onClose])
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(AUTHOR_EMAIL)
@@ -100,6 +162,84 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
     setCopiedLicense(true)
     setTimeout(() => setCopiedLicense(false), 2000)
   }
+
+  const handleCopyKey = () => {
+    if (licenseInfo?.licenseKey) {
+      navigator.clipboard.writeText(licenseInfo.licenseKey)
+      setCopiedKey(true)
+      setTimeout(() => setCopiedKey(false), 2000)
+    }
+  }
+
+  const handleCopyHwid = () => {
+    if (licenseInfo?.hwid) {
+      navigator.clipboard.writeText(licenseInfo.hwid)
+      setCopiedHwid(true)
+      setTimeout(() => setCopiedHwid(false), 2000)
+    }
+  }
+
+  const handleActivateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setActivationError(null)
+    setActivationSuccess(null)
+
+    const rawKey = keyInput.trim().toUpperCase()
+    if (!rawKey) {
+      setActivationError('Please enter a valid license key.')
+      return
+    }
+
+    const isAdm = rawKey.startsWith('ADM-') || rawKey.startsWith('ADMIN-')
+    if (!isAdm && !userInput.trim()) {
+      setActivationError('Username is required for this license.')
+      return
+    }
+
+    setIsActivating(true)
+    try {
+      const res = await licenseService.activate({
+        licenseKey: rawKey,
+        username: userInput.trim() || undefined,
+        password: passwordInput || undefined,
+      })
+
+      if (res.success) {
+        setActivationSuccess(res.message || 'License activated successfully!')
+        if (res.info) setLicenseInfo(res.info)
+        setTimeout(() => {
+          setIsEnterLicenseOpen(false)
+          setKeyInput('')
+          setUserInput('')
+          setPasswordInput('')
+          setActivationSuccess(null)
+        }, 1200)
+      } else {
+        setActivationError(res.error || 'Activation failed. Please verify credentials and seat limits.')
+      }
+    } catch (err: any) {
+      setActivationError(err.message || 'Network error communicating with license server.')
+    } finally {
+      setIsActivating(false)
+    }
+  }
+
+  const handleRemoveLicense = async () => {
+    try {
+      const res = await licenseService.remove()
+      if (res.info) {
+        setLicenseInfo(res.info)
+      }
+      setConfirmRemove(false)
+      setIsRevealed(false)
+    } catch (err: any) {
+      console.error('Failed to remove license:', err)
+    }
+  }
+
+  const isKeyAdm = keyInput.trim().toUpperCase().startsWith('ADM-') || keyInput.trim().toUpperCase().startsWith('ADMIN-')
+  const isKeyDev = keyInput.trim().toUpperCase().startsWith('DEV-')
+  const isKeyUser = keyInput.trim().toUpperCase().startsWith('USER-')
 
   return (
     <AnimatePresence>
@@ -119,7 +259,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
 
             {/* Header / Close Button */}
             <div className="license-modal-header">
-              <span className="license-modal-subtitle">SOFTWARE LICENSE & COPYRIGHT NOTICE</span>
+              <span className="license-modal-subtitle">SOFTWARE LICENSING & SUBSCRIPTION</span>
               <button className="license-close-btn glass-interactive" onClick={onClose} title="Close (Esc)">
                 <X size={14} />
               </button>
@@ -128,12 +268,21 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
             {/* App Branding & Tagline */}
             <div className="license-branding-section">
               <div className="license-icon-wrapper">
-                <AppIcon size={44} />
+                <AppIcon size={46} />
               </div>
               <div className="license-title-group">
                 <div className="license-app-name-row">
                   <h1 className="license-app-title">IndoctrinatedEdit</h1>
-                  <span className="license-pro-badge">PRO EDITION</span>
+                  {licenseInfo?.type === 'ADM' && (
+                    <span className="license-pro-badge adm-edition-ultra">
+                      <Crown size={12} className="adm-crown-icon" />
+                      <span className="adm-shine-text">ADMIN EDITION</span>
+                      <Sparkles size={11} className="adm-sparkles-icon" />
+                    </span>
+                  )}
+                  {licenseInfo?.type === 'DEV' && <span className="license-pro-badge dev">DEV PRO EDITION</span>}
+                  {licenseInfo?.type === 'USER' && <span className="license-pro-badge user">PRO EDITION</span>}
+                  {licenseInfo?.type === 'TRIAL' && <span className="license-pro-badge trial">TRIAL EDITION</span>}
                 </div>
                 <div className="license-version-row">
                   <span className="license-version-tag">v{version}</span>
@@ -143,6 +292,318 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* ========================================================= */}
+            {/* LIVE LICENSE STATUS & NODE-LOCKING CARD                   */}
+            {/* ========================================================= */}
+            <div className="license-status-master-card glass-interactive">
+              <div className="status-master-header">
+                <div className="status-title-row">
+                  <KeyRound size={15} className="status-icon" />
+                  <span className="status-main-heading">
+                    {licenseInfo?.type === 'TRIAL' ? 'TRIAL LICENSE' : licenseInfo?.typeName || 'ACTIVE LICENSE'}
+                  </span>
+                </div>
+                {licenseInfo?.type === 'TRIAL' ? (
+                  <span className={`status-pill ${licenseInfo.status === 'expired' ? 'pill-danger' : 'pill-warning'}`}>
+                    <Clock size={11} />
+                    {licenseInfo.status === 'expired'
+                      ? 'EXPIRED'
+                      : `${licenseInfo.trialDaysRemaining ?? 30} DAYS LEFT`}
+                  </span>
+                ) : (
+                  <span className="status-pill pill-success">
+                    <Check size={11} /> ACTIVE
+                  </span>
+                )}
+              </div>
+
+              {/* Body: Active License Mode vs Trial Mode */}
+              {licenseInfo && licenseInfo.type !== 'TRIAL' ? (
+                <div className="active-license-details">
+                  {/* License Key with Reveal Button */}
+                  <div className="license-field-row">
+                    <div className="field-info">
+                      <span className="field-label">LICENSE KEY</span>
+                      <code className="field-value key-value">
+                        {isRevealed
+                          ? licenseInfo.licenseKey
+                          : licenseInfo.maskedKey || licenseService.maskKey(licenseInfo.licenseKey)}
+                      </code>
+                    </div>
+                    <div className="field-actions">
+                      <button
+                        type="button"
+                        className="field-action-btn glass-interactive"
+                        onClick={() => setIsRevealed(!isRevealed)}
+                        title={isRevealed ? 'Hide license digits' : 'Reveal license key'}
+                      >
+                        {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                        <span>{isRevealed ? 'Hide' : 'Reveal'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`field-action-btn glass-interactive ${copiedKey ? 'copied' : ''}`}
+                        onClick={handleCopyKey}
+                        title="Copy License Key"
+                      >
+                        {copiedKey ? <Check size={13} /> : <Copy size={13} />}
+                        <span>{copiedKey ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Registered Owner & HWID Binding */}
+                  <div className="license-meta-grid">
+                    <div className="meta-box">
+                      <span className="meta-label">
+                        <User size={11} /> REGISTERED TO
+                      </span>
+                      <span className="meta-val">{licenseInfo.username || 'Authorized User'}</span>
+                    </div>
+                    <div className="meta-box">
+                      <span className="meta-label">
+                        <Laptop size={11} /> HARDWARE ID (NODE-LOCK)
+                      </span>
+                      <div className="hwid-val-row">
+                        <code className="hwid-code">{licenseInfo.hwid}</code>
+                        <button
+                          type="button"
+                          className="hwid-copy-icon-btn"
+                          onClick={handleCopyHwid}
+                          title="Copy HWID"
+                        >
+                          {copiedHwid ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Remove License Button & Confirmation */}
+                  <div className="license-management-footer">
+                    {!confirmRemove ? (
+                      <button
+                        type="button"
+                        className="remove-license-btn glass-interactive"
+                        onClick={() => setConfirmRemove(true)}
+                        title="Deactivate this machine and revert to a Trial License"
+                      >
+                        <Trash2 size={13} />
+                        <span>Remove License</span>
+                      </button>
+                    ) : (
+                      <div className="remove-confirm-bar">
+                        <span className="confirm-text">Deactivate machine & revert to 30-day Trial?</span>
+                        <div className="confirm-btns">
+                          <button
+                            type="button"
+                            className="confirm-yes-btn"
+                            onClick={handleRemoveLicense}
+                          >
+                            Yes, Deactivate
+                          </button>
+                          <button
+                            type="button"
+                            className="confirm-cancel-btn"
+                            onClick={() => setConfirmRemove(false)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Trial Mode View */
+                <div className="trial-license-details">
+                  <div className="trial-banner">
+                    <Clock size={16} className="trial-clock-icon" />
+                    <div className="trial-banner-text">
+                      <span className="trial-headline">
+                        {licenseInfo?.status === 'expired'
+                          ? 'Trial License Expired'
+                          : `30-Day Evaluation License (${licenseInfo?.trialDaysRemaining ?? 30} Days Remaining)`}
+                      </span>
+                      <span className="trial-subtext">
+                        {licenseInfo?.status === 'expired'
+                          ? 'Your evaluation period has ended. Activate a license to unlock full features.'
+                          : 'Full access to all editing, AI, compiler, terminal, and extension tools is unlocked.'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="trial-hwid-row">
+                    <span className="hwid-title">Machine HWID:</span>
+                    <code className="hwid-text">{licenseInfo?.hwid || 'Detecting...'}</code>
+                    <button
+                      type="button"
+                      className="hwid-copy-icon-btn"
+                      onClick={handleCopyHwid}
+                      title="Copy Hardware Fingerprint"
+                    >
+                      {copiedHwid ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+                    </button>
+                  </div>
+
+                  {/* Action Buttons: Enter License & Purchase License */}
+                  <div className="trial-action-buttons">
+                    <button
+                      type="button"
+                      className="enter-license-btn glass-interactive"
+                      onClick={() => {
+                        setIsEnterLicenseOpen(true)
+                        setActivationError(null)
+                      }}
+                    >
+                      <Sparkles size={14} />
+                      <span>Enter License</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="purchase-license-btn disabled"
+                      disabled
+                      title="Online purchasing coming soon (Website currently in progress)"
+                    >
+                      <Lock size={13} />
+                      <span>Purchase License</span>
+                      <span className="coming-soon-badge">Coming Soon</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ========================================================= */}
+            {/* INLINE "ENTER LICENSE" ACTIVATION MODAL FORM             */}
+            {/* ========================================================= */}
+            <AnimatePresence>
+              {isEnterLicenseOpen && (
+                <motion.form
+                  className="activation-form-card glass-panel"
+                  onSubmit={handleActivateSubmit}
+                  initial={{ opacity: 0, height: 0, y: -10 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="activation-card-header">
+                    <div className="activation-heading-row">
+                      <KeyRound size={15} className="text-cyan" />
+                      <span>ACTIVATE PRODUCT LICENSE</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="form-close-btn"
+                      onClick={() => setIsEnterLicenseOpen(false)}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+
+                  {/* License Key Input */}
+                  <div className="form-group">
+                    <div className="form-label-row">
+                      <label htmlFor="license-key-input">License Key</label>
+                      {isKeyAdm && <span className="key-detect-tag adm">ADM (Admin Bypass)</span>}
+                      {isKeyDev && <span className="key-detect-tag dev">DEV (Developer)</span>}
+                      {isKeyUser && <span className="key-detect-tag user">USER (Retail)</span>}
+                    </div>
+                    <input
+                      id="license-key-input"
+                      type="text"
+                      className="license-input mono"
+                      placeholder="e.g. USER-XXXX-XXXX-XXXX or ADM-XXXX-XXXX-XXXX"
+                      value={keyInput}
+                      onChange={(e) => setKeyInput(e.target.value)}
+                      autoFocus
+                      required
+                    />
+                  </div>
+
+                  {/* Username (Optional for ADM, required for USER/DEV) */}
+                  <div className="form-group">
+                    <label htmlFor="license-username-input">
+                      Username {isKeyAdm && <span className="optional-tag">(Optional for Admin)</span>}
+                    </label>
+                    <input
+                      id="license-username-input"
+                      type="text"
+                      className="license-input"
+                      placeholder={isKeyAdm ? 'Administrator' : 'License owner username'}
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      required={!isKeyAdm}
+                    />
+                  </div>
+
+                  {/* Password (Optional for ADM, required for assigned USER/DEV) */}
+                  <div className="form-group">
+                    <label htmlFor="license-password-input">
+                      Password {isKeyAdm && <span className="optional-tag">(Optional for Admin)</span>}
+                    </label>
+                    <input
+                      id="license-password-input"
+                      type="password"
+                      className="license-input"
+                      placeholder={isKeyAdm ? 'Bypassed for Admin' : 'License owner password'}
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Hardware Fingerprint Note */}
+                  <div className="hwid-info-notice">
+                    <Laptop size={13} className="notice-icon" />
+                    <span>Machine HWID: <code>{licenseInfo?.hwid || 'HWID-AUTO-DETECT'}</code> will be bound to this seat.</span>
+                  </div>
+
+                  {/* Error & Success Messages */}
+                  {activationError && (
+                    <div className="form-alert error">
+                      <AlertCircle size={14} />
+                      <span>{activationError}</span>
+                    </div>
+                  )}
+
+                  {activationSuccess && (
+                    <div className="form-alert success">
+                      <Check size={14} />
+                      <span>{activationSuccess}</span>
+                    </div>
+                  )}
+
+                  {/* Form Action Buttons */}
+                  <div className="form-actions-row">
+                    <button
+                      type="button"
+                      className="cancel-form-btn glass-interactive"
+                      onClick={() => setIsEnterLicenseOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="submit-form-btn glass-interactive"
+                      disabled={isActivating || !keyInput.trim()}
+                    >
+                      {isActivating ? (
+                        <>
+                          <Loader2 size={13} className="spin-icon" />
+                          <span>Verifying...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check size={13} />
+                          <span>Activate Now</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
 
             {/* Author Contact & Permission Card */}
             <div className="license-key-card glass-interactive">
@@ -244,7 +705,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
               .modal-backdrop {
                 position: fixed;
                 inset: 0;
-                background: rgba(4, 6, 12, 0.72);
+                background: rgba(4, 6, 12, 0.76);
                 backdrop-filter: blur(16px);
                 -webkit-backdrop-filter: blur(16px);
                 display: flex;
@@ -256,7 +717,7 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
 
               .license-modal {
                 width: 100%;
-                max-width: 540px;
+                max-width: 580px;
                 max-height: 90vh;
                 overflow-y: auto;
                 border-radius: var(--radius-lg);
@@ -356,14 +817,67 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
               }
 
               .license-pro-badge {
-                font-size: 10px;
+                display: inline-flex;
+                align-items: center;
+                gap: 4.5px;
+                font-size: 9.5px;
                 font-weight: 800;
                 letter-spacing: 0.6px;
-                padding: 2px 6px;
-                border-radius: 4px;
-                background: linear-gradient(135deg, #0A84FF 0%, #BF5AF2 100%);
+                padding: 2.5px 8px;
+                border-radius: 5px;
                 color: #FFF;
-                box-shadow: 0 0 12px rgba(10, 132, 255, 0.35);
+              }
+              .license-pro-badge.adm-edition-ultra {
+                background: linear-gradient(135deg, #FFD700 0%, #FF9500 30%, #FF2D55 70%, #AF52DE 100%);
+                background-size: 200% 200%;
+                animation: adminGoldShimmer 4s ease infinite;
+                border: 1px solid rgba(255, 235, 100, 0.75);
+                box-shadow: 0 0 16px rgba(255, 170, 0, 0.6), 0 0 28px rgba(175, 82, 222, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+                position: relative;
+                overflow: hidden;
+              }
+              .adm-crown-icon {
+                color: #FFF275;
+                filter: drop-shadow(0 0 4px #FFD700);
+                animation: crownFloat 2s ease-in-out infinite alternate;
+              }
+              .adm-sparkles-icon {
+                color: #FFFFFF;
+                filter: drop-shadow(0 0 4px #FFF);
+                animation: sparkleTwinkle 1.8s ease-in-out infinite alternate;
+              }
+              .adm-shine-text {
+                font-weight: 900;
+                letter-spacing: 0.8px;
+              }
+              @keyframes adminGoldShimmer {
+                0% { background-position: 0% 50%; }
+                50% { background-position: 100% 50%; }
+                100% { background-position: 0% 50%; }
+              }
+              @keyframes crownFloat {
+                0% { transform: translateY(0px) rotate(0deg); }
+                100% { transform: translateY(-1.5px) rotate(-3deg); }
+              }
+              @keyframes sparkleTwinkle {
+                0% { transform: scale(0.85); opacity: 0.8; }
+                100% { transform: scale(1.15); opacity: 1; }
+              }
+              .license-pro-badge.dev {
+                background: linear-gradient(135deg, #BF5AF2 0%, #5E5CE6 100%);
+                box-shadow: 0 0 12px rgba(191, 90, 242, 0.4);
+                border: 1px solid rgba(191, 90, 242, 0.35);
+              }
+              .license-pro-badge.user {
+                background: linear-gradient(135deg, #0A84FF 0%, #64D2FF 100%);
+                box-shadow: 0 0 12px rgba(10, 132, 255, 0.4);
+                border: 1px solid rgba(100, 210, 255, 0.35);
+              }
+              .license-pro-badge.trial {
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                color: var(--text-primary);
               }
 
               .license-version-row {
@@ -392,6 +906,573 @@ export const LicenseModal: React.FC<LicenseModalProps> = ({
                 color: rgba(235, 235, 245, 0.75);
               }
 
+              /* Status Master Card */
+              .license-status-master-card {
+                padding: 14px 16px;
+                border-radius: var(--radius-md);
+                background: rgba(10, 14, 26, 0.65);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                margin-bottom: 14px;
+                position: relative;
+                z-index: 2;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+              }
+
+              .status-master-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+                padding-bottom: 8px;
+              }
+
+              .status-title-row {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+              }
+
+              .status-icon {
+                color: #64D2FF;
+              }
+
+              .status-main-heading {
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+                color: #FFF;
+              }
+
+              .status-pill {
+                font-size: 10px;
+                font-weight: 700;
+                padding: 2px 8px;
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                letter-spacing: 0.4px;
+              }
+              .status-pill.pill-success {
+                background: rgba(48, 209, 88, 0.18);
+                color: #30D158;
+                border: 1px solid rgba(48, 209, 88, 0.35);
+              }
+              .status-pill.pill-warning {
+                background: rgba(255, 159, 10, 0.18);
+                color: #FF9F0A;
+                border: 1px solid rgba(255, 159, 10, 0.35);
+              }
+              .status-pill.pill-danger {
+                background: rgba(255, 69, 58, 0.18);
+                color: #FF453A;
+                border: 1px solid rgba(255, 69, 58, 0.35);
+              }
+
+              /* Active License details */
+              .active-license-details {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+              }
+
+              .license-field-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                background: rgba(0, 0, 0, 0.35);
+                padding: 8px 12px;
+                border-radius: var(--radius-sm);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+              }
+
+              .field-info {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              }
+
+              .field-label {
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 0.6px;
+                color: var(--text-muted);
+              }
+
+              .key-value {
+                font-size: 12.5px;
+                font-weight: 700;
+                color: #64D2FF;
+                letter-spacing: 1px;
+                user-select: all;
+              }
+
+              .field-actions {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+              }
+
+              .field-action-btn {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 10.5px;
+                font-weight: 600;
+                padding: 4px 8px;
+                border-radius: var(--radius-xs);
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                color: var(--text-primary);
+                cursor: pointer;
+                transition: all 0.12s;
+              }
+              .field-action-btn:hover {
+                background: rgba(255, 255, 255, 0.12);
+              }
+              .field-action-btn.copied {
+                color: #30D158;
+                border-color: rgba(48, 209, 88, 0.4);
+              }
+
+              .license-meta-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+              }
+
+              .meta-box {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                padding: 6px 10px;
+                border-radius: var(--radius-xs);
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+              }
+
+              .meta-label {
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+                color: var(--text-muted);
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              }
+
+              .meta-val {
+                font-size: 11px;
+                font-weight: 600;
+                color: #FFF;
+              }
+
+              .hwid-val-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 4px;
+              }
+
+              .hwid-code {
+                font-size: 10px;
+                color: #A4FFFF;
+                font-family: var(--font-mono);
+              }
+
+              .hwid-copy-icon-btn {
+                background: none;
+                border: none;
+                color: var(--text-muted);
+                cursor: pointer;
+                padding: 1px 3px;
+                display: flex;
+                align-items: center;
+              }
+              .hwid-copy-icon-btn:hover {
+                color: #FFF;
+              }
+
+              .license-management-footer {
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 4px;
+              }
+
+              .remove-license-btn {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 10.5px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: var(--radius-xs);
+                background: rgba(255, 69, 58, 0.1);
+                border: 1px solid rgba(255, 69, 58, 0.3);
+                color: #FF6E6E;
+                cursor: pointer;
+                transition: all 0.15s;
+              }
+              .remove-license-btn:hover {
+                background: rgba(255, 69, 58, 0.2);
+                border-color: rgba(255, 69, 58, 0.5);
+              }
+
+              .remove-confirm-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+                background: rgba(255, 69, 58, 0.14);
+                border: 1px solid rgba(255, 69, 58, 0.4);
+                padding: 6px 10px;
+                border-radius: var(--radius-xs);
+                gap: 8px;
+              }
+
+              .confirm-text {
+                font-size: 10.5px;
+                font-weight: 600;
+                color: #FFF;
+              }
+
+              .confirm-btns {
+                display: flex;
+                gap: 5px;
+              }
+
+              .confirm-yes-btn {
+                background: #FF453A;
+                color: #FFF;
+                border: none;
+                padding: 3px 8px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 700;
+                cursor: pointer;
+              }
+
+              .confirm-cancel-btn {
+                background: rgba(255, 255, 255, 0.1);
+                color: #FFF;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                padding: 3px 8px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+                cursor: pointer;
+              }
+
+              /* Trial License details */
+              .trial-license-details {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+              }
+
+              .trial-banner {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: rgba(255, 159, 10, 0.08);
+                border: 1px solid rgba(255, 159, 10, 0.25);
+                padding: 8px 12px;
+                border-radius: var(--radius-sm);
+              }
+
+              .trial-clock-icon {
+                color: #FF9F0A;
+                flex-shrink: 0;
+              }
+
+              .trial-banner-text {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              }
+
+              .trial-headline {
+                font-size: 11.5px;
+                font-weight: 700;
+                color: #FFFFFF;
+              }
+
+              .trial-subtext {
+                font-size: 10.5px;
+                color: rgba(235, 235, 245, 0.7);
+              }
+
+              .trial-hwid-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 10.5px;
+                background: rgba(0, 0, 0, 0.3);
+                padding: 6px 10px;
+                border-radius: var(--radius-xs);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+              }
+
+              .hwid-title {
+                color: var(--text-muted);
+                font-weight: 600;
+              }
+
+              .hwid-text {
+                color: #64D2FF;
+                font-family: var(--font-mono);
+                flex: 1;
+              }
+
+              .trial-action-buttons {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-top: 4px;
+              }
+
+              .enter-license-btn {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                padding: 8px 14px;
+                border-radius: var(--radius-sm);
+                background: linear-gradient(135deg, #0A84FF 0%, #0066CC 100%);
+                border: 1px solid rgba(100, 210, 255, 0.4);
+                color: #FFFFFF;
+                font-size: 11.5px;
+                font-weight: 700;
+                cursor: pointer;
+                box-shadow: 0 4px 14px rgba(10, 132, 255, 0.3);
+                transition: all 0.15s;
+              }
+              .enter-license-btn:hover {
+                background: linear-gradient(135deg, #2A94FF 0%, #0077EE 100%);
+                transform: translateY(-1px);
+                box-shadow: 0 6px 18px rgba(10, 132, 255, 0.45);
+              }
+
+              .purchase-license-btn {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                padding: 8px 14px;
+                border-radius: var(--radius-sm);
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: var(--text-muted);
+                font-size: 11.5px;
+                font-weight: 600;
+                cursor: not-allowed;
+                position: relative;
+              }
+              .coming-soon-badge {
+                font-size: 8px;
+                font-weight: 800;
+                background: rgba(255, 255, 255, 0.12);
+                padding: 1px 4px;
+                border-radius: 3px;
+                color: #A0AAB8;
+                letter-spacing: 0.4px;
+              }
+
+              /* Inline Activation Form */
+              .activation-form-card {
+                background: rgba(14, 20, 36, 0.95);
+                border: 1px solid rgba(100, 210, 255, 0.3);
+                border-radius: var(--radius-md);
+                padding: 14px;
+                margin-bottom: 14px;
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+                position: relative;
+                z-index: 5;
+              }
+
+              .activation-card-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 12px;
+                padding-bottom: 6px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+              }
+
+              .activation-heading-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.6px;
+                color: #FFF;
+              }
+
+              .form-close-btn {
+                background: none;
+                border: none;
+                color: var(--text-muted);
+                cursor: pointer;
+                padding: 2px;
+              }
+              .form-close-btn:hover {
+                color: #FFF;
+              }
+
+              .form-group {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                margin-bottom: 10px;
+              }
+
+              .form-label-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+              }
+
+              .form-group label {
+                font-size: 10.5px;
+                font-weight: 700;
+                color: var(--text-secondary);
+              }
+
+              .optional-tag {
+                font-size: 9px;
+                color: var(--text-muted);
+                font-weight: 500;
+              }
+
+              .key-detect-tag {
+                font-size: 9px;
+                font-weight: 800;
+                padding: 1px 5px;
+                border-radius: 3px;
+              }
+              .key-detect-tag.adm {
+                background: rgba(255, 159, 10, 0.2);
+                color: #FFB340;
+                border: 1px solid rgba(255, 159, 10, 0.4);
+              }
+              .key-detect-tag.dev {
+                background: rgba(191, 90, 242, 0.2);
+                color: #DA8FFF;
+                border: 1px solid rgba(191, 90, 242, 0.4);
+              }
+              .key-detect-tag.user {
+                background: rgba(10, 132, 255, 0.2);
+                color: #64D2FF;
+                border: 1px solid rgba(10, 132, 255, 0.4);
+              }
+
+              .license-input {
+                background: rgba(0, 0, 0, 0.5);
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: var(--radius-xs);
+                padding: 6px 10px;
+                color: #FFF;
+                font-size: 11.5px;
+                outline: none;
+                transition: border-color 0.15s;
+              }
+              .license-input:focus {
+                border-color: #0A84FF;
+                box-shadow: 0 0 8px rgba(10, 132, 255, 0.3);
+              }
+              .license-input.mono {
+                font-family: var(--font-mono);
+                letter-spacing: 0.5px;
+              }
+
+              .hwid-info-notice {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 10px;
+                color: var(--text-muted);
+                background: rgba(255, 255, 255, 0.03);
+                padding: 5px 8px;
+                border-radius: var(--radius-xs);
+                margin-bottom: 10px;
+              }
+              .hwid-info-notice code {
+                color: #64D2FF;
+              }
+
+              .form-alert {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11px;
+                padding: 7px 10px;
+                border-radius: var(--radius-xs);
+                margin-bottom: 10px;
+              }
+              .form-alert.error {
+                background: rgba(255, 69, 58, 0.15);
+                border: 1px solid rgba(255, 69, 58, 0.35);
+                color: #FF6E6E;
+              }
+              .form-alert.success {
+                background: rgba(48, 209, 88, 0.15);
+                border: 1px solid rgba(48, 209, 88, 0.35);
+                color: #30D158;
+              }
+
+              .form-actions-row {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 8px;
+                margin-top: 4px;
+              }
+
+              .cancel-form-btn {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                color: var(--text-secondary);
+                padding: 6px 12px;
+                border-radius: var(--radius-xs);
+                font-size: 11px;
+                font-weight: 600;
+                cursor: pointer;
+              }
+
+              .submit-form-btn {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                background: linear-gradient(135deg, #0A84FF 0%, #0066CC 100%);
+                border: 1px solid rgba(100, 210, 255, 0.4);
+                color: #FFF;
+                padding: 6px 14px;
+                border-radius: var(--radius-xs);
+                font-size: 11px;
+                font-weight: 700;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(10, 132, 255, 0.3);
+              }
+              .submit-form-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+              }
+
+              .spin-icon {
+                animation: spin 1s linear infinite;
+              }
+
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+
+              /* Author info card */
               .license-key-card {
                 padding: 12px 14px;
                 border-radius: var(--radius-md);

@@ -149,6 +149,47 @@ export interface ElectronUpdaterAPI {
   onDownloadProgress: (callback: (progress: any) => void) => () => void
 }
 
+export type LicenseType = 'ADM' | 'DEV' | 'USER' | 'TRIAL'
+export type LicenseStatus = 'active' | 'trial' | 'expired' | 'revoked'
+
+export interface LicenseInfo {
+  type: LicenseType
+  typeName: string
+  licenseKey?: string
+  maskedKey?: string
+  username?: string
+  hwid: string
+  status: LicenseStatus
+  trialDaysRemaining?: number
+  trialStartedAt?: string
+  activatedAt?: string
+  expiresAt?: string | null
+  isValid: boolean
+  isTrial: boolean
+  machineName: string
+}
+
+export interface LicenseActivationRequest {
+  licenseKey: string
+  username?: string
+  password?: string
+}
+
+export interface LicenseActionResult {
+  success: boolean
+  message?: string
+  error?: string
+  info?: LicenseInfo
+}
+
+export interface ElectronLicenseAPI {
+  getInfo: () => Promise<LicenseInfo>
+  getHwid: () => Promise<string>
+  activate: (request: LicenseActivationRequest) => Promise<LicenseActionResult>
+  validate: () => Promise<{ valid: boolean; message?: string; info: LicenseInfo }>
+  remove: () => Promise<LicenseActionResult>
+}
+
 export interface ElectronAPI {
   minimize: () => Promise<void>
   maximize: () => Promise<boolean>
@@ -183,6 +224,9 @@ export interface ElectronAPI {
 
   // Auto-updater operations
   updater: ElectronUpdaterAPI
+
+  // Licensing & Activation subsystem
+  license: ElectronLicenseAPI
 
   // Lifecycle notification
   notifyReady: () => Promise<void>
@@ -292,6 +336,14 @@ const api: ElectronAPI = {
         ipcRenderer.removeListener('updater:downloadProgress', handler)
       }
     },
+  },
+
+  license: {
+    getInfo: () => ipcRenderer.invoke('license:getInfo'),
+    getHwid: () => ipcRenderer.invoke('license:getHwid'),
+    activate: (request) => ipcRenderer.invoke('license:activate', request),
+    validate: () => ipcRenderer.invoke('license:validate'),
+    remove: () => ipcRenderer.invoke('license:remove'),
   },
 
   notifyReady: () => ipcRenderer.invoke('app:ready'),
