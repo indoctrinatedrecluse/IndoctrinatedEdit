@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import {
   getRepoStatus,
   stageFile,
@@ -91,7 +92,10 @@ function createWindow() {
   let preloadPath = path.join(__dirname, 'preload.cjs')
   for (const candidate of candidatePreloadPaths) {
     try {
-      if (require('node:fs').existsSync(candidate)) {
+      // NOTE: must not use a bare `require` here - the Electron main process is
+      // bundled as ESM, where `require` is undefined and the ReferenceError was
+      // previously swallowed, silently disabling this fallback search.
+      if (existsSync(candidate)) {
         preloadPath = candidate
         break
       }
@@ -182,6 +186,18 @@ function createWindow() {
   win.on('maximize', sendMaxState)
   win.on('unmaximize', sendMaxState)
   win.on('restore', sendMaxState)
+
+  // Native close paths (Alt+F4, taskbar/title-bar close) must tear the terminal
+  // process trees down as well. The in-app close button goes through the
+  // `window:close` IPC handler below, which does the same thing - killAll() is
+  // idempotent, so both hooks can safely run.
+  win.on('close', () => {
+    try {
+      terminalService.killAll()
+    } catch (e) {
+      console.warn('[Main] Error killing terminals on window close:', e)
+    }
+  })
 }
 
 // IPC Handlers for frameless window controls

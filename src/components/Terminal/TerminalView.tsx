@@ -15,7 +15,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { terminalService, TerminalTab } from '../../services/terminalService'
-import { ShellProfile } from '../../../electron/preload'
+import { ShellProfile, TerminalDiagnostics } from '../../../electron/preload'
 
 interface TerminalViewProps {
   onOpenConfig?: () => void
@@ -37,6 +37,20 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
 
   useEffect(() => {
     if (!containerRef.current) return
+
+    // Tell xterm.js which pseudo-console is actually driving this session so its
+    // Windows line-wrap / reflow workarounds match reality. A hard-coded fake
+    // build number previously mismatched the host OS (and, because node-pty
+    // silently failed to load, described a ConPTY that was not in use at all).
+    const windowsPty =
+      tab.ptyBackend === 'conpty'
+        ? {
+            backend: 'conpty' as const,
+            ...(tab.osBuild && tab.osBuild > 0 ? { buildNumber: tab.osBuild } : {}),
+          }
+        : tab.ptyBackend === 'winpty'
+          ? { backend: 'winpty' as const }
+          : undefined
 
     const term = new Terminal({
       cursorBlink: true,
@@ -69,11 +83,10 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
       },
       allowTransparency: true,
       scrollback: 5000,
-      convertEol: true,
-      windowsPty: {
-        backend: 'conpty',
-        buildNumber: 22000,
-      },
+      // `convertEol` MUST stay disabled. It rewrites every LF as CRLF in the
+      // output stream, which destroys the explicit cursor addressing that
+      // full-screen TUIs (`ir pmon`, `ir nettop`, htop, curses apps) depend on.
+      ...(windowsPty ? { windowsPty } : {}),
     })
 
     // Prevent browser focus trap on Tab while allowing xterm to handle Tab and all terminal keys natively
@@ -166,6 +179,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
   const [isTuiMode, setIsTuiMode] = useState<boolean>(false)
+  // Tabs that flipped into the alternate screen buffer (i.e. a full-screen TUI
+  // such as `ir pmon` is running). Tracked automatically so raw key routing and
+  // the on-screen control pad arm themselves without user intervention.
+  const [autoTuiTabIds, setAutoTuiTabIds] = useState<string[]>([])
+  const [ptyDiagnostics, setPtyDiagnostics] = useState<TerminalDiagnostics | null>(null)
 
   // Initialize terminal subsystem on mount
   useEffect(() => {
@@ -175,6 +193,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       const detected = await terminalService.initialize()
       if (!isMounted) return
       setProfiles(detected)
+      setPtyDiagnostics(terminalService.getPtyDiagnostics())
 
       const existingTabs = terminalService.getTabs()
       if (existingTabs.length === 0) {
@@ -194,6 +213,36 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       isMounted = false
     }
   }, [workspacePath])
+
+  // Auto-arm TUI mode whenever a pane enters the alternate screen buffer.
+  useEffect(() => {
+    const unsubscribe = terminalService.onTuiState('*', (active, tabId) => {
+      setAutoTuiTabIds((prev) => {
+        if (active) {
+          return prev.includes(tabId) ? prev : [...prev, tabId]
+        }
+        return prev.includes(tabId) ? prev.filter((id) => id !== tabId) : prev
+      })
+    })
+    return unsubscribe
+  }, [])
+
+  // Close a tab the moment its shell ends on its own - the user typed `exit`,
+  // pressed Ctrl+D, or the shell crashed. The main process has already released
+  // the pseudo-console and reaped the session's process tree, so this only has
+  // to mirror the service's tab list and drop the now-dead pane.
+  useEffect(() => {
+    const unsubscribe = terminalService.onSessionExit(() => {
+      const remaining = terminalService.getTabs()
+      setTabs(remaining)
+      setActiveTabId((prev) =>
+        prev && remaining.some((t) => t.id === prev) ? prev : remaining[0]?.id ?? null
+      )
+      setSplitTabId((prev) => (prev && remaining.some((t) => t.id === prev) ? prev : null))
+      setAutoTuiTabIds((prev) => prev.filter((id) => remaining.some((t) => t.id === id)))
+    })
+    return unsubscribe
+  }, [])
 
   const handleCreateNewTab = async (shellId?: string) => {
     setIsDropdownOpen(false)
@@ -270,6 +319,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0]
   const splitTab = splitTabId ? tabs.find((t) => t.id === splitTabId) : null
+  // TUI key routing is armed either manually (toolbar toggle) or automatically
+  // when the active pane is running a full-screen program in the alt buffer.
+  const isActiveTabTui = !!activeTab && (isTuiMode || autoTuiTabIds.includes(activeTab.id))
+  const isPtyDegraded = !!ptyDiagnostics && !ptyDiagnostics.ptyAvailable
 
   return (
     <div className="terminal-subsystem-root">
@@ -340,12 +393,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
 
           {/* TUI / CLI Graphical Mode Toggle */}
           <button
-            className={`term-icon-btn tui-toggle-btn glass-interactive ${isTuiMode ? 'active-tui' : ''}`}
+            className={`term-icon-btn tui-toggle-btn glass-interactive ${isActiveTabTui ? 'active-tui' : ''}`}
             onClick={() => setIsTuiMode((prev) => !prev)}
             title={
-              isTuiMode
-                ? 'TUI Live Control Pad Enabled (Click on-screen controls to navigate TUIs)'
-                : 'Enable TUI On-Screen Navigation Controls'
+              isActiveTabTui
+                ? 'TUI Live Control Pad Enabled (raw keys + on-screen controls are routed to the TUI)'
+                : 'Enable TUI On-Screen Navigation Controls (auto-arms when a full-screen TUI starts)'
             }
           >
             <Gamepad2 size={13} />
@@ -406,12 +459,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       </div>
 
       {/* Terminal Viewport / Split Area */}
+      {isPtyDegraded && (
+        <div className="terminal-pty-warning" role="alert">
+          <span className="pty-warning-icon">⚠</span>
+          <span>
+            Terminal is running <strong>without a pseudo-console</strong> — Backspace, Tab
+            completion, Ctrl+C and TUI keypresses will not work. Native module: node-pty
+            {ptyDiagnostics?.ptyLoadError ? ` (${ptyDiagnostics.ptyLoadError})` : ''}
+          </span>
+        </div>
+      )}
       <div className={`terminal-viewport-container ${splitTab ? 'split-active' : ''}`}>
         {activeTab ? (
-          <div className="terminal-pane">
+          <div className="terminal-pane" data-tui-active={isActiveTabTui ? 'true' : 'false'}>
             <XTermPane tab={activeTab} isActive={true} onTermReady={handleTermReady} />
             {/* TUI Interactive On-Screen Quick Control Pad */}
-            {isTuiMode && (
+            {isActiveTabTui && (
               <div className="tui-keypad-toolbar">
                 {/* D-Pad Arrows */}
                 <div className="keypad-group d-pad">
@@ -966,6 +1029,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
           background: rgba(255, 179, 0, 0.18);
           border-color: rgba(255, 179, 0, 0.35);
           color: #ffd54f;
+        }
+
+        .terminal-pty-warning {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 12px;
+          background: rgba(255, 179, 0, 0.14);
+          border-bottom: 1px solid rgba(255, 179, 0, 0.35);
+          color: #ffd54f;
+          font-size: 11px;
+          line-height: 1.4;
+        }
+
+        .terminal-pty-warning .pty-warning-icon {
+          font-size: 13px;
+          flex-shrink: 0;
+        }
+
+        .terminal-pty-warning strong {
+          color: #ffffff;
+          font-weight: 600;
         }
 
         .terminal-empty-state {

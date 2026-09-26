@@ -77,6 +77,20 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       const key = e.key.toLowerCase()
       const now = Date.now()
 
+      // While a full-screen TUI (`ir pmon`, `ir nettop`, htop, vim ...) is running
+      // in the focused terminal pane, its raw keystrokes - including Ctrl+<key>
+      // chords such as Ctrl+C / Ctrl+R / Ctrl+W - must reach that program instead
+      // of being swallowed by the workbench accelerators below. The terminal pane
+      // marks itself with `data-tui-active="true"` while TUI routing is armed.
+      const eventTarget = e.target as HTMLElement | null
+      const activeElement = (
+        typeof document !== 'undefined' ? document.activeElement : null
+      ) as HTMLElement | null
+      const inTuiPane =
+        !!eventTarget?.closest?.('[data-tui-active="true"]') ||
+        !!activeElement?.closest?.('[data-tui-active="true"]')
+      if (inTuiPane) return
+
       // Handle chord sequences (e.g. Ctrl+K followed by Ctrl+O or Ctrl+S)
       if (chordRef.current && now - chordRef.current.time < 2000) {
         if (chordRef.current.key === 'k') {

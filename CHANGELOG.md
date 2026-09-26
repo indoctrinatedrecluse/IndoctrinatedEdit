@@ -5,11 +5,13 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.9.1] - 2026-09-25
+## [4.9.1] - 2026-09-26
 
-### 🩹 Hotfix — Industry-Standard xterm.js + node-pty Pseudoconsole (ConPTY) Subsystem, Native PTY Streaming, Full Path Resolution, Kill Terminal Button & System Terminal Launcher
+### 🩹 Hotfix — Industry-Standard xterm.js + node-pty Pseudoconsole (ConPTY) Subsystem, Working Interactive Keyboard Input, Clean Session Teardown (Zero Orphaned Processes), Full Path Resolution, Kill Terminal Button & System Terminal Launcher
 
-IndoctrinatedEdit 4.9.1 delivers an overhaul of the integrated terminal subsystem, bringing the pre-optimized Monaco/VS Code standard stack (**`@xterm/xterm`** + **`node-pty`**) into IndoctrinatedEdit alongside full absolute working directory path resolution, a one-click "Kill Terminal" session control, an external system terminal launcher, and editor scroll stabilization:
+IndoctrinatedEdit 4.9.1 delivers an overhaul of the integrated terminal subsystem, bringing the pre-optimized Monaco/VS Code standard stack (**`@xterm/xterm`** + **`node-pty`**) into IndoctrinatedEdit alongside working interactive keyboard input, leak-free session teardown, full absolute working directory path resolution, a one-click "Kill Terminal" session control, an external system terminal launcher, and editor scroll stabilization:
+
+> **This hotfix ships the actual fixes behind the 4.9.1 terminal overhaul.** The native `node-pty` module previously failed to load inside the ESM main-process bundle, so every terminal silently fell back to a non-TTY pipe with **no pseudo-console at all** — `cmd.exe` looked dead, PowerShell ignored <kbd>Backspace</kbd>/<kbd>Tab</kbd>, and full-screen TUIs never received a single keypress. This release makes input, full-screen TUIs, session termination and process-tree cleanup behave correctly on Windows and POSIX.
 
 #### 🎮 xterm.js + node-pty Native PTY Pipeline & Interactive TUI Execution
 - **Pre-Optimized xterm.js + ConPTY Engine**:
@@ -19,14 +21,32 @@ IndoctrinatedEdit 4.9.1 delivers an overhaul of the integrated terminal subsyste
   - Auto-resizing viewport with `ResizeObserver` dynamically synchronizing terminal row/column geometry to the backend PTY.
 - **Full Absolute Working Directory Path Resolution**:
   - Resolved absolute working directory filesystem paths (`info.cwd` / `path.resolve`) in both the backend PTY session manager and tab state.
+- **Native Module Loading Fix (root cause of the dead `cmd.exe` and broken PowerShell input)**:
+  - The Electron main process is bundled as **ESM**, where a bare CommonJS `require()` throws `ReferenceError: require is not defined`. That error was swallowed by a `try`/`catch`, so `node-pty` was never loaded and **every** session degraded to a `child_process.spawn()` pipe without a pseudo-console.
+  - `electron/terminal-service.ts` now resolves the native addon through `createRequire(import.meta.url)`, restoring a real ConPTY on Windows, and reports `ptyAvailable` / `ptyLoadError` / backend / `osBuild` through a new `terminal:getDiagnostics` IPC channel.
+  - Degraded mode is no longer silent: the terminal pane shows an explicit warning banner (and a `data-tui-active` marker) instead of quietly dropping input support.
+  - Removed the last bare `require()` from `electron/main.ts` (preload discovery now uses a static `node:fs` import) and removed the hard-coded fake ConPTY build number (`22000`) so xterm.js applies workarounds matching the real host OS rather than a fabricated one.
+  - Packaged builds now ship **and unpack** the native binaries (`node-pty/**/*` in `files` + `asarUnpack`), which `*.node`, `conpty.dll` and `OpenConsole.exe` require in order to load from outside the asar archive.
+  - Removed `convertEol: true`, which was corrupting full-screen TUI cursor addressing.
 
 #### 🔴 Enhanced Header Controls, External Launcher & TUI Keypad Dock
 - **"Open in System Terminal" Launcher**:
   - Added a 1-click external terminal button to launch the active workspace directly inside native OS terminal instances (Windows Terminal, Windows PowerShell, PowerShell 7, Git Bash, Cygwin mintty, WSL, macOS Terminal, Linux x-terminal-emulator).
 - **One-Click "Kill Terminal" Button**:
-  - Added a dedicated <kbd>Kill Terminal</kbd> button (Power icon with ruby-red hover state) in the terminal header toolbar for terminating the active PTY session immediately.
+  - Added a dedicated <kbd>Kill Terminal</kbd> button (Power icon with ruby-red hover state) in the terminal header toolbar for terminating the active PTY session immediately — terminating the **entire process tree**, not just the shell process.
 - **Expanded TUI Quick Action Keypad**:
   - Preserved on-screen TUI quick controls with D-Pad arrows, WASD, navigation keys (<kbd>PgUp</kbd>, <kbd>PgDn</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>), process management shortcuts (<kbd>C</kbd>, <kbd>M</kbd>, <kbd>N</kbd>, <kbd>P</kbd>, <kbd>K</kbd>, <kbd>Y</kbd>, <kbd>R</kbd>, <kbd>Q</kbd>), and action buttons (<kbd>Enter</kbd>, <kbd>Space</kbd>, <kbd>Esc</kbd>, <kbd>Tab</kbd>, <kbd>Bksp</kbd>, <kbd>Ctrl+C</kbd>).
+
+#### 🧹 Terminal Process Lifecycle — Clean `exit`, Full Tree Termination & Zero Orphans
+- **Clean `exit` Handling**:
+  - Typing `exit` (or pressing <kbd>Ctrl+D</kbd>) now closes its terminal tab automatically instead of leaving a dead pane on screen, releases the pseudo-console handle, reaps any process the shell left behind, and drops the tab's cached buffers and listeners so nothing leaks.
+- **No Orphaned Processes (Windows process-tree teardown)**:
+  - A terminal session is never a single process: the shell spawns children, which spawn grandchildren (TUIs, watchers, servers). Killing only the shell abandoned them.
+  - Teardown now takes the tree down **before** the pseudo-console is closed, because `taskkill /T` resolves the descendant chain through a *still-running* root; closing the PTY first made `/T` miss the entire tree. A process-snapshot sweep then reaps anything that outlives its parent (Windows retains the original `ParentProcessId`, so orphans stay findable), while POSIX signals the child's whole process group.
+  - `killAll()` is synchronous and idempotent so `app.exit()` can no longer race ahead of an async `taskkill`, and it snapshots the process table only once no matter how many tabs are open.
+- **Every Termination Entry Point Wired**: the <kbd>Kill Terminal</kbd> power button, the <kbd>✕</kbd> beside each terminal tab, and closing the application via its title-bar close button (plus `before-quit`, `will-quit`, `window-all-closed` and the native window `close` event) all tear the process trees down, so quitting the app can never leave shells, TUIs or `conhost` processes running behind it.
+- **Explicit Exit Reasons**: the `terminal:exit` event now reports `reason: 'exited' | 'killed'`, letting the UI tell a shell that ended on its own apart from one the application terminated.
+- **Regression Coverage**: added `test/terminalSessionLifecycle.test.ts` (25 tests) covering process-snapshot parsing and tree walking, kill ordering, descendant reaping, single-snapshot teardowns, exit-reason reporting, tab auto-close, buffer release and every termination entry point — alongside `test/terminalPtyInputRegression.test.ts` (15 tests) for the ESM/ConPTY input fixes.
 
 #### 🛡️ Editor Viewport Scroll Stabilization & Layout Protection
 - **PageDown / PageUp Window Displacement Fix**: Fixed an issue where pressing <kbd>PageDown</kbd>, <kbd>PageUp</kbd>, or navigation keys in the text editor pane could cause the parent window viewport to scroll vertically, displacing the top titlebar off-screen and leaving a blank void at the bottom.

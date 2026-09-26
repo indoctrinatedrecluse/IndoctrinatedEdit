@@ -1,16 +1,167 @@
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
+import { spawn, spawnSync, execFile, ChildProcessWithoutNullStreams } from 'child_process'
 import { IpcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import { createRequire } from 'node:module'
 import type { IPty } from 'node-pty'
 
+/**
+ * The Electron main process is bundled as an **ESM** module (package.json has
+ * `"type": "module"`), therefore the CommonJS `require` identifier does not
+ * exist in this scope.
+ *
+ * A bare `require('node-pty')` throws `ReferenceError: require is not defined`.
+ * That error used to be swallowed by the try/catch below, which silently
+ * degraded every terminal session to a piped `child_process.spawn()` with **no
+ * pseudo-console**. Without a real ConPTY:
+ *   - cmd.exe never echoes keystrokes (looks like the terminal is dead),
+ *   - PowerShell has no PSReadLine console, so Backspace is ignored and Tab
+ *     inserts a literal tab (rendered as 8 spaces) instead of completing,
+ *   - full-screen TUI programs (e.g. `ir pmon`) render their first frame from
+ *     stdout but can never receive raw keypresses from stdin.
+ *
+ * `createRequire` gives us a genuine CommonJS resolver rooted at this module so
+ * node-pty (and its bundled ConPTY/winpty binaries) load correctly in both
+ * `npm run dev` and packaged (asar) builds.
+ */
+const requireFromMain = createRequire(import.meta.url)
+
 let nodePty: typeof import('node-pty') | null = null
+let nodePtyLoadError: string | null = null
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  nodePty = require('node-pty')
+  nodePty = requireFromMain('node-pty')
 } catch (e) {
+  nodePtyLoadError = e instanceof Error ? e.message : String(e)
   console.warn('[TerminalService] node-pty not loaded, falling back to standard child_process:', e)
+}
+
+/**
+ * Returns the running Windows build number (e.g. 26200 for `10.0.26200`).
+ * xterm.js uses this to apply the correct ConPTY line-wrap/reflow workarounds.
+ */
+function getWindowsBuildNumber(): number {
+  try {
+    const parts = os.release().split('.')
+    const build = Number(parts[2])
+    return Number.isFinite(build) && build > 0 ? build : 0
+  } catch {
+    return 0
+  }
+}
+
+/* ==========================================================================
+ * Process-tree teardown helpers
+ *
+ * A terminal session is never a single process: the shell spawns children, and
+ * those spawn grandchildren (TUIs such as `ir pmon`, esbuild watchers, node
+ * daemons...). Killing only the shell leaves those orphans running forever,
+ * holding locks and pipe handles. The helpers below take down the whole tree.
+ * ======================================================================== */
+
+const IS_WINDOWS = process.platform === 'win32'
+
+/**
+ * `wmic` is deprecated and absent on recent Windows builds, so process
+ * enumeration goes through PowerShell CIM instead.
+ */
+const PROCESS_PAIRS_POWERSHELL =
+  'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }'
+
+let powershellPathCache: string | null = null
+
+function resolvePowerShell(): string {
+  if (powershellPathCache) return powershellPathCache
+  const sysRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows'
+  const candidate = path.join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  powershellPathCache = fs.existsSync(candidate) ? candidate : 'powershell.exe'
+  return powershellPathCache
+}
+
+/**
+ * Parses the `ProcessId ParentProcessId` pairs printed by
+ * {@link PROCESS_PAIRS_POWERSHELL}. Exported for unit testing.
+ */
+export function parseProcessPairs(output: string): Array<[number, number]> {
+  const pairs: Array<[number, number]> = []
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.trim().match(/^(\d+)\s+(\d+)$/)
+    if (match) pairs.push([Number(match[1]), Number(match[2])])
+  }
+  return pairs
+}
+
+/**
+ * Walks a `[pid, parentPid]` snapshot and returns every descendant of `rootPid`.
+ *
+ * Windows retains a process' original `ParentProcessId` even after its parent
+ * has exited, so this walk still finds the children of an already-dead shell -
+ * which is exactly the orphan case `taskkill /T` cannot handle once the root is
+ * gone. Exported for unit testing.
+ */
+export function collectDescendantPids(
+  rootPid: number,
+  pairs: Array<[number, number]>
+): number[] {
+  const childrenOf = new Map<number, number[]>()
+  for (const [pid, parentPid] of pairs) {
+    const bucket = childrenOf.get(parentPid)
+    if (bucket) bucket.push(pid)
+    else childrenOf.set(parentPid, [pid])
+  }
+
+  const descendants: number[] = []
+  const visited = new Set<number>([rootPid])
+  const queue: number[] = [rootPid]
+
+  while (queue.length > 0) {
+    const current = queue.shift() as number
+    for (const child of childrenOf.get(current) || []) {
+      if (visited.has(child)) continue
+      visited.add(child)
+      descendants.push(child)
+      queue.push(child)
+    }
+  }
+
+  return descendants
+}
+
+/**
+ * Best-effort `taskkill /F [/T] /PID <pid>`. Never throws.
+ */
+function taskkill(pid: number, options: { tree: boolean; sync: boolean }): void {
+  if (!IS_WINDOWS || !Number.isFinite(pid) || pid <= 0) return
+  const args = ['/F', ...(options.tree ? ['/T'] : []), '/PID', String(pid)]
+  try {
+    if (options.sync) {
+      spawnSync('taskkill', args, { stdio: 'ignore', windowsHide: true, timeout: 5000 })
+    } else {
+      const child = spawn('taskkill', args, { stdio: 'ignore', windowsHide: true })
+      child.on('error', () => {})
+      child.unref()
+    }
+  } catch {
+    /* best effort - the process may already be gone */
+  }
+}
+
+/**
+ * Synchronously snapshots every live `[pid, parentPid]` pair on Windows.
+ * Returns `[]` on failure or on POSIX so callers degrade gracefully.
+ */
+function queryProcessPairsSync(): Array<[number, number]> {
+  if (!IS_WINDOWS) return []
+  try {
+    const result = spawnSync(
+      resolvePowerShell(),
+      ['-NoProfile', '-NonInteractive', '-Command', PROCESS_PAIRS_POWERSHELL],
+      { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 8 * 1024 * 1024 }
+    )
+    return result.stdout ? parseProcessPairs(result.stdout) : []
+  } catch {
+    return []
+  }
 }
 
 export interface ShellProfile {
@@ -38,16 +189,44 @@ export interface TerminalSessionInfo {
   shellName: string
   pid?: number
   cwd: string
+  /** True when the session is backed by a genuine pseudo-console (node-pty). */
+  pty?: boolean
+  /** Which pseudo-console implementation is driving the session. */
+  backend?: 'conpty' | 'winpty' | 'openpty' | 'pipe'
+  /** Windows build number, forwarded to xterm.js for ConPTY workarounds. */
+  osBuild?: number
+}
+
+export interface TerminalDiagnostics {
+  ptyAvailable: boolean
+  ptyLoadError: string | null
+  backend: 'conpty' | 'winpty' | 'openpty' | 'pipe'
+  osBuild: number
+  platform: NodeJS.Platform
+  activeSessions: number
 }
 
 type ActiveTerminalProcess = IPty | ChildProcessWithoutNullStreams
 
+interface ActiveSession {
+  process: ActiveTerminalProcess
+  isPty: boolean
+  info: TerminalSessionInfo
+}
+
 export class TerminalService {
   private static instance: TerminalService
-  private sessions: Map<
-    string,
-    { process: ActiveTerminalProcess; isPty: boolean; info: TerminalSessionInfo }
-  > = new Map()
+  private sessions: Map<string, ActiveSession> = new Map()
+  /**
+   * Sessions the application asked to terminate (Kill button, tab close, window
+   * close, app quit).
+   *
+   * This lives outside the session map because the map entry is deleted as soon
+   * as the kill is issued, while node-pty's `onExit` fires asynchronously
+   * afterwards. Without it, every intentional kill would be misreported as a
+   * user-typed `exit`.
+   */
+  private terminatingSessions: Set<string> = new Set()
   private configPath: string
 
   private constructor() {
@@ -351,6 +530,7 @@ export class TerminalService {
     if (nodePty) {
       try {
         let ptyProc: IPty
+        let backend: 'conpty' | 'winpty' | 'openpty' = process.platform === 'win32' ? 'conpty' : 'openpty'
         try {
           ptyProc = nodePty.spawn(profile.path, args, {
             name: 'xterm-256color',
@@ -362,6 +542,7 @@ export class TerminalService {
           })
         } catch (conptyErr) {
           console.warn('[TerminalService] ConPTY spawn failed, falling back to WinPTY:', conptyErr)
+          backend = 'winpty'
           ptyProc = nodePty.spawn(profile.path, args, {
             name: 'xterm-256color',
             cols,
@@ -378,9 +559,16 @@ export class TerminalService {
           shellName: profile.name,
           pid: ptyProc.pid,
           cwd: targetCwd,
+          pty: true,
+          backend,
+          osBuild: process.platform === 'win32' ? getWindowsBuildNumber() : 0,
         }
 
-        this.sessions.set(sessionId, { process: ptyProc, isPty: true, info: sessionInfo })
+        this.sessions.set(sessionId, {
+          process: ptyProc,
+          isPty: true,
+          info: sessionInfo,
+        })
 
         ptyProc.onData((data: string) => {
           if (!mainWindow.isDestroyed()) {
@@ -392,12 +580,26 @@ export class TerminalService {
         })
 
         ptyProc.onExit(({ exitCode, signal }) => {
+          const intentional = this.terminatingSessions.delete(sessionId)
           this.sessions.delete(sessionId)
+
+          if (!intentional) {
+            // The shell ended on its own (user typed `exit`, pressed Ctrl+D, or
+            // crashed). Release the pseudo-console so ConPTY/conhost is not held
+            // open, then reap any children the shell left behind - killing the
+            // shell alone would leave TUIs and watchers orphaned.
+            try {
+              ptyProc.kill()
+            } catch {}
+            this.reapOrphansAsync(sessionInfo.pid)
+          }
+
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('terminal:exit', {
               id: sessionId,
               code: exitCode,
               signal: signal ? String(signal) : null,
+              reason: intentional ? 'killed' : 'exited',
             })
           }
         })
@@ -408,7 +610,10 @@ export class TerminalService {
       }
     }
 
-    // Fallback: standard child_process.spawn
+    // Fallback: standard child_process.spawn (NO pseudo-console / no TTY).
+    // This is a genuine degradation: interactive shells lose line editing, and
+    // full-screen TUIs cannot receive raw keypresses. Only used if node-pty is
+    // missing or its ConPTY/WinPTY agent failed to spawn.
     const proc = spawn(profile.path, args, {
       cwd: targetCwd,
       env,
@@ -422,9 +627,26 @@ export class TerminalService {
       shellName: profile.name,
       pid: proc.pid,
       cwd: targetCwd,
+      pty: false,
+      backend: 'pipe',
+      osBuild: process.platform === 'win32' ? getWindowsBuildNumber() : 0,
     }
 
-    this.sessions.set(sessionId, { process: proc, isPty: false, info: sessionInfo })
+    this.sessions.set(sessionId, {
+      process: proc,
+      isPty: false,
+      info: sessionInfo,
+    })
+
+    if (!mainWindow.isDestroyed()) {
+      const reason = nodePtyLoadError ? ` (${nodePtyLoadError})` : ''
+      mainWindow.webContents.send('terminal:data', {
+        id: sessionId,
+        data:
+          `\r\n\x1b[33m[TerminalService] Running WITHOUT a pseudo-console${reason}.\r\n` +
+          `Interactive key handling (Backspace, Tab completion, TUI keypresses, Ctrl+C) is unavailable in this mode.\x1b[0m\r\n\r\n`,
+      })
+    }
 
     proc.stdout.on('data', (chunk: Buffer) => {
       if (!mainWindow.isDestroyed()) {
@@ -445,12 +667,20 @@ export class TerminalService {
     })
 
     proc.on('close', (code, signal) => {
+      const intentional = this.terminatingSessions.delete(sessionId)
       this.sessions.delete(sessionId)
+
+      // Same orphan prevention as the pseudo-console path above.
+      if (!intentional) {
+        this.reapOrphansAsync(proc.pid)
+      }
+
       if (!mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:exit', {
           id: sessionId,
           code,
           signal,
+          reason: intentional ? 'killed' : 'exited',
         })
       }
     })
@@ -510,30 +740,82 @@ export class TerminalService {
   }
 
   /**
-   * Terminates an active terminal session and all child processes.
+   * Asynchronously reaps descendants of a shell that exited on its own.
+   *
+   * Runs detached so a terminal `exit` never blocks the main process while the
+   * process snapshot is taken.
    */
-  public kill(sessionId: string): boolean {
+  private reapOrphansAsync(rootPid?: number): void {
+    if (!IS_WINDOWS || !rootPid || !Number.isFinite(rootPid)) return
+    try {
+      execFile(
+        resolvePowerShell(),
+        ['-NoProfile', '-NonInteractive', '-Command', PROCESS_PAIRS_POWERSHELL],
+        { windowsHide: true, timeout: 5000, maxBuffer: 8 * 1024 * 1024 },
+        (error, stdout) => {
+          if (error || !stdout) return
+          for (const pid of collectDescendantPids(rootPid, parseProcessPairs(stdout))) {
+            taskkill(pid, { tree: false, sync: false })
+          }
+        }
+      )
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /**
+   * Terminates one session and its process tree.
+   *
+   * @param pairs Optional pre-captured process snapshot. A full teardown passes
+   *   a single shared snapshot so N sessions cost one enumeration rather than N.
+   */
+  private killSession(sessionId: string, pairs?: Array<[number, number]>): boolean {
     const session = this.sessions.get(sessionId)
     if (!session) return false
 
+    // Flag the session first so `onExit` reports this as `reason: 'killed'`,
+    // even though the map entry is removed before node-pty fires onExit.
+    this.terminatingSessions.add(sessionId)
+    const pid = session.info.pid
+
     try {
-      const pid = session.info.pid
-      if (session.isPty) {
-        try {
-          ;(session.process as IPty).kill()
-        } catch {}
-      } else {
-        try {
-          ;(session.process as ChildProcessWithoutNullStreams).kill()
-        } catch {}
+      if (pid && Number.isFinite(pid) && pid > 0) {
+        if (IS_WINDOWS) {
+          // ORDER IS CRITICAL: `taskkill /T` resolves the descendant chain
+          // through the still-running root. Closing the pseudo-console first
+          // (as this used to) killed the root immediately, so `/T` found no
+          // tree and every grandchild survived as an orphan.
+          taskkill(pid, { tree: true, sync: true })
+
+          if (pairs) {
+            for (const childPid of collectDescendantPids(pid, pairs)) {
+              taskkill(childPid, { tree: false, sync: true })
+            }
+          } else {
+            // One-off kill: sweep in the background so the UI is not blocked by
+            // the process enumeration.
+            this.reapOrphansAsync(pid)
+          }
+        } else {
+          // POSIX: node-pty runs the shell as its own process-group leader
+          // (forkpty), so the negative pid reaches every descendant at once.
+          try {
+            process.kill(-pid, 'SIGKILL')
+          } catch {
+            /* group already gone */
+          }
+        }
       }
 
-      // Force-terminate process tree on Windows to ensure winpty-agent/conhost don't hang
-      if (process.platform === 'win32' && pid) {
-        try {
-          spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' }).unref()
-        } catch {}
-      }
+      // Only now release the pseudo-console / stdio pipes.
+      try {
+        if (session.isPty) {
+          ;(session.process as IPty).kill()
+        } else {
+          ;(session.process as ChildProcessWithoutNullStreams).kill()
+        }
+      } catch {}
 
       this.sessions.delete(sessionId)
       return true
@@ -545,13 +827,33 @@ export class TerminalService {
   }
 
   /**
-   * Terminates all active terminal sessions on window close / app quit.
+   * Terminates an active terminal session and its entire process tree.
+   * Bound to the Kill Terminal button and the tab close button.
+   */
+  public kill(sessionId: string): boolean {
+    return this.killSession(sessionId)
+  }
+
+  /**
+   * Terminates every active terminal session and its process tree.
+   *
+   * Called on window close and app quit (`window:close` IPC, `before-quit`,
+   * `will-quit`, `window-all-closed`) so closing the app can never leave
+   * shells, TUIs, watchers or conhost processes running behind it.
+   *
+   * Teardown is synchronous and deterministic: async `taskkill` invocations
+   * used to be abandoned when `app.exit()` raced ahead of them.
    */
   public killAll(): void {
     const sessionIds = Array.from(this.sessions.keys())
+    if (sessionIds.length === 0) return
+
+    // One shared snapshot for the whole teardown, so killing is O(1) queries.
+    const pairs = IS_WINDOWS ? queryProcessPairsSync() : undefined
     for (const id of sessionIds) {
-      this.kill(id)
+      this.killSession(id, pairs)
     }
+
     this.sessions.clear()
   }
 
@@ -624,11 +926,35 @@ export class TerminalService {
   }
 
   /**
+   * Reports whether terminals are backed by a real pseudo-console.
+   * The renderer surfaces this so a degraded (pipe-only) mode is never silent.
+   */
+  public getDiagnostics(): TerminalDiagnostics {
+    const backend: TerminalDiagnostics['backend'] = nodePty
+      ? process.platform === 'win32'
+        ? 'conpty'
+        : 'openpty'
+      : 'pipe'
+    return {
+      ptyAvailable: Boolean(nodePty),
+      ptyLoadError: nodePtyLoadError,
+      backend,
+      osBuild: process.platform === 'win32' ? getWindowsBuildNumber() : 0,
+      platform: process.platform,
+      activeSessions: this.sessions.size,
+    }
+  }
+
+  /**
    * Registers all terminal IPC channels.
    */
   public setupIPC(ipcMain: IpcMain, getWindow: () => BrowserWindow | null): void {
     ipcMain.handle('terminal:detectShells', async () => {
       return this.detectShells()
+    })
+
+    ipcMain.handle('terminal:getDiagnostics', async () => {
+      return this.getDiagnostics()
     })
 
     ipcMain.handle('terminal:getConfig', async () => {

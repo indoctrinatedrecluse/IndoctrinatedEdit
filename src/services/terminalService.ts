@@ -1,4 +1,28 @@
-import { ShellProfile, TerminalConfig, TerminalSessionInfo } from '../../electron/preload'
+import {
+  ShellProfile,
+  TerminalConfig,
+  TerminalSessionInfo,
+  TerminalDiagnostics,
+  TerminalExitReason,
+} from '../../electron/preload'
+
+/**
+ * Details delivered when a terminal session ends.
+ */
+export interface TerminalExitInfo {
+  code: number | null
+  signal: string | null
+  /**
+   * `exited` - the shell ended on its own (`exit`, Ctrl+D, crash); the dead tab
+   * is dropped automatically.
+   * `killed` - the app terminated it (Kill button, tab close, window close).
+   */
+  reason: TerminalExitReason
+}
+
+export interface TerminalSessionExitEvent extends TerminalExitInfo {
+  id: string
+}
 
 export interface TerminalTab {
   id: string
@@ -10,6 +34,10 @@ export interface TerminalTab {
   isSplit?: boolean
   splitTargetId?: string
   isTuiActive?: boolean
+  /** Pseudo-console implementation backing this tab ('pipe' means degraded). */
+  ptyBackend?: 'conpty' | 'winpty' | 'openpty' | 'pipe'
+  /** Windows build number for xterm.js ConPTY workarounds. */
+  osBuild?: number
 }
 
 export interface AnsiToken {
@@ -30,9 +58,13 @@ export class TerminalService {
   private activeTabId: string | null = null
   private rawStreamBuffers: Map<string, string> = new Map()
   private dataListeners: Map<string, Array<(data: string) => void>> = new Map()
-  private exitListeners: Map<string, Array<(code: number | null) => void>> = new Map()
+  private exitListeners: Map<string, Array<(code: number | null, info: TerminalExitInfo) => void>> = new Map()
+  private sessionExitListeners: Array<(event: TerminalSessionExitEvent) => void> = []
   private cleanupIpcDataListener: (() => void) | null = null
   private cleanupIpcExitListener: (() => void) | null = null
+  private ptyDiagnostics: TerminalDiagnostics | null = null
+  private tuiStateListeners: Map<string, Array<(active: boolean, tabId: string) => void>> = new Map()
+  private lastTuiState: Map<string, boolean> = new Map()
 
   public static getInstance(): TerminalService {
     if (!TerminalService.instance) {
@@ -83,6 +115,29 @@ export class TerminalService {
       this.config = this.getDefaultConfig()
     }
 
+    // Pseudo-console diagnostics. Without these the UI could not tell the
+    // difference between a healthy ConPTY session and a degraded pipe session,
+    // which is exactly how the "cmd.exe is dead / PowerShell has no Backspace"
+    // regressions stayed invisible for so long.
+    if (electron?.terminal?.getDiagnostics) {
+      try {
+        this.ptyDiagnostics = await electron.terminal.getDiagnostics()
+      } catch (e) {
+        console.warn('[TerminalService] Error reading terminal diagnostics:', e)
+        this.ptyDiagnostics = null
+      }
+    }
+    if (!this.ptyDiagnostics) {
+      this.ptyDiagnostics = {
+        ptyAvailable: false,
+        ptyLoadError: 'electron bridge unavailable',
+        backend: 'pipe',
+        osBuild: 0,
+        platform: typeof electron?.platform === 'string' ? electron.platform : 'unknown',
+        activeSessions: 0,
+      }
+    }
+
     // Subscribe to IPC data and exit events
     if (electron?.terminal?.onData && !this.cleanupIpcDataListener) {
       this.cleanupIpcDataListener = electron.terminal.onData((payload: { id: string; data: string }) => {
@@ -95,11 +150,28 @@ export class TerminalService {
     }
 
     if (electron?.terminal?.onExit && !this.cleanupIpcExitListener) {
-      this.cleanupIpcExitListener = electron.terminal.onExit((payload: { id: string; code: number | null }) => {
+      this.cleanupIpcExitListener = electron.terminal.onExit((payload: TerminalSessionExitEvent) => {
+        const info: TerminalExitInfo = {
+          code: payload.code ?? null,
+          signal: payload.signal ?? null,
+          reason: payload.reason === 'killed' ? 'killed' : 'exited',
+        }
+
+        // Per-tab listeners first, so panes/tests still observe the final exit
+        // code while the tab state is intact.
         const listeners = this.exitListeners.get(payload.id)
         if (listeners) {
-          listeners.forEach((fn) => fn(payload.code))
+          listeners.forEach((fn) => fn(info.code, info))
         }
+
+        // A shell that ended on its own (`exit`, Ctrl+D, crash) leaves a dead
+        // session behind: drop the tab and release every buffer and listener it
+        // owned, so nothing is kept alive and the UI can close it automatically.
+        if (info.reason === 'exited') {
+          this.removeTabState(payload.id)
+        }
+
+        this.sessionExitListeners.forEach((fn) => fn({ id: payload.id, ...info }))
       })
     }
 
@@ -175,12 +247,14 @@ export class TerminalService {
     let tabId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
     let targetCwd = (options?.cwd && options.cwd !== '.') ? options.cwd : ''
 
+    let sessionInfo: TerminalSessionInfo | null = null
     if (electron?.terminal?.create) {
       try {
         const info: TerminalSessionInfo = await electron.terminal.create({
           shellId: profile.id,
           cwd: options?.cwd,
         })
+        sessionInfo = info
         tabId = info.id
         if (info.cwd) {
           targetCwd = info.cwd
@@ -208,6 +282,8 @@ export class TerminalService {
       ],
       isSplit: !!options?.splitWith,
       splitTargetId: options?.splitWith,
+      ptyBackend: sessionInfo?.backend ?? this.ptyDiagnostics?.backend ?? 'pipe',
+      osBuild: sessionInfo?.osBuild ?? this.ptyDiagnostics?.osBuild ?? 0,
     }
 
     this.tabs.push(newTab)
@@ -246,7 +322,10 @@ export class TerminalService {
   }
 
   /**
-   * Closes / kills a terminal tab.
+   * Closes / kills a terminal tab: terminates the session's whole process tree
+   * in the main process, then releases all renderer-side tab state.
+   *
+   * Bound to the Kill Terminal button and the tab close button.
    */
   public async closeTab(tabId: string): Promise<void> {
     const electron = this.getElectronAPI()
@@ -254,9 +333,24 @@ export class TerminalService {
       await electron.terminal.kill(tabId)
     }
 
+    this.removeTabState(tabId)
+  }
+
+  /**
+   * Releases every piece of per-tab state for a session that is gone.
+   *
+   * Shared by `closeTab()` (app-initiated kill) and the natural-exit path
+   * (user typed `exit`), so no buffer, listener or TUI screen model can leak
+   * once a terminal disappears.
+   */
+  private removeTabState(tabId: string): void {
     this.tabs = this.tabs.filter((t) => t.id !== tabId)
     this.dataListeners.delete(tabId)
     this.exitListeners.delete(tabId)
+    this.tuiStateListeners.delete(tabId)
+    this.lastTuiState.delete(tabId)
+    this.rawStreamBuffers.delete(tabId)
+    this.tabScreenStates.delete(tabId)
 
     if (this.activeTabId === tabId) {
       this.activeTabId = this.tabs.length > 0 ? this.tabs[this.tabs.length - 1].id : null
@@ -300,6 +394,69 @@ export class TerminalService {
     if (tab) {
       tab.isTuiActive = active
     }
+    this.notifyTuiState(tabId)
+  }
+
+  /**
+   * Reports the pseudo-console health of the native terminal backend.
+   * `ptyAvailable === false` means every session is running over pipes, where
+   * Backspace/Tab completion/TUI keypresses cannot work.
+   */
+  public getPtyDiagnostics(): TerminalDiagnostics {
+    return (
+      this.ptyDiagnostics || {
+        ptyAvailable: false,
+        ptyLoadError: 'not initialised',
+        backend: 'pipe',
+        osBuild: 0,
+        platform: 'unknown',
+        activeSessions: 0,
+      }
+    )
+  }
+
+  public isPtyAvailable(): boolean {
+    return Boolean(this.ptyDiagnostics?.ptyAvailable)
+  }
+
+  /**
+   * Subscribes to TUI (alternate screen buffer) activation transitions.
+   * Pass '*' as the tab id to observe every tab. Returns an unsubscribe fn.
+   */
+  public onTuiState(tabId: string, callback: (active: boolean, tabId: string) => void): () => void {
+    const key = tabId || '*'
+    if (!this.tuiStateListeners.has(key)) {
+      this.tuiStateListeners.set(key, [])
+    }
+    this.tuiStateListeners.get(key)!.push(callback)
+    return () => {
+      const list = this.tuiStateListeners.get(key)
+      if (list) {
+        this.tuiStateListeners.set(key, list.filter((cb) => cb !== callback))
+      }
+    }
+  }
+
+  /**
+   * Recomputes and broadcasts the TUI state for a tab. Listeners only fire when
+   * the state actually flips, so consumers can arm/disarm raw key routing once
+   * per transition instead of on every output chunk.
+   */
+  private notifyTuiState(tabId: string): void {
+    const active = this.isTuiActive(tabId)
+    if (this.lastTuiState.get(tabId) === active) return
+    this.lastTuiState.set(tabId, active)
+    const listeners = [
+      ...(this.tuiStateListeners.get(tabId) || []),
+      ...(this.tuiStateListeners.get('*') || []),
+    ]
+    for (const cb of listeners) {
+      try {
+        cb(active, tabId)
+      } catch (e) {
+        console.warn('[TerminalService] TUI state listener failed:', e)
+      }
+    }
   }
 
   /**
@@ -341,6 +498,7 @@ export class TerminalService {
         tab.buffer = []
       }
       text = text.replace(/\x1b\[\?(1049|47)h/g, '')
+      this.notifyTuiState(tabId)
     }
 
     if (text.includes('\x1b[?1049l') || text.includes('\x1b[?47l')) {
@@ -349,6 +507,17 @@ export class TerminalService {
         state.inAltBuffer = false
       }
       text = text.replace(/\x1b\[\?(1049|47)l/g, '')
+      this.notifyTuiState(tabId)
+    }
+
+    // Also honour explicit DECSCNM / alternate-screen style mode sets that some
+    // TUIs (e.g. Python curses via `curses.initscr()`) emit as ?1047h.
+    if (text.includes('\x1b[?1047h') && !state.inAltBuffer) {
+      state.savedBuffer = [...tab.buffer]
+      state.inAltBuffer = true
+      tab.buffer = []
+      text = text.replace(/\x1b\[\?1047h/g, '')
+      this.notifyTuiState(tabId)
     }
 
     // 2. Full Screen Clear (\x1b[2J, \x1b[3J) - only clear buffer in alternate TUI mode
@@ -474,9 +643,19 @@ export class TerminalService {
       pgdn: '\x1b[6~',
       home: '\x1b[H',
       end: '\x1b[F',
+      arrowup: '\x1b[A',
+      arrowdown: '\x1b[B',
+      arrowleft: '\x1b[D',
+      arrowright: '\x1b[C',
+      bs: '\x7f',
+      'shift+tab': '\x1b[Z',
+      backtab: '\x1b[Z',
     }
 
     const normalized = action.trim().toLowerCase()
+    // Unknown actions fall through as their literal text so callers can send
+    // arbitrary single characters (e.g. `ir nettop`'s hotkeys) without the map
+    // having to enumerate every key.
     const seq = keyMap[normalized] || action
     return await this.write(tabId, seq)
   }
@@ -491,6 +670,41 @@ export class TerminalService {
       if (list) {
         this.dataListeners.set(tabId, list.filter((cb) => cb !== callback))
       }
+    }
+  }
+
+  /**
+   * Subscribes to the end of one specific session.
+   *
+   * @param callback Receives the exit code/signal and whether the session
+   *   `exited` on its own or was `killed` by the app.
+   */
+  public onExit(
+    tabId: string,
+    callback: (code: number | null, info: TerminalExitInfo) => void
+  ): () => void {
+    if (!this.exitListeners.has(tabId)) {
+      this.exitListeners.set(tabId, [])
+    }
+    this.exitListeners.get(tabId)!.push(callback)
+    return () => {
+      const list = this.exitListeners.get(tabId)
+      if (list) {
+        this.exitListeners.set(tabId, list.filter((cb) => cb !== callback))
+      }
+    }
+  }
+
+  /**
+   * Subscribes to every session ending, regardless of tab.
+   *
+   * The terminal view uses this to close a tab automatically the moment its
+   * shell exits (e.g. the user typed `exit`), instead of leaving a dead pane.
+   */
+  public onSessionExit(callback: (event: TerminalSessionExitEvent) => void): () => void {
+    this.sessionExitListeners.push(callback)
+    return () => {
+      this.sessionExitListeners = this.sessionExitListeners.filter((cb) => cb !== callback)
     }
   }
 

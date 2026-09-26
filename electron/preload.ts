@@ -92,11 +92,43 @@ export interface TerminalSessionInfo {
   shellName: string
   pid?: number
   cwd: string
+  /** True when the session is backed by a genuine pseudo-console (node-pty). */
+  pty?: boolean
+  /** Which pseudo-console implementation is driving the session. */
+  backend?: 'conpty' | 'winpty' | 'openpty' | 'pipe'
+  /** Windows build number, used by xterm.js ConPTY line-wrap workarounds. */
+  osBuild?: number
+}
+
+export interface TerminalDiagnostics {
+  ptyAvailable: boolean
+  ptyLoadError: string | null
+  backend: 'conpty' | 'winpty' | 'openpty' | 'pipe'
+  osBuild: number
+  platform: string
+  activeSessions: number
+}
+
+/**
+ * Why a terminal session ended.
+ * - `exited` - the shell ended on its own (`exit`, Ctrl+D, crash). The tab is
+ *   dropped and any leftover children are reaped.
+ * - `killed` - the application terminated it (Kill button, tab close, window
+ *   close, app quit).
+ */
+export type TerminalExitReason = 'exited' | 'killed'
+
+export interface TerminalExitPayload {
+  id: string
+  code: number | null
+  signal: string | null
+  reason: TerminalExitReason
 }
 
 export interface ElectronTerminalAPI {
   detectShells: () => Promise<ShellProfile[]>
   getConfig: () => Promise<TerminalConfig>
+  getDiagnostics: () => Promise<TerminalDiagnostics>
   saveConfig: (config: Partial<TerminalConfig>) => Promise<boolean>
   create: (options: { shellId?: string; cwd?: string; cols?: number; rows?: number }) => Promise<TerminalSessionInfo>
   write: (id: string, data: string) => Promise<boolean>
@@ -104,7 +136,7 @@ export interface ElectronTerminalAPI {
   kill: (id: string) => Promise<boolean>
   openExternal: (shellId?: string, cwd?: string) => Promise<boolean>
   onData: (callback: (payload: { id: string; data: string }) => void) => () => void
-  onExit: (callback: (payload: { id: string; code: number | null; signal: string | null }) => void) => () => void
+  onExit: (callback: (payload: TerminalExitPayload) => void) => () => void
 }
 
 export interface ElectronUpdaterAPI {
@@ -222,6 +254,7 @@ const api: ElectronAPI = {
   terminal: {
     detectShells: () => ipcRenderer.invoke('terminal:detectShells'),
     getConfig: () => ipcRenderer.invoke('terminal:getConfig'),
+    getDiagnostics: () => ipcRenderer.invoke('terminal:getDiagnostics'),
     saveConfig: (config) => ipcRenderer.invoke('terminal:saveConfig', config),
     create: (options) => ipcRenderer.invoke('terminal:create', options),
     write: (id, data) => ipcRenderer.invoke('terminal:write', { id, data }),
@@ -236,7 +269,7 @@ const api: ElectronAPI = {
       }
     },
     onExit: (callback) => {
-      const handler = (_: unknown, payload: { id: string; code: number | null; signal: string | null }) => callback(payload)
+      const handler = (_: unknown, payload: TerminalExitPayload) => callback(payload)
       ipcRenderer.on('terminal:exit', handler)
       return () => {
         ipcRenderer.removeListener('terminal:exit', handler)
