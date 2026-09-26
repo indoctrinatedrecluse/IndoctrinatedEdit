@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { FolderOpen, Bell } from 'lucide-react'
+import { FolderOpen, Bell, Crown, Sparkles } from 'lucide-react'
 import { AppIcon } from '../Brand/AppIcon'
 import { WindowControls } from './WindowControls'
 import { MenuBar, MenuActionHandlers } from '../MenuBar/MenuBar'
+import { licenseService, LicenseInfo } from '../../services/licenseService'
 
 interface WindowFrameProps {
   activeFileName?: string
@@ -22,6 +23,14 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
   onNotificationToggle,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
+  const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null)
+
+  useEffect(() => {
+    licenseService.getInfo().then(setLicenseInfo)
+    return licenseService.subscribe((info) => {
+      setLicenseInfo(info)
+    })
+  }, [])
 
   useEffect(() => {
     if (window.electronAPI?.isMaximized) {
@@ -51,7 +60,35 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
         <div className="app-brand-badge glass-pill">
           <AppIcon size={18} />
           <span className="app-title">IndoctrinatedEdit</span>
-          <span className="app-tag">PRO</span>
+          {licenseInfo?.type === 'ADM' && (
+            <span className="app-tag app-tag-adm" title="Administrator Edition (Lifetime Master License)">
+              <Crown size={9} className="tag-crown-icon" />
+              <span>ADMIN</span>
+              <Sparkles size={8} className="tag-sparkle-icon" />
+            </span>
+          )}
+          {licenseInfo?.type === 'DEV' && (
+            <span className="app-tag app-tag-dev" title="Developer Pro Edition">
+              DEV PRO
+            </span>
+          )}
+          {licenseInfo?.type === 'USER' && (
+            <span className="app-tag app-tag-pro" title="Pro Edition">
+              PRO
+            </span>
+          )}
+          {(!licenseInfo || licenseInfo.type === 'TRIAL') && (
+            <span
+              className={`app-tag app-tag-trial ${licenseInfo?.status === 'expired' ? 'is-expired' : ''}`}
+              title={
+                licenseInfo?.status === 'expired'
+                  ? 'Trial License (Expired)'
+                  : `Trial Edition (${licenseInfo?.trialDaysRemaining ?? 30} days remaining)`
+              }
+            >
+              {licenseInfo?.status === 'expired' ? 'EXPIRED' : 'TRIAL'}
+            </span>
+          )}
         </div>
         {menuHandlers && <MenuBar handlers={menuHandlers} />}
       </div>
@@ -221,13 +258,78 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
         }
 
         .app-tag {
-          font-size: 9px;
+          font-size: 8.5px;
           font-weight: 800;
           letter-spacing: 0.6px;
-          padding: 1px 4px;
+          padding: 1px 5px;
           border-radius: 3px;
-          background: linear-gradient(135deg, var(--accent-primary) 0%, #BF5AF2 100%);
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          line-height: 12px;
           color: #FFF;
+        }
+
+        .app-tag-adm {
+          background: linear-gradient(135deg, #FFD700 0%, #FF9500 30%, #FF2D55 70%, #AF52DE 100%);
+          background-size: 200% 200%;
+          animation: adminTitleShimmer 3.5s ease infinite;
+          border: 1px solid rgba(255, 235, 100, 0.75);
+          box-shadow: 0 0 10px rgba(255, 170, 0, 0.55), 0 0 16px rgba(175, 82, 222, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        }
+
+        .tag-crown-icon {
+          color: #FFF275;
+          filter: drop-shadow(0 0 3px #FFD700);
+          animation: crownWiggle 2s ease-in-out infinite alternate;
+        }
+
+        .tag-sparkle-icon {
+          color: #FFFFFF;
+          filter: drop-shadow(0 0 3px #FFF);
+          animation: sparkleGlint 1.6s ease-in-out infinite alternate;
+        }
+
+        @keyframes adminTitleShimmer {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+
+        @keyframes crownWiggle {
+          0% { transform: translateY(0px) rotate(0deg); }
+          100% { transform: translateY(-1px) rotate(-4deg); }
+        }
+
+        @keyframes sparkleGlint {
+          0% { transform: scale(0.85); opacity: 0.75; }
+          100% { transform: scale(1.15); opacity: 1; }
+        }
+
+        .app-tag-dev {
+          background: linear-gradient(135deg, #BF5AF2 0%, #5E5CE6 100%);
+          border: 1px solid rgba(191, 90, 242, 0.45);
+          box-shadow: 0 0 8px rgba(191, 90, 242, 0.35);
+        }
+
+        .app-tag-pro {
+          background: linear-gradient(135deg, #0A84FF 0%, #64D2FF 100%);
+          border: 1px solid rgba(100, 210, 255, 0.45);
+          box-shadow: 0 0 8px rgba(10, 132, 255, 0.35);
+        }
+
+        .app-tag-trial {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: var(--text-secondary);
+        }
+
+        .app-tag-trial.is-expired {
+          background: rgba(255, 69, 58, 0.22);
+          border: 1px solid rgba(255, 69, 58, 0.55);
+          color: #FF6961;
+          box-shadow: 0 0 8px rgba(255, 69, 58, 0.4);
         }
 
         .window-frame-center {

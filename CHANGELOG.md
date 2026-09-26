@@ -35,7 +35,13 @@ IndoctrinatedEdit 5.0.0 marks a major milestone with the launch of our enterpris
   - Added a disabled "Purchase License" button equipped with a "Coming Soon" indicator for upcoming web store integration.
 
 #### 👑 Ultra-Stylized UI Editions & Visual Vanity Badges
-- **Ultra-Stylized "Admin Edition" Badge**:
+- **Dynamic Title Bar Edition Badges**:
+  - The top window frame brand pill dynamically reflects the active license tier:
+    - **`ADMIN` Edition**: Super-stylized 24k liquid gold shimmering badge with floating crown and sparkling glint animations.
+    - **`DEV PRO` Edition**: Neon-violet glowing glass badge.
+    - **`PRO` Edition**: Electric-azure glowing glass badge.
+    - **`TRIAL` Edition**: Frosted glass badge (or red `EXPIRED` badge when evaluation period ends).
+- **Ultra-Stylized "Admin Edition" Badge in License Modal**:
   - Features an animated 24k liquid gold and imperial amethyst crystal gradient with shimmering highlights (`adminGoldShimmer`), floating crown icon, sparkling stars, and iridescent violet glow.
 - **"Pro Edition" & "Developer Pro Edition" Badges**:
   - Sleek electric-azure and neon-violet glass badges for verified `USER` and `DEV` license holders.

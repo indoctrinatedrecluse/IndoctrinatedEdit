@@ -1,9 +1,16 @@
-import {
+import type {
   LicenseInfo,
   LicenseActivationRequest,
   LicenseActionResult,
   LicenseType,
 } from '../../electron/preload'
+
+export type {
+  LicenseInfo,
+  LicenseActivationRequest,
+  LicenseActionResult,
+  LicenseType,
+}
 
 export type LicenseChangeListener = (info: LicenseInfo) => void
 
