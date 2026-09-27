@@ -41,24 +41,42 @@ export interface LicenseActionResult {
 const LICENSOR_SERVER_URL = process.env.LICENSOR_SERVER_URL || 'https://licensor-h5zdysrkqa-uc.a.run.app'
 const PRODUCT_ID = 'indoctrinated-edit'
 const APP_VERSION = '5.0.2'
-const REG_KEY = 'HKCU\\Software\\Indoctrinated\\IndoctrinatedEdit'
+const REG_KEY_USER = 'HKCU\\Software\\Indoctrinated\\IndoctrinatedEdit'
+const REG_KEY_MACHINE = 'HKLM\\Software\\Indoctrinated\\IndoctrinatedEdit'
 
 export class LicenseService {
   private static instance: LicenseService
   private configDir: string
   private licenseFilePath: string
+  private programDataFilePath: string
+  private localAppDataFilePath: string
   private cachedHwid: string | null = null
 
   private constructor() {
     this.configDir = path.join(os.homedir(), '.indoctrinated')
+    this.licenseFilePath = path.join(this.configDir, 'license.json')
+    
+    // System-wide permanent machine storage (survives app updates & uninstalls)
+    const programData = process.env.ProgramData || process.env.ALLUSERSPROFILE || 'C:\\ProgramData'
+    const programDataDir = path.join(programData, 'Indoctrinated')
+    this.programDataFilePath = path.join(programDataDir, 'license.json')
+
+    // Local user app data persistent directory
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+    const localAppDir = path.join(localAppData, 'Indoctrinated')
+    this.localAppDataFilePath = path.join(localAppDir, 'license.json')
+
     try {
       if (!fs.existsSync(this.configDir)) {
         fs.mkdirSync(this.configDir, { recursive: true })
       }
-    } catch (e) {
-      console.warn('[LicenseService] Could not create config dir:', e)
-    }
-    this.licenseFilePath = path.join(this.configDir, 'license.json')
+      if (!fs.existsSync(programDataDir)) {
+        fs.mkdirSync(programDataDir, { recursive: true })
+      }
+      if (!fs.existsSync(localAppDir)) {
+        fs.mkdirSync(localAppDir, { recursive: true })
+      }
+    } catch {}
   }
 
   public static getInstance(): LicenseService {
@@ -107,12 +125,15 @@ export class LicenseService {
   }
 
   /**
-   * Reads string value from Windows Registry or fallback file
+   * Reads string value from Windows Registry or multi-anchor persistent storage
    */
   private readRegistryValue(valueName: string): string | null {
+    let foundValue: string | null = null
+
+    // 1. Try HKCU Windows Registry
     if (process.platform === 'win32') {
       try {
-        const res = spawnSync('reg', ['query', REG_KEY, '/v', valueName], {
+        const res = spawnSync('reg', ['query', REG_KEY_USER, '/v', valueName], {
           encoding: 'utf8',
           windowsHide: true,
         })
@@ -123,72 +144,150 @@ export class LicenseService {
             if (trimmed.startsWith(valueName)) {
               const parts = trimmed.split(/\s+REG_\w+\s+/)
               if (parts.length >= 2) {
-                return parts[1].trim()
+                foundValue = parts[1].trim()
+                break
               }
             }
           }
         }
       } catch {}
+
+      // 2. Try HKLM Windows Registry fallback
+      if (!foundValue) {
+        try {
+          const res = spawnSync('reg', ['query', REG_KEY_MACHINE, '/v', valueName], {
+            encoding: 'utf8',
+            windowsHide: true,
+          })
+          if (res.status === 0 && res.stdout) {
+            const lines = res.stdout.split(/\r?\n/)
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (trimmed.startsWith(valueName)) {
+                const parts = trimmed.split(/\s+REG_\w+\s+/)
+                if (parts.length >= 2) {
+                  foundValue = parts[1].trim()
+                  break
+                }
+              }
+            }
+          }
+        } catch {}
+      }
     }
 
-    // Fallback: file storage
-    try {
-      if (fs.existsSync(this.licenseFilePath)) {
-        const raw = fs.readFileSync(this.licenseFilePath, 'utf8')
-        const data = JSON.parse(raw)
-        return data[valueName] ?? null
-      }
-    } catch {}
+    // 3. Try persistent ProgramData storage
+    if (!foundValue) {
+      try {
+        if (fs.existsSync(this.programDataFilePath)) {
+          const raw = fs.readFileSync(this.programDataFilePath, 'utf8')
+          const data = JSON.parse(raw)
+          if (data[valueName] !== undefined && data[valueName] !== null) {
+            foundValue = String(data[valueName])
+          }
+        }
+      } catch {}
+    }
 
-    return null
+    // 4. Try User home directory storage
+    if (!foundValue) {
+      try {
+        if (fs.existsSync(this.licenseFilePath)) {
+          const raw = fs.readFileSync(this.licenseFilePath, 'utf8')
+          const data = JSON.parse(raw)
+          if (data[valueName] !== undefined && data[valueName] !== null) {
+            foundValue = String(data[valueName])
+          }
+        }
+      } catch {}
+    }
+
+    // 5. Try LocalAppData directory storage
+    if (!foundValue) {
+      try {
+        if (fs.existsSync(this.localAppDataFilePath)) {
+          const raw = fs.readFileSync(this.localAppDataFilePath, 'utf8')
+          const data = JSON.parse(raw)
+          if (data[valueName] !== undefined && data[valueName] !== null) {
+            foundValue = String(data[valueName])
+          }
+        }
+      } catch {}
+    }
+
+    // If found in any anchor, self-heal / replicate to all other anchors
+    if (foundValue) {
+      this.writeRegistryValue(valueName, foundValue)
+    }
+
+    return foundValue
   }
 
   /**
-   * Writes value to Windows Registry and file storage
+   * Writes value to Windows Registry and all persistent storage anchors
    */
   private writeRegistryValue(valueName: string, value: string): void {
     if (process.platform === 'win32') {
       try {
-        spawnSync('reg', ['add', REG_KEY, '/v', valueName, '/d', value, '/f'], {
+        spawnSync('reg', ['add', REG_KEY_USER, '/v', valueName, '/d', value, '/f'], {
+          windowsHide: true,
+        })
+      } catch {}
+
+      try {
+        spawnSync('reg', ['add', REG_KEY_MACHINE, '/v', valueName, '/d', value, '/f'], {
           windowsHide: true,
         })
       } catch {}
     }
 
-    // Always mirror to local file store
-    try {
-      let data: Record<string, any> = {}
-      if (fs.existsSync(this.licenseFilePath)) {
-        try {
-          data = JSON.parse(fs.readFileSync(this.licenseFilePath, 'utf8'))
-        } catch {}
-      }
-      data[valueName] = value
-      fs.writeFileSync(this.licenseFilePath, JSON.stringify(data, null, 2), 'utf8')
-    } catch (e) {
-      console.warn('[LicenseService] Failed to write license file:', e)
+    // Mirror to all persistent file anchors
+    const fileTargets = [this.licenseFilePath, this.programDataFilePath, this.localAppDataFilePath]
+    for (const targetPath of fileTargets) {
+      try {
+        const dir = path.dirname(targetPath)
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true })
+        }
+        let data: Record<string, any> = {}
+        if (fs.existsSync(targetPath)) {
+          try {
+            data = JSON.parse(fs.readFileSync(targetPath, 'utf8'))
+          } catch {}
+        }
+        data[valueName] = value
+        fs.writeFileSync(targetPath, JSON.stringify(data, null, 2), 'utf8')
+      } catch {}
     }
   }
 
   /**
-   * Deletes a value from Windows Registry and file storage
+   * Deletes a value from Windows Registry and persistent storage anchors
    */
   private deleteRegistryValue(valueName: string): void {
     if (process.platform === 'win32') {
       try {
-        spawnSync('reg', ['delete', REG_KEY, '/v', valueName, '/f'], {
+        spawnSync('reg', ['delete', REG_KEY_USER, '/v', valueName, '/f'], {
+          windowsHide: true,
+        })
+      } catch {}
+      try {
+        spawnSync('reg', ['delete', REG_KEY_MACHINE, '/v', valueName, '/f'], {
           windowsHide: true,
         })
       } catch {}
     }
 
-    try {
-      if (fs.existsSync(this.licenseFilePath)) {
-        const data = JSON.parse(fs.readFileSync(this.licenseFilePath, 'utf8'))
-        delete data[valueName]
-        fs.writeFileSync(this.licenseFilePath, JSON.stringify(data, null, 2), 'utf8')
-      }
-    } catch {}
+    const fileTargets = [this.licenseFilePath, this.programDataFilePath, this.localAppDataFilePath]
+    for (const targetPath of fileTargets) {
+      try {
+        if (fs.existsSync(targetPath)) {
+          const data = JSON.parse(fs.readFileSync(targetPath, 'utf8'))
+          delete data[valueName]
+          fs.writeFileSync(targetPath, JSON.stringify(data, null, 2), 'utf8')
+        }
+      } catch {}
+    }
   }
 
   /**
