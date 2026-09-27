@@ -561,8 +561,10 @@ Your objective is to autonomously execute implementation plans, write high-quali
           else if (model.id === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
           else if (!targetModel.includes('/')) targetModel = `deepseek/${targetModel}`
         } else if (model.provider === 'deepseek' && cleanBase.includes('api.deepseek.com')) {
-          if (targetModel === 'deepseek-v4-flash' || targetModel === 'deepseek-v4-pro') {
-            targetModel = 'deepseek-chat'
+          if (targetModel === 'deepseek-v4-flash') {
+            targetModel = 'deepseek-flash'
+          } else if (targetModel === 'deepseek-v4-pro') {
+            targetModel = 'deepseek-pro'
           }
         }
 

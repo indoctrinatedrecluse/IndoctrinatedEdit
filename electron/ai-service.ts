@@ -60,8 +60,10 @@ export async function streamAiResponse(
         else if (model === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
         else if (!targetModel.includes('/')) targetModel = `deepseek/${targetModel}`
       } else if (targetEndpoint.includes('api.deepseek.com')) {
-        if (model === 'deepseek-v4-flash' || model === 'deepseek-v4-pro') {
-          targetModel = 'deepseek-chat'
+        if (model === 'deepseek-v4-flash') {
+          targetModel = 'deepseek-flash'
+        } else if (model === 'deepseek-v4-pro') {
+          targetModel = 'deepseek-pro'
         }
       }
 
