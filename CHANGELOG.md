@@ -5,6 +5,36 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.2] - 2026-09-27
+
+### ⚡ Hotfix Release — In-Editor Inline Copilot Redesign, Streaming AI Integration & Liquid Glass Chat Polishing
+
+IndoctrinatedEdit 5.0.2 delivers a major redesign of the in-editor **Inline Copilot HUD**, updates keybinding routing to preserve Monaco editor `Ctrl+K` chord chains, connects real-time AI code generation streaming, and elevates the Liquid Glass aesthetic across the AI Assistant subsystem:
+
+#### 🪄 In-Editor Inline Copilot Redesign (`Ctrl+I` / `Cmd+I`)
+- **Keybinding Remapping**:
+  - Remapped the in-editor inline AI Copilot popup trigger from `Ctrl+K` to **`Ctrl+I`** (`Cmd+I` on macOS) matching modern industry standards (e.g. Cursor, GitHub Copilot).
+  - Preserved standard `Ctrl+K` chord chains in Monaco editor (`Ctrl+K Ctrl+O` to open folder, `Ctrl+K Ctrl+S` for shortcuts, `Ctrl+K Ctrl+\` for split editor) without intercepting key combinations.
+  - Added direct **"AI: Inline Code Copilot (Ctrl+I)"** entry to the editor context menu.
+- **Liquid Glass Dark Titanium HUD**:
+  - Replaced the legacy modal dialog with a frosted, translucent HUD card (`backdrop-filter: blur(12px) saturate(160%)`) featuring dark titanium surfaces and sapphire accents.
+  - Displays language indicator pill, selected line count badge, and intuitive shortcut legends (`Esc` to dismiss, `Enter` to generate, `Ctrl+Enter` to accept & insert).
+- **Background Live Streaming AI**:
+  - Connected directly to `AiService.streamChat()` with the active model (Gemini / Antigravity / Claude / DeepSeek / Ollama).
+  - Code streams in real time directly into a monospace code diff preview block with full syntax highlighting.
+- **Smart Quick Presets & Heuristic Fallbacks**:
+  - Added instant action chips: **Refactor Cleanly**, **Add JSDoc / Comments**, **Convert to Async/Await**, **Write Unit Tests**, and **Optimize Performance**.
+  - Provides instant offline fallback transforms when network or provider credentials are not configured.
+
+#### 🎨 Liquid Glass AI Chat Panel Enhancements
+- **Polished Message Bubbles**:
+  - User messages feature high-contrast sapphire gradients (`linear-gradient(135deg, rgba(10, 132, 255, 0.26) 0%, rgba(94, 92, 230, 0.18) 100%)`) with frosted borders and outer glow.
+  - Assistant responses styled with layered dark glass (`backdrop-filter: blur(16px)`), refined line heights, and typography improvements.
+- **Refined Badging & Context Chips**:
+  - Glowing cyan context attachment chips with micro-shadows and improved readability.
+
+---
+
 ## [5.0.1] - 2026-09-26
 
 ### 💎 Hotfix & Feature Release — Pro Extensions Gating Subsystem, Visual Badging, and Trial Tier Governance
