@@ -42,12 +42,14 @@ import {
   UserCheck,
   LogOut,
   User,
+  Compass,
 } from 'lucide-react'
 import { McpService } from '../../services/mcpService'
 import {
   AiChatMessage,
   AiModelOption,
   AiProvider,
+  AiChatMode,
   AiAutoApproveSettings,
   AutoApprovePreset,
   AiToolCall,
@@ -60,12 +62,14 @@ import {
   AiSettingsMap,
   AUTO_APPROVE_PRESETS,
 } from '../../services/aiService'
+import { AiTokenizer, TokenBreakdown } from '../../services/aiTokenizer'
 import { antigravityAuthService } from '../../services/antigravityAuthService'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { terminalService } from '../../services/terminalService'
 import {
   AiToolExecutor,
   AiToolParser,
+  AiToolsRegistry,
 } from '../../services/aiToolsService'
 import { DiagnosticsService } from '../../services/diagnosticsService'
 
@@ -94,13 +98,20 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   onReplaceSelection,
   onOpenFile,
 }) => {
+  // Mode State (Plan Mode vs Act Mode)
+  const [chatMode, setChatMode] = useState<AiChatMode>(AiService.getActiveMode())
+  const [planModelId, setPlanModelId] = useState<string>(AiService.getPlanModelId())
+  const [actModelId, setActModelId] = useState<string>(AiService.getActModelId())
+
   // Settings & Models
   const [settings, setSettings] = useState<AiSettingsMap>(AiService.getSettings())
   const [autoApprove, setAutoApprove] = useState<AiAutoApproveSettings>(AiService.getAutoApproveSettings())
   const [models, setModels] = useState<AiModelOption[]>(PRESET_MODELS)
-  const [selectedModelId, setSelectedModelId] = useState<string>(AiService.getActiveModelId())
+  const [selectedModelId, setSelectedModelId] = useState<string>(
+    chatMode === 'plan' ? AiService.getPlanModelId() : AiService.getActModelId()
+  )
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<'keys' | 'permissions'>('keys')
+  const [settingsTab, setSettingsTab] = useState<'keys' | 'permissions' | 'modes'>('keys')
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [showKey, setShowKey] = useState<Record<string, boolean>>({})
 
@@ -109,7 +120,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     {
       id: 'welcome-msg',
       role: 'assistant',
-      content: `Hello! I'm your **IndoctrinatedEdit** AI Assistant.\n\nI have access to local workspace tools (reading files, checking diagnostics, git diffs, file edits, and terminal execution) with strict security guardrails. Type **\`@\`** to inject editor context, or **\`/\`** for instant slash commands!`,
+      content: `Hello! I'm your **IndoctrinatedEdit** AI Assistant.\n\nChoose **Plan Mode** for architecture, research & design without code modifications, or **Act Mode** to write code, edit files, and execute commands. Type **\`@\`** to inject editor context, or **\`/\`** for instant slash commands!`,
       timestamp: Date.now(),
     },
   ])
@@ -207,7 +218,41 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     }
   }, [settings.ollama.endpoint])
 
-  const selectedModel = models.find((m) => m.id === selectedModelId) || models[0]
+  // Switch between Plan Mode and Act Mode
+  const handleSwitchMode = (newMode: AiChatMode) => {
+    setChatMode(newMode)
+    AiService.setActiveMode(newMode)
+    const targetModelId = newMode === 'plan' ? planModelId : actModelId
+    setSelectedModelId(targetModelId)
+    AiService.setActiveModelId(targetModelId)
+  }
+
+  const handleSelectModel = (modelId: string) => {
+    setSelectedModelId(modelId)
+    AiService.setActiveModelId(modelId)
+    if (chatMode === 'plan') {
+      setPlanModelId(modelId)
+      AiService.setPlanModelId(modelId)
+    } else {
+      setActModelId(modelId)
+      AiService.setActModelId(modelId)
+    }
+  }
+
+  const selectedModel =
+    models.find((m) => m.id === selectedModelId) ||
+    models.find((m) => m.id === (chatMode === 'plan' ? planModelId : actModelId)) ||
+    models[0]
+
+  // Live Token Breakdown
+  const systemPromptForMode = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
+  const tokenBreakdown: TokenBreakdown = AiTokenizer.estimateConversation(
+    systemPromptForMode,
+    messages,
+    inputText,
+    attachedContext,
+    selectedModel.id
+  )
 
   const handleToggleAutoApprove = (key: keyof AiAutoApproveSettings, val: boolean | number) => {
     const updated: AiAutoApproveSettings = {
@@ -383,6 +428,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     )
 
     const context = {
+      mode: chatMode,
       workspaceRoot,
       activeFileName,
       activeFileContent,
@@ -531,11 +577,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const handleSendMessage = () => {
     if ((!inputText.trim() && !attachedContext) || isStreaming) return
 
+    // Smart context optimization for attached files/buffers
+    let optimizedAttachment = attachedContext ? { ...attachedContext } : undefined
+    if (optimizedAttachment?.code && optimizedAttachment.code.length > 30000) {
+      const optimized = AiTokenizer.optimizeContextSnippet(optimizedAttachment.code, 12000)
+      optimizedAttachment.code = optimized.content
+    }
+
     const userMsg: AiChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: inputText.trim() || (attachedContext ? `Please inspect the attached ${attachedContext.type}.` : ''),
-      attachment: attachedContext || undefined,
+      content: inputText.trim() || (optimizedAttachment ? `Please inspect the attached ${optimizedAttachment.type}.` : ''),
+      attachment: optimizedAttachment,
       timestamp: Date.now(),
     }
 
@@ -560,7 +613,17 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
     let accumulatedText = ''
 
-    const cancel = AiService.streamChat(selectedModel, newHistory, async (chunk) => {
+    // Prepend system prompt for current mode
+    const systemMsg: AiChatMessage = {
+      id: `sys-${Date.now()}`,
+      role: 'system',
+      content: systemPromptForMode,
+      timestamp: Date.now(),
+    }
+
+    const streamHistory = [systemMsg, ...newHistory]
+
+    const cancel = AiService.streamChat(selectedModel, streamHistory, async (chunk) => {
       if (chunk.text) {
         accumulatedText += chunk.text
       }
@@ -850,6 +913,33 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             </div>
           )
         })}
+
+        {/* Plan Mode Handoff Banner */}
+        {msg.role === 'assistant' && chatMode === 'plan' && !isStreaming && (
+          <div className="plan-handoff-banner glass-subcard">
+            <div className="plan-handoff-left">
+              <Compass size={14} className="text-sapphire" />
+              <div className="plan-handoff-text">
+                <span className="plan-handoff-title">Implementation Plan Ready</span>
+                <span className="plan-handoff-subtitle">
+                  Switch to Act Mode to autonomously write code, apply diffs, and run commands.
+                </span>
+              </div>
+            </div>
+            <button
+              className="switch-to-act-btn glass-interactive"
+              onClick={() => {
+                handleSwitchMode('act')
+                setInputText('Proceed with executing the plan step-by-step.')
+                if (textareaRef.current) textareaRef.current.focus()
+              }}
+              title="Switch to Act Mode with configured Act model to execute plan"
+            >
+              <Zap size={11} />
+              <span>⚡ Switch to Act Mode & Execute</span>
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -878,7 +968,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 setIsModelDropdownOpen(!isModelDropdownOpen)
                 setIsSettingsOpen(false)
               }}
-              title="Select AI Model"
+              title={`Select AI Model for ${chatMode === 'plan' ? 'Plan' : 'Act'} Mode`}
             >
               <span
                 className="provider-dot"
@@ -894,17 +984,18 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 onWheel={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="dropdown-header">Available AI Models</div>
+                <div className="dropdown-header">
+                  Available AI Models ({chatMode === 'plan' ? 'Plan Mode' : 'Act Mode'})
+                </div>
                 <div className="dropdown-list">
                   {models.map((model) => {
                     const isAntigravityModel = model.provider === 'antigravity'
                     return (
                       <button
                         key={model.id}
-                        className={`model-option ${model.id === selectedModelId ? 'active' : ''}`}
+                        className={`model-option ${model.id === selectedModel.id ? 'active' : ''}`}
                         onClick={() => {
-                          setSelectedModelId(model.id)
-                          AiService.setActiveModelId(model.id)
+                          handleSelectModel(model.id)
                           setIsModelDropdownOpen(false)
                         }}
                       >
@@ -924,7 +1015,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                           </div>
                           <div className="model-option-desc">{model.description}</div>
                         </div>
-                        {model.id === selectedModelId && <Check size={13} className="check-active" />}
+                        {model.id === selectedModel.id && <Check size={13} className="check-active" />}
                       </button>
                     )
                   })}
@@ -1021,24 +1112,61 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         </div>
       </header>
 
+      {/* Mode Selector Bar (Plan Mode vs Act Mode) */}
+      <div className="ai-mode-toggle-bar">
+        <div className="ai-mode-tabs">
+          <button
+            className={`mode-tab-btn plan ${chatMode === 'plan' ? 'active' : ''}`}
+            onClick={() => handleSwitchMode('plan')}
+            title="Plan Mode: Research, inspect files, formulate plans (Read-Only)"
+          >
+            <Compass size={12} className="mode-tab-icon" />
+            <span className="mode-tab-title">Plan Mode</span>
+            <span className="mode-tab-badge">Design</span>
+          </button>
+          <button
+            className={`mode-tab-btn act ${chatMode === 'act' ? 'active' : ''}`}
+            onClick={() => handleSwitchMode('act')}
+            title="Act Mode: Write code, propose edits, apply diffs & run commands (Autonomous)"
+          >
+            <Zap size={12} className="mode-tab-icon" />
+            <span className="mode-tab-title">Act Mode</span>
+            <span className="mode-tab-badge">Execute</span>
+          </button>
+        </div>
+
+        <div className="mode-quick-info">
+          <span className="mode-active-pill">
+            {chatMode === 'plan' ? '📘 Plan Mode Active' : '⚡ Act Mode Active'}
+          </span>
+        </div>
+      </div>
+
       {/* Settings / API Key / Permissions Drawer */}
       {isSettingsOpen && (
         <div className="ai-settings-drawer glass-panel custom-scrollbar">
           <div className="settings-header">
             <div className="settings-tab-bar">
               <button
+                className={`settings-tab-btn ${settingsTab === 'modes' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('modes')}
+              >
+                <Compass size={12} />
+                <span>Mode Models</span>
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'permissions' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('permissions')}
               >
                 <ShieldCheck size={12} />
-                <span>Auto-Approve & Permissions</span>
+                <span>Permissions</span>
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'keys' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('keys')}
               >
                 <Key size={12} />
-                <span>API Keys & Subscriptions</span>
+                <span>API Keys</span>
               </button>
             </div>
             <button className="settings-close" onClick={() => setIsSettingsOpen(false)}>
@@ -1046,7 +1174,73 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             </button>
           </div>
 
-          {settingsTab === 'permissions' ? (
+          {settingsTab === 'modes' && (
+            <div className="modes-drawer-body">
+              <div className="mode-setting-card glass-subcard">
+                <div className="mode-setting-header">
+                  <div className="mode-setting-title">
+                    <Compass size={14} className="text-sapphire" />
+                    <span>Default Plan Mode Model</span>
+                  </div>
+                  <span className="mode-role-badge plan">Architecture & Planning</span>
+                </div>
+                <p className="mode-setting-desc">
+                  Model utilized when in Plan Mode to research code, inspect workspace diagnostics, and formulate structured implementation plans without code edits.
+                </p>
+                <select
+                  className="mode-select-input glass-interactive"
+                  value={planModelId}
+                  onChange={(e) => {
+                    setPlanModelId(e.target.value)
+                    AiService.setPlanModelId(e.target.value)
+                    if (chatMode === 'plan') {
+                      setSelectedModelId(e.target.value)
+                      AiService.setActiveModelId(e.target.value)
+                    }
+                  }}
+                >
+                  {models.map((m) => (
+                    <option key={`plan-${m.id}`} value={m.id}>
+                      {m.name} ({m.provider.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mode-setting-card glass-subcard">
+                <div className="mode-setting-header">
+                  <div className="mode-setting-title">
+                    <Zap size={14} className="text-emerald" />
+                    <span>Default Act Mode Model</span>
+                  </div>
+                  <span className="mode-role-badge act">Code & Execution</span>
+                </div>
+                <p className="mode-setting-desc">
+                  Model utilized when in Act Mode to autonomously write code, propose file diffs, apply edits, and execute test runs.
+                </p>
+                <select
+                  className="mode-select-input glass-interactive"
+                  value={actModelId}
+                  onChange={(e) => {
+                    setActModelId(e.target.value)
+                    AiService.setActModelId(e.target.value)
+                    if (chatMode === 'act') {
+                      setSelectedModelId(e.target.value)
+                      AiService.setActiveModelId(e.target.value)
+                    }
+                  }}
+                >
+                  {models.map((m) => (
+                    <option key={`act-${m.id}`} value={m.id}>
+                      {m.name} ({m.provider.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {settingsTab === 'permissions' && (
             <div className="permissions-drawer-body">
               {/* Presets Bar */}
               <div className="permissions-presets-bar">
@@ -1213,7 +1407,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
+          )}
+
+          {settingsTab === 'keys' && (
             <div className="settings-scroll-list">
               {(['antigravity', 'openai', 'deepseek', 'gemini', 'claude', 'ollama'] as AiProvider[]).map((prov) => {
                 const cfg = settings[prov]
@@ -1749,6 +1945,30 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           </button>
         </div>
 
+        {/* Live Tokenizer Meter Bar */}
+        <div
+          className="ai-token-meter-bar"
+          title={`Token Breakdown:\n• System Prompt: ${tokenBreakdown.systemTokens.toLocaleString()} tokens\n• Chat History: ${tokenBreakdown.historyTokens.toLocaleString()} tokens\n• Attached Context: ${tokenBreakdown.attachmentTokens.toLocaleString()} tokens\n• Current Input: ${tokenBreakdown.inputTokens.toLocaleString()} tokens\n• Total: ${tokenBreakdown.totalTokens.toLocaleString()} / ${tokenBreakdown.contextLimit.toLocaleString()} tokens (${tokenBreakdown.percentUsed}%)`}
+        >
+          <div className="token-meter-left">
+            <Cpu size={10} className="meter-icon" />
+            <span className="token-count-label">
+              {tokenBreakdown.totalTokens.toLocaleString()} / {(tokenBreakdown.contextLimit / 1000).toFixed(0)}k tokens ({tokenBreakdown.percentUsed}%)
+            </span>
+          </div>
+          <div className="token-meter-bar-track">
+            <div
+              className={`token-meter-bar-fill ${tokenBreakdown.percentUsed > 80 ? 'danger' : tokenBreakdown.percentUsed > 50 ? 'warning' : 'safe'}`}
+              style={{ width: `${Math.max(2, Math.min(100, tokenBreakdown.percentUsed))}%` }}
+            />
+          </div>
+          <div className="token-meter-right">
+            <span className={`active-mode-tag ${chatMode}`}>
+              {chatMode === 'plan' ? '📘 Plan Mode' : '⚡ Act Mode'}
+            </span>
+          </div>
+        </div>
+
         {/* Prompt Input Box */}
         <div className="input-box-container glass-card">
           <textarea
@@ -2116,6 +2336,281 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
         .auto-pill-label {
           white-space: nowrap;
+        }
+
+        /* Mode Toggle Bar (Plan Mode vs Act Mode) */
+        .ai-mode-toggle-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 12px;
+          background: rgba(14, 18, 32, 0.7);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+          gap: 8px;
+        }
+
+        .ai-mode-tabs {
+          display: flex;
+          gap: 6px;
+          background: rgba(0, 0, 0, 0.25);
+          padding: 2px;
+          border-radius: 7px;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .mode-tab-btn {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 3px 8px;
+          border-radius: 5px;
+          background: transparent;
+          border: none;
+          color: rgba(235, 235, 245, 0.6);
+          font-size: 11px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .mode-tab-btn:hover {
+          color: #FFFFFF;
+          background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mode-tab-btn.active.plan {
+          background: rgba(10, 132, 255, 0.2);
+          color: #5AC8FA;
+          border: 1px solid rgba(10, 132, 255, 0.4);
+          box-shadow: 0 0 10px rgba(10, 132, 255, 0.2);
+        }
+
+        .mode-tab-btn.active.act {
+          background: rgba(48, 209, 88, 0.18);
+          color: #30D158;
+          border: 1px solid rgba(48, 209, 88, 0.4);
+          box-shadow: 0 0 10px rgba(48, 209, 88, 0.2);
+        }
+
+        .mode-tab-badge {
+          font-size: 9px;
+          padding: 1px 4px;
+          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.08);
+          color: inherit;
+        }
+
+        .mode-quick-info {
+          display: flex;
+          align-items: center;
+        }
+
+        .mode-active-pill {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.04);
+          color: rgba(235, 235, 245, 0.65);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Modes Drawer Body */
+        .modes-drawer-body {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding-top: 8px;
+        }
+
+        .mode-setting-card {
+          padding: 10px;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .mode-setting-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .mode-setting-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #FFFFFF;
+        }
+
+        .mode-role-badge {
+          font-size: 9.5px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-weight: 600;
+        }
+
+        .mode-role-badge.plan {
+          background: rgba(10, 132, 255, 0.15);
+          color: #5AC8FA;
+          border: 1px solid rgba(10, 132, 255, 0.3);
+        }
+
+        .mode-role-badge.act {
+          background: rgba(48, 209, 88, 0.15);
+          color: #30D158;
+          border: 1px solid rgba(48, 209, 88, 0.3);
+        }
+
+        .mode-setting-desc {
+          font-size: 11px;
+          color: rgba(235, 235, 245, 0.6);
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .mode-select-input {
+          padding: 5px 8px;
+          border-radius: 6px;
+          background: rgba(0, 0, 0, 0.4);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: #FFFFFF;
+          font-size: 11.5px;
+          outline: none;
+          cursor: pointer;
+        }
+
+        /* Plan Handoff Banner */
+        .plan-handoff-banner {
+          margin-top: 10px;
+          padding: 10px 12px;
+          border-radius: 8px;
+          background: linear-gradient(135deg, rgba(10, 132, 255, 0.12) 0%, rgba(94, 92, 230, 0.08) 100%);
+          border: 1px solid rgba(10, 132, 255, 0.28);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .plan-handoff-left {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+        }
+
+        .plan-handoff-text {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .plan-handoff-title {
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #5AC8FA;
+        }
+
+        .plan-handoff-subtitle {
+          font-size: 10.5px;
+          color: rgba(235, 235, 245, 0.65);
+          line-height: 1.3;
+        }
+
+        .switch-to-act-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 10px;
+          border-radius: 6px;
+          background: linear-gradient(135deg, #30D158 0%, #248A3D 100%);
+          color: #000000;
+          font-size: 11px;
+          font-weight: 600;
+          border: none;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 8px rgba(48, 209, 88, 0.3);
+        }
+
+        .switch-to-act-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(48, 209, 88, 0.45);
+        }
+
+        /* Live Tokenizer Meter Bar */
+        .ai-token-meter-bar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 10px;
+          background: rgba(0, 0, 0, 0.35);
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          margin-bottom: 6px;
+          font-size: 10px;
+          color: rgba(235, 235, 245, 0.6);
+        }
+
+        .token-meter-left {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          white-space: nowrap;
+        }
+
+        .meter-icon {
+          color: #5AC8FA;
+        }
+
+        .token-meter-bar-track {
+          flex: 1;
+          height: 4px;
+          border-radius: 2px;
+          background: rgba(255, 255, 255, 0.08);
+          overflow: hidden;
+        }
+
+        .token-meter-bar-fill {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.3s ease;
+        }
+
+        .token-meter-bar-fill.safe {
+          background: linear-gradient(90deg, #30D158, #34C759);
+        }
+
+        .token-meter-bar-fill.warning {
+          background: linear-gradient(90deg, #FF9F0A, #FFD60A);
+        }
+
+        .token-meter-bar-fill.danger {
+          background: linear-gradient(90deg, #FF453A, #FF375F);
+        }
+
+        .active-mode-tag {
+          font-size: 9.5px;
+          font-weight: 600;
+          padding: 1px 5px;
+          border-radius: 3px;
+        }
+
+        .active-mode-tag.plan {
+          background: rgba(10, 132, 255, 0.15);
+          color: #5AC8FA;
+        }
+
+        .active-mode-tag.act {
+          background: rgba(48, 209, 88, 0.15);
+          color: #30D158;
         }
 
         /* Settings Drawer & Tab Bar */

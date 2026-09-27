@@ -1,6 +1,7 @@
 import {
   AiModelOption,
   AiProvider,
+  AiChatMode,
   AiStreamChunk,
   AiChatMessage,
   AiAutoApproveSettings,
@@ -63,16 +64,23 @@ export const PRESET_MODELS: AiModelOption[] = [
   // Antigravity (Personal Subscription & Flagship Models)
   {
     id: 'antigravity-gemini-3-7-flash',
-    name: 'Gemini 3.7 Flash (Flagship Reasoning)',
+    name: 'Gemini 3.7 Flash (Antigravity Flagship)',
     provider: 'antigravity',
     description: 'Antigravity flagship model with hybrid Chain-of-Thought reasoning, high-speed streaming, and 1M context',
     supportsReasoning: true,
   },
   {
-    id: 'antigravity-gemini-2-5-pro',
-    name: 'Gemini 2.5 Pro (Antigravity Tier)',
+    id: 'antigravity-gemini-3-8-flash',
+    name: 'Gemini 3.8 Flash (Antigravity Next-Gen)',
     provider: 'antigravity',
-    description: 'Deep architectural coding and 1M context analysis via Antigravity Personal Subscription',
+    description: 'Next-generation ultra-low latency agent model with instant tool dispatch and real-time execution',
+    supportsReasoning: true,
+  },
+  {
+    id: 'antigravity-gemini-3-1-pro',
+    name: 'Gemini 3.1 Pro (Antigravity Deep Architecture)',
+    provider: 'antigravity',
+    description: 'Deep architectural coding, multi-repo synthesis, and massive 2M context analysis via Antigravity Personal Subscription',
     supportsReasoning: true,
   },
   {
@@ -82,19 +90,112 @@ export const PRESET_MODELS: AiModelOption[] = [
     description: 'Hybrid reasoning and benchmark-leading code intelligence via Antigravity Personal Tier',
     supportsReasoning: true,
   },
-
-  // ChatGPT & OpenAI Codex (Subscription / BYOK)
   {
-    id: 'gpt-4o-codex',
-    name: 'ChatGPT Codex (OpenAI Subscription)',
-    provider: 'openai',
-    description: 'Specialized Codex engine for autonomous code completion, synthesis and refactoring',
+    id: 'antigravity-claude-3-7-opus',
+    name: 'Claude 3.7 Opus (Antigravity Flagship)',
+    provider: 'antigravity',
+    description: 'Flagship deep synthesis and multi-file architectural planning via Antigravity Personal Tier',
+    supportsReasoning: true,
   },
   {
-    id: 'chatgpt-4o-latest',
-    name: 'ChatGPT Plus / Pro (chatgpt-4o-latest)',
+    id: 'antigravity-deepseek-v4',
+    name: 'DeepSeek-V4-Pro (Antigravity Tier)',
+    provider: 'antigravity',
+    description: 'Next-generation MoE architectural reasoning and extreme code efficiency via Antigravity Personal Tier',
+    supportsReasoning: true,
+  },
+
+  // Google Gemini (BYOK / Direct API)
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Hybrid Reasoning)',
+    provider: 'gemini',
+    description: 'Flagship Google model with adjustable Chain-of-Thought reasoning and 1M context window',
+    supportsReasoning: true,
+  },
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash (Ultra-Fast)',
+    provider: 'gemini',
+    description: 'Next-gen ultra-low latency streaming model engineered for lightning-fast coding assistance',
+  },
+  {
+    id: 'gemini-3.1-pro',
+    name: 'Gemini 3.1 Pro (2M Context)',
+    provider: 'gemini',
+    description: 'Deep architectural coding, multi-file repo synthesis, and 2M token context reasoning',
+    supportsReasoning: true,
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    provider: 'gemini',
+    description: 'High-speed multimodal coding model with 1M context window',
+  },
+  {
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    provider: 'gemini',
+    description: 'Top-tier code generation and complex multi-file reasoning',
+    supportsReasoning: true,
+  },
+
+  // Anthropic Claude (BYOK / Direct API)
+  {
+    id: 'claude-3-7-sonnet',
+    name: 'Claude 3.7 Sonnet (Latest)',
+    provider: 'claude',
+    description: 'Anthropic hybrid reasoning model with benchmark-leading coding capability',
+    supportsReasoning: true,
+  },
+  {
+    id: 'claude-3-7-opus',
+    name: 'Claude 3.7 Opus (Latest)',
+    provider: 'claude',
+    description: 'Anthropic flagship model for deep synthesis, complex refactorings, and system design',
+    supportsReasoning: true,
+  },
+  {
+    id: 'claude-3-5-sonnet',
+    name: 'Claude 3.5 Sonnet',
+    provider: 'claude',
+    description: 'State-of-the-art coding, debugging, and nuanced code reviews',
+  },
+
+  // DeepSeek (BYOK / Direct API)
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek-V4-Flash',
+    provider: 'deepseek',
+    description: 'Ultra-fast next-gen MoE model with 1M context window and rapid token generation',
+  },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek-V4-Pro (Reasoning)',
+    provider: 'deepseek',
+    description: 'Flagship V4 MoE model with deep algorithmic coding and architectural reasoning',
+    supportsReasoning: true,
+  },
+  {
+    id: 'deepseek-reasoner',
+    name: 'DeepSeek-R1 (Reasoning)',
+    provider: 'deepseek',
+    description: 'Reinforcement learning CoT model displaying step-by-step thinking process',
+    supportsReasoning: true,
+  },
+  {
+    id: 'deepseek-chat',
+    name: 'DeepSeek-V3',
+    provider: 'deepseek',
+    description: '671B MoE model with exceptional coding and architectural reasoning',
+  },
+
+  // OpenAI & ChatGPT (BYOK / Direct API)
+  {
+    id: 'gpt-4.5-preview',
+    name: 'OpenAI GPT-4.5 Preview',
     provider: 'openai',
-    description: 'Direct ChatGPT subscription model with latest dynamic instruction tuning',
+    description: 'Next-gen flagship OpenAI model with enhanced world knowledge and nuanced coding',
   },
   {
     id: 'o3-mini',
@@ -102,6 +203,12 @@ export const PRESET_MODELS: AiModelOption[] = [
     provider: 'openai',
     description: 'High-speed STEM, algorithmic logic, and coding CoT reasoning model',
     supportsReasoning: true,
+  },
+  {
+    id: 'chatgpt-4o-latest',
+    name: 'ChatGPT Plus / Pro (chatgpt-4o-latest)',
+    provider: 'openai',
+    description: 'Direct ChatGPT subscription model with latest dynamic instruction tuning',
   },
   {
     id: 'gpt-4o',
@@ -115,54 +222,19 @@ export const PRESET_MODELS: AiModelOption[] = [
     provider: 'openai',
     description: 'Ultra-fast and cost-efficient coding assistant',
   },
-
-  // DeepSeek (BYOK)
   {
-    id: 'deepseek-chat',
-    name: 'DeepSeek-V3',
-    provider: 'deepseek',
-    description: '671B MoE model with exceptional coding and architectural reasoning',
-  },
-  {
-    id: 'deepseek-reasoner',
-    name: 'DeepSeek-R1 (Reasoning)',
-    provider: 'deepseek',
-    description: 'Reinforcement learning CoT model displaying step-by-step thinking process',
-    supportsReasoning: true,
-  },
-
-  // Gemini (BYOK)
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    provider: 'gemini',
-    description: 'High-speed multimodal coding model with massive 1M context window',
-  },
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    provider: 'gemini',
-    description: 'Top-tier code generation and complex multi-file reasoning',
-  },
-
-  // Claude (BYOK)
-  {
-    id: 'claude-3-7-sonnet',
-    name: 'Claude 3.7 Sonnet',
-    provider: 'claude',
-    description: 'Hybrid reasoning and leading coding benchmarks',
-    supportsReasoning: true,
-  },
-  {
-    id: 'claude-3-5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    provider: 'claude',
-    description: 'State-of-the-art coding and nuanced code reviews',
+    id: 'gpt-4o-codex',
+    name: 'ChatGPT Codex (OpenAI Subscription)',
+    provider: 'openai',
+    description: 'Specialized Codex engine for autonomous code completion, synthesis and refactoring',
   },
 ]
 
 const SETTINGS_STORAGE_KEY = 'indoctrinated_ai_settings'
 const ACTIVE_MODEL_STORAGE_KEY = 'indoctrinated_ai_active_model'
+const PLAN_MODEL_STORAGE_KEY = 'indoctrinated_ai_plan_model'
+const ACT_MODEL_STORAGE_KEY = 'indoctrinated_ai_act_model'
+const ACTIVE_MODE_STORAGE_KEY = 'indoctrinated_ai_active_mode'
 const AUTO_APPROVE_STORAGE_KEY = 'indoctrinated_ai_auto_approve'
 
 export class AiService {
@@ -272,15 +344,146 @@ export class AiService {
 
   static getActiveModelId(): string {
     if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'deepseek-chat'
+      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'gemini-3.7-flash'
     }
-    return 'deepseek-chat'
+    return 'gemini-3.7-flash'
   }
 
   static setActiveModelId(modelId: string): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(ACTIVE_MODEL_STORAGE_KEY, modelId)
     }
+  }
+
+  private static modeListeners: Set<(state: AiModeState) => void> = new Set()
+  private static inMemoryPlanModelId: string = 'gemini-3.1-pro'
+  private static inMemoryActModelId: string = 'gemini-3.7-flash'
+  private static inMemoryActiveMode: AiChatMode = 'plan'
+
+  static getPlanModelId(): string {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const item = localStorage.getItem(PLAN_MODEL_STORAGE_KEY)
+        if (item) return item
+      } catch {}
+    }
+    return this.inMemoryPlanModelId
+  }
+
+  static setPlanModelId(modelId: string): void {
+    this.inMemoryPlanModelId = modelId
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(PLAN_MODEL_STORAGE_KEY, modelId)
+      } catch {}
+    }
+    this.notifyModeListeners()
+  }
+
+  static getActModelId(): string {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const item = localStorage.getItem(ACT_MODEL_STORAGE_KEY)
+        if (item) return item
+      } catch {}
+    }
+    return this.inMemoryActModelId
+  }
+
+  static setActModelId(modelId: string): void {
+    this.inMemoryActModelId = modelId
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(ACT_MODEL_STORAGE_KEY, modelId)
+      } catch {}
+    }
+    this.notifyModeListeners()
+  }
+
+  static getActiveMode(): AiChatMode {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const item = localStorage.getItem(ACTIVE_MODE_STORAGE_KEY)
+        if (item) return item as AiChatMode
+      } catch {}
+    }
+    return this.inMemoryActiveMode
+  }
+
+  static setActiveMode(mode: AiChatMode): void {
+    this.inMemoryActiveMode = mode
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(ACTIVE_MODE_STORAGE_KEY, mode)
+      } catch {}
+    }
+    this.notifyModeListeners()
+  }
+
+  static getMode(): ChatMode {
+    return this.getActiveMode() as ChatMode
+  }
+
+  static setMode(mode: ChatMode): void {
+    this.setActiveMode(mode as AiChatMode)
+  }
+
+  static getActiveModelIdForCurrentMode(): string {
+    return this.getMode() === 'plan' ? this.getPlanModelId() : this.getActModelId()
+  }
+
+  static getSystemPromptForMode(mode: ChatMode): string {
+    return this.getModeSystemPrompt(mode as AiChatMode)
+  }
+
+  static subscribeMode(listener: (state: AiModeState) => void): () => void {
+    this.modeListeners.add(listener)
+    listener({
+      mode: this.getMode(),
+      planModelId: this.getPlanModelId(),
+      actModelId: this.getActModelId(),
+    })
+    return () => {
+      this.modeListeners.delete(listener)
+    }
+  }
+
+  private static notifyModeListeners(): void {
+    const state: AiModeState = {
+      mode: this.getMode(),
+      planModelId: this.getPlanModelId(),
+      actModelId: this.getActModelId(),
+    }
+    this.modeListeners.forEach((fn) => fn(state))
+  }
+
+  static getModelForMode(mode: AiChatMode, availableModels: AiModelOption[]): AiModelOption {
+    const targetId = mode === 'plan' ? this.getPlanModelId() : this.getActModelId()
+    return availableModels.find((m) => m.id === targetId) || availableModels.find((m) => m.id === this.getActiveModelId()) || availableModels[0]
+  }
+
+  static getModeSystemPrompt(mode: AiChatMode): string {
+    if (mode === 'plan') {
+      return `You are in **Plan Mode** in IndoctrinatedEdit.
+Your objective is to thoroughly investigate, analyze the codebase, diagnose bugs, and formulate a clear, actionable implementation plan in text.
+
+### Plan Mode Operational Rules:
+1. **Discovery & Exploration**: You can freely read files (\`read_file\`), search keywords (\`search_code\`), check diagnostics (\`get_workspace_diagnostics\`), inspect directory trees (\`list_workspace_files\`), run read-only terminal commands, and query MCP tools.
+2. **Read-Only / No Code Writing**: In Plan Mode, you must NOT write or overwrite code files directly. Do NOT attempt to use \`propose_file_edit\`.
+3. **Structured Implementation Plan**: Output your plan with:
+   - **Problem Analysis & Root Cause**: Clear explanation of what needs to be solved.
+   - **Proposed Changes**: Exact list of files to modify or create with step-by-step logic.
+   - **Verification Strategy**: How the changes will be tested (unit tests, build checks, manual flows).
+4. **Handoff to Act Mode**: Conclude by instructing the user to switch to **Act Mode** (via the toggle button) when ready to execute and write the code.`
+    }
+
+    return `You are in **Act Mode** in IndoctrinatedEdit.
+Your objective is to autonomously execute implementation plans, write high-quality code, apply diffs, run tests, and verify solutions.
+
+### Act Mode Operational Rules:
+1. **Execution**: You can read files, write code (\`propose_file_edit\`), run terminal commands (\`execute_terminal_command\`), and trigger test runs.
+2. **Quality & Precision**: Write clean, modern code matching the existing repository style. Avoid placeholders. Always check compiler errors and diagnostics after edits.
+3. **Safety**: Destructive commands and path traversal are guarded.`
   }
 
   static async fetchOllamaModels(host = 'http://localhost:11434'): Promise<AiModelOption[]> {
@@ -450,3 +653,12 @@ export class AiService {
     }
   }
 }
+
+export type ChatMode = 'plan' | 'act'
+
+export interface AiModeState {
+  mode: ChatMode
+  planModelId: string
+  actModelId: string
+}
+

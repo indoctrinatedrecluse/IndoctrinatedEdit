@@ -180,6 +180,7 @@ export interface ViewContribution {
  * ========================================================================= */
 
 export type AiProvider = 'openai' | 'deepseek' | 'gemini' | 'claude' | 'ollama' | 'antigravity'
+export type AiChatMode = 'plan' | 'act'
 
 export interface AiModelOption {
   id: string

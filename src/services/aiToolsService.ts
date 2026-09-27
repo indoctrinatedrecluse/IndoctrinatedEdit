@@ -385,6 +385,7 @@ You can call multiple tools if needed. Always prefer reading files or checking d
  * ========================================================================= */
 
 export interface ToolExecutionContext {
+  mode?: 'plan' | 'act'
   workspaceRoot?: string
   activeFileName?: string
   activeFileContent?: string
@@ -409,6 +410,17 @@ export class AiToolExecutor {
         success: false,
         output: '',
         error: `Unknown tool: "${call.toolName}"`,
+      }
+    }
+
+    // Plan Mode Guardrail: Prohibit direct write / modification tools
+    if (context.mode === 'plan' && def.category === 'write') {
+      return {
+        toolCallId: call.id,
+        toolName: call.toolName,
+        success: false,
+        output: '',
+        error: `Plan Mode Policy: Direct code modifications are disabled in Plan Mode. Switch to Act Mode to apply file edits and write code.`,
       }
     }
 
