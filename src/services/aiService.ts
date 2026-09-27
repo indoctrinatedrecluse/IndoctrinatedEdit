@@ -17,11 +17,11 @@ export type AiSettingsMap = Record<AiProvider, ProviderSetting>
 
 const DEFAULT_SETTINGS: AiSettingsMap = {
   deepseek: { apiKey: '', endpoint: 'https://api.deepseek.com' },
-  openai: { apiKey: '', endpoint: 'https://api.openai.com/v1' },
-  gemini: { apiKey: '', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  gemini: { apiKey: '', endpoint: 'https://generativelanguage.googleapis.com' },
   claude: { apiKey: '', endpoint: 'https://api.anthropic.com' },
+  openai: { apiKey: '', endpoint: 'https://api.openai.com/v1' },
   ollama: { apiKey: '', endpoint: 'http://localhost:11434' },
-  antigravity: { apiKey: '', endpoint: 'http://localhost:8080/v1' },
+  antigravity: { apiKey: '', endpoint: '' },
 }
 
 export const DEFAULT_AUTO_APPROVE_SETTINGS: AiAutoApproveSettings = {
@@ -61,120 +61,12 @@ export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettin
 }
 
 export const PRESET_MODELS: AiModelOption[] = [
-  // Antigravity (Personal Subscription & Flagship Models)
+  // DeepSeek (Direct API)
   {
-    id: 'antigravity-gemini-3-7-flash',
-    name: 'Gemini 3.7 Flash (Antigravity Flagship)',
-    provider: 'antigravity',
-    description: 'Antigravity flagship model with hybrid Chain-of-Thought reasoning, high-speed streaming, and 1M context',
-    supportsReasoning: true,
-  },
-  {
-    id: 'antigravity-gemini-3-8-flash',
-    name: 'Gemini 3.8 Flash (Antigravity Next-Gen)',
-    provider: 'antigravity',
-    description: 'Next-generation ultra-low latency agent model with instant tool dispatch and real-time execution',
-    supportsReasoning: true,
-  },
-  {
-    id: 'antigravity-gemini-3-1-pro',
-    name: 'Gemini 3.1 Pro (Antigravity Deep Architecture)',
-    provider: 'antigravity',
-    description: 'Deep architectural coding, multi-repo synthesis, and massive 2M context analysis via Antigravity Personal Subscription',
-    supportsReasoning: true,
-  },
-  {
-    id: 'antigravity-claude-3-7-sonnet',
-    name: 'Claude 3.7 Sonnet (Antigravity Tier)',
-    provider: 'antigravity',
-    description: 'Hybrid reasoning and benchmark-leading code intelligence via Antigravity Personal Tier',
-    supportsReasoning: true,
-  },
-  {
-    id: 'antigravity-claude-3-7-opus',
-    name: 'Claude 3.7 Opus (Antigravity Flagship)',
-    provider: 'antigravity',
-    description: 'Flagship deep synthesis and multi-file architectural planning via Antigravity Personal Tier',
-    supportsReasoning: true,
-  },
-  {
-    id: 'antigravity-deepseek-v4',
-    name: 'DeepSeek-V4-Pro (Antigravity Tier)',
-    provider: 'antigravity',
-    description: 'Next-generation MoE architectural reasoning and extreme code efficiency via Antigravity Personal Tier',
-    supportsReasoning: true,
-  },
-
-  // Google Gemini (BYOK / Direct API)
-  {
-    id: 'gemini-3.7-flash',
-    name: 'Gemini 3.7 Flash (Hybrid Reasoning)',
-    provider: 'gemini',
-    description: 'Flagship Google model with adjustable Chain-of-Thought reasoning and 1M context window',
-    supportsReasoning: true,
-  },
-  {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash (Ultra-Fast)',
-    provider: 'gemini',
-    description: 'Next-gen ultra-low latency streaming model engineered for lightning-fast coding assistance',
-  },
-  {
-    id: 'gemini-3.1-pro',
-    name: 'Gemini 3.1 Pro (2M Context)',
-    provider: 'gemini',
-    description: 'Deep architectural coding, multi-file repo synthesis, and 2M token context reasoning',
-    supportsReasoning: true,
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    provider: 'gemini',
-    description: 'High-speed multimodal coding model with 1M context window',
-  },
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    provider: 'gemini',
-    description: 'Top-tier code generation and complex multi-file reasoning',
-    supportsReasoning: true,
-  },
-
-  // Anthropic Claude (BYOK / Direct API)
-  {
-    id: 'claude-3-7-sonnet',
-    name: 'Claude 3.7 Sonnet (Latest)',
-    provider: 'claude',
-    description: 'Anthropic hybrid reasoning model with benchmark-leading coding capability',
-    supportsReasoning: true,
-  },
-  {
-    id: 'claude-3-7-opus',
-    name: 'Claude 3.7 Opus (Latest)',
-    provider: 'claude',
-    description: 'Anthropic flagship model for deep synthesis, complex refactorings, and system design',
-    supportsReasoning: true,
-  },
-  {
-    id: 'claude-3-5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    provider: 'claude',
-    description: 'State-of-the-art coding, debugging, and nuanced code reviews',
-  },
-
-  // DeepSeek (BYOK / Direct API)
-  {
-    id: 'deepseek-v4-flash',
-    name: 'DeepSeek-V4-Flash',
+    id: 'deepseek-chat',
+    name: 'DeepSeek-V3 (Chat & Code)',
     provider: 'deepseek',
-    description: 'Ultra-fast next-gen MoE model with 1M context window and rapid token generation',
-  },
-  {
-    id: 'deepseek-v4-pro',
-    name: 'DeepSeek-V4-Pro (Reasoning)',
-    provider: 'deepseek',
-    description: 'Flagship V4 MoE model with deep algorithmic coding and architectural reasoning',
-    supportsReasoning: true,
+    description: 'Flagship 671B MoE model with exceptional coding, architecture, and multi-turn refactoring',
   },
   {
     id: 'deepseek-reasoner',
@@ -183,33 +75,70 @@ export const PRESET_MODELS: AiModelOption[] = [
     description: 'Reinforcement learning CoT model displaying step-by-step thinking process',
     supportsReasoning: true,
   },
-  {
-    id: 'deepseek-chat',
-    name: 'DeepSeek-V3',
-    provider: 'deepseek',
-    description: '671B MoE model with exceptional coding and architectural reasoning',
-  },
 
-  // OpenAI & ChatGPT (BYOK / Direct API)
+  // Google Gemini (Direct API)
   {
-    id: 'gpt-4.5-preview',
-    name: 'OpenAI GPT-4.5 Preview',
-    provider: 'openai',
-    description: 'Next-gen flagship OpenAI model with enhanced world knowledge and nuanced coding',
-  },
-  {
-    id: 'o3-mini',
-    name: 'OpenAI o3-mini (Reasoning)',
-    provider: 'openai',
-    description: 'High-speed STEM, algorithmic logic, and coding CoT reasoning model',
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro (Deep Reasoning)',
+    provider: 'gemini',
+    description: 'Top-tier code generation, complex architectural reasoning, and massive context',
     supportsReasoning: true,
   },
   {
-    id: 'chatgpt-4o-latest',
-    name: 'ChatGPT Plus / Pro (chatgpt-4o-latest)',
-    provider: 'openai',
-    description: 'Direct ChatGPT subscription model with latest dynamic instruction tuning',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash (Ultra-Fast)',
+    provider: 'gemini',
+    description: 'High-speed multimodal coding model engineered for rapid streaming',
   },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    provider: 'gemini',
+    description: 'Next-generation low-latency model with real-time tool execution',
+  },
+  {
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro (2M Context)',
+    provider: 'gemini',
+    description: 'Deep architectural coding, multi-file repo synthesis, and 2M token context reasoning',
+    supportsReasoning: true,
+  },
+  {
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
+    provider: 'gemini',
+    description: 'Lightweight, fast coding assistant with 1M context window',
+  },
+
+  // Anthropic Claude (Direct API)
+  {
+    id: 'claude-3-7-sonnet-20250219',
+    name: 'Claude 3.7 Sonnet (Hybrid Reasoning)',
+    provider: 'claude',
+    description: 'Anthropic hybrid reasoning model with benchmark-leading coding capability',
+    supportsReasoning: true,
+  },
+  {
+    id: 'claude-3-5-sonnet-20241022',
+    name: 'Claude 3.5 Sonnet',
+    provider: 'claude',
+    description: 'State-of-the-art coding, debugging, and nuanced code reviews',
+  },
+  {
+    id: 'claude-3-5-haiku-20241022',
+    name: 'Claude 3.5 Haiku',
+    provider: 'claude',
+    description: 'Ultra-fast and cost-efficient code completion and analysis',
+  },
+  {
+    id: 'claude-3-opus-20240229',
+    name: 'Claude 3 Opus',
+    provider: 'claude',
+    description: 'Anthropic flagship model for deep synthesis, complex refactorings, and system design',
+    supportsReasoning: true,
+  },
+
+  // OpenAI (Direct API)
   {
     id: 'gpt-4o',
     name: 'OpenAI GPT-4o',
@@ -223,10 +152,18 @@ export const PRESET_MODELS: AiModelOption[] = [
     description: 'Ultra-fast and cost-efficient coding assistant',
   },
   {
-    id: 'gpt-4o-codex',
-    name: 'ChatGPT Codex (OpenAI Subscription)',
+    id: 'o3-mini',
+    name: 'OpenAI o3-mini (Reasoning)',
     provider: 'openai',
-    description: 'Specialized Codex engine for autonomous code completion, synthesis and refactoring',
+    description: 'High-speed STEM, algorithmic logic, and coding CoT reasoning model',
+    supportsReasoning: true,
+  },
+  {
+    id: 'o1',
+    name: 'OpenAI o1 (Deep Reasoning)',
+    provider: 'openai',
+    description: 'Deep reasoning for complex algorithms, architecture, and mathematics',
+    supportsReasoning: true,
   },
 ]
 
@@ -344,9 +281,9 @@ export class AiService {
 
   static getActiveModelId(): string {
     if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'gemini-3.7-flash'
+      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'deepseek-chat'
     }
-    return 'gemini-3.7-flash'
+    return 'deepseek-chat'
   }
 
   static setActiveModelId(modelId: string): void {
@@ -356,8 +293,8 @@ export class AiService {
   }
 
   private static modeListeners: Set<(state: AiModeState) => void> = new Set()
-  private static inMemoryPlanModelId: string = 'gemini-3.1-pro'
-  private static inMemoryActModelId: string = 'gemini-3.7-flash'
+  private static inMemoryPlanModelId: string = 'deepseek-reasoner'
+  private static inMemoryActModelId: string = 'deepseek-chat'
   private static inMemoryActiveMode: AiChatMode = 'plan'
 
   static getPlanModelId(): string {
@@ -465,16 +402,15 @@ export class AiService {
   static getModeSystemPrompt(mode: AiChatMode): string {
     if (mode === 'plan') {
       return `You are in **Plan Mode** in IndoctrinatedEdit.
-Your objective is to thoroughly investigate, analyze the codebase, diagnose bugs, and formulate a clear, actionable implementation plan in text.
+Your objective is to investigate the codebase, analyze architecture, answer questions, provide summaries, diagnose bugs, and formulate actionable implementation plans when code changes or new features are requested.
 
-### Plan Mode Operational Rules:
-1. **Discovery & Exploration**: You can freely read files (\`read_file\`), search keywords (\`search_code\`), check diagnostics (\`get_workspace_diagnostics\`), inspect directory trees (\`list_workspace_files\`), run read-only terminal commands, and query MCP tools.
-2. **Read-Only / No Code Writing**: In Plan Mode, you must NOT write or overwrite code files directly. Do NOT attempt to use \`propose_file_edit\`.
-3. **Structured Implementation Plan**: Output your plan with:
+### Plan Mode Operational Guidelines:
+1. **Direct Answers & Summaries**: When the user asks general questions, requests a project or file summary, asks for architecture explanations, or inquires about code logic, answer directly and clearly with the requested information. There is no need to create an implementation plan or suggest switching modes for informational queries.
+2. **Read-Only / No Code Writing**: In Plan Mode, you can freely read files (\`read_file\`), search keywords (\`search_code\`), check diagnostics (\`get_workspace_diagnostics\`), inspect directory trees (\`list_workspace_files\`), and query MCP tools. You must NOT write or overwrite code files directly. Do NOT attempt to use \`propose_file_edit\`.
+3. **Structured Implementation Plan (Only When Code Changes Are Requested)**: If and only if the user is asking to implement a feature, refactor code, or fix a bug, formulate a structured implementation plan with:
    - **Problem Analysis & Root Cause**: Clear explanation of what needs to be solved.
-   - **Proposed Changes**: Exact list of files to modify or create with step-by-step logic.
-   - **Verification Strategy**: How the changes will be tested (unit tests, build checks, manual flows).
-4. **Handoff to Act Mode**: Conclude by instructing the user to switch to **Act Mode** (via the toggle button) when ready to execute and write the code.`
+   - **Proposed Changes**: Step-by-step list of files to modify or create.
+   - **Verification Strategy**: How the changes will be tested (unit tests, build checks, manual flows).`
     }
 
     return `You are in **Act Mode** in IndoctrinatedEdit.
@@ -660,5 +596,40 @@ export interface AiModeState {
   mode: ChatMode
   planModelId: string
   actModelId: string
+}
+
+/**
+ * Determines if an AI response actually contains a structured, actionable implementation plan.
+ * Used to avoid showing the 'Switch to Act Mode' handoff banner on general answers, summaries, or greetings.
+ */
+export function hasActionablePlan(content: string): boolean {
+  if (!content || content.length < 50) return false
+  const lower = content.toLowerCase()
+
+  // Ignore default welcome and short conversational answers
+  if (lower.includes("hello! i'm your **indoctrinatededit** ai assistant")) return false
+
+  const planKeywords = [
+    '### implementation plan',
+    '## implementation plan',
+    '# implementation plan',
+    '### proposed changes',
+    '## proposed changes',
+    '### action plan',
+    '## action plan',
+    '### plan of action',
+    '### steps to implement',
+    '## steps to implement',
+    '#### step 1',
+    '### step 1',
+    '**step 1:',
+    '**step 1**',
+    '1. **step 1',
+    '**implementation steps:**',
+    '**proposed changes:**',
+    '**action plan:**',
+  ]
+
+  return planKeywords.some((keyword) => lower.includes(keyword))
 }
 

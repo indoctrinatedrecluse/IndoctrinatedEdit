@@ -39,9 +39,6 @@ import {
   Cpu,
   CornerDownLeft,
   Server,
-  UserCheck,
-  LogOut,
-  User,
   Compass,
 } from 'lucide-react'
 import { McpService } from '../../services/mcpService'
@@ -54,16 +51,15 @@ import {
   AutoApprovePreset,
   AiToolCall,
   AiToolResult,
-  AntigravitySession,
 } from '@sdk/types'
 import {
   AiService,
   PRESET_MODELS,
   AiSettingsMap,
   AUTO_APPROVE_PRESETS,
+  hasActionablePlan,
 } from '../../services/aiService'
 import { AiTokenizer, TokenBreakdown } from '../../services/aiTokenizer'
-import { antigravityAuthService } from '../../services/antigravityAuthService'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { terminalService } from '../../services/terminalService'
 import {
@@ -151,22 +147,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
 
-  // Google Antigravity Session State
-  const [agSession, setAgSession] = useState<AntigravitySession | null>(antigravityAuthService.getSession())
-  const [isLoggingInGoogle, setIsLoggingInGoogle] = useState(false)
-
   const modelSelectorRef = useRef<HTMLDivElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-
-  // Sync Antigravity auth state
-  useEffect(() => {
-    const unsub = antigravityAuthService.onAuthChanged((sess) => {
-      setAgSession(sess)
-    })
-    return () => unsub()
-  }, [])
 
   // Close model selector dropdown on click outside
   useEffect(() => {
@@ -698,11 +682,12 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   }
 
   const handleSaveSettings = (provider: AiProvider, field: 'apiKey' | 'endpoint', value: string) => {
+    const cleanVal = field === 'apiKey' ? value.trim() : value
     const updated = {
       ...settings,
       [provider]: {
         ...settings[provider],
-        [field]: value,
+        [field]: cleanVal,
       },
     }
     setSettings(updated)
@@ -914,8 +899,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           )
         })}
 
-        {/* Plan Mode Handoff Banner */}
-        {msg.role === 'assistant' && chatMode === 'plan' && !isStreaming && (
+        {/* Plan Mode Handoff Banner - Only shown when the model generates an actionable implementation plan */}
+        {msg.role === 'assistant' && chatMode === 'plan' && !isStreaming && hasActionablePlan(msg.content) && (
           <div className="plan-handoff-banner glass-subcard">
             <div className="plan-handoff-left">
               <Compass size={14} className="text-sapphire" />
@@ -989,7 +974,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                 </div>
                 <div className="dropdown-list">
                   {models.map((model) => {
-                    const isAntigravityModel = model.provider === 'antigravity'
                     return (
                       <button
                         key={model.id}
@@ -1007,11 +991,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                             />
                             <span>{model.name}</span>
                             {model.supportsReasoning && <span className="cot-badge">CoT Thinking</span>}
-                            {isAntigravityModel && (
-                              <span className="ag-sub-badge" title="Powered by Google Antigravity Personal Subscription">
-                                {agSession ? 'Google Active' : 'Personal Sub'}
-                              </span>
-                            )}
                           </div>
                           <div className="model-option-desc">{model.description}</div>
                         </div>
@@ -1411,11 +1390,16 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
           {settingsTab === 'keys' && (
             <div className="settings-scroll-list">
-              {(['antigravity', 'openai', 'deepseek', 'gemini', 'claude', 'ollama'] as AiProvider[]).map((prov) => {
-                const cfg = settings[prov]
+              {([
+                { id: 'deepseek', name: 'DeepSeek API', defaultUrl: 'https://api.deepseek.com', keyPlaceholder: 'sk-...' },
+                { id: 'gemini', name: 'Google Gemini API', defaultUrl: 'https://generativelanguage.googleapis.com', keyPlaceholder: 'AIza...' },
+                { id: 'claude', name: 'Anthropic Claude API', defaultUrl: 'https://api.anthropic.com', keyPlaceholder: 'sk-ant-...' },
+                { id: 'openai', name: 'OpenAI API', defaultUrl: 'https://api.openai.com/v1', keyPlaceholder: 'sk-...' },
+                { id: 'ollama', name: 'Ollama (Local Models)', defaultUrl: 'http://localhost:11434', keyPlaceholder: '' },
+              ] as const).map((provInfo) => {
+                const prov = provInfo.id as AiProvider
+                const cfg = settings[prov] || { apiKey: '', endpoint: '' }
                 const isOllama = prov === 'ollama'
-                const isAntigravity = prov === 'antigravity'
-                const isOpenAI = prov === 'openai'
                 const isRevealed = showKey[prov]
 
                 return (
@@ -1426,13 +1410,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                           className="provider-dot"
                           style={{ backgroundColor: getProviderColor(prov) }}
                         />
-                        <span className="prov-name">
-                          {isAntigravity
-                            ? 'GOOGLE ANTIGRAVITY (PERSONAL SUBSCRIPTION)'
-                            : isOpenAI
-                            ? 'OPENAI / CHATGPT CODEX'
-                            : prov.toUpperCase()}
-                        </span>
+                        <span className="prov-name">{provInfo.name.toUpperCase()}</span>
                       </div>
                       {isOllama && (
                         <button
@@ -1446,150 +1424,35 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                       )}
                     </div>
 
-                    {isAntigravity ? (
-                      <div className="google-account-panel">
-                        {agSession ? (
-                          <div className="google-session-active">
-                            <div className="google-user-row">
-                              {agSession.picture ? (
-                                <img
-                                  src={agSession.picture}
-                                  alt={agSession.name}
-                                  className="google-user-avatar"
-                                />
-                              ) : (
-                                <div className="google-user-avatar placeholder">
-                                  <User size={14} />
-                                </div>
-                              )}
-                              <div className="google-user-details">
-                                <div className="google-user-name">{agSession.name || 'Google User'}</div>
-                                <div className="google-user-email">{agSession.email}</div>
-                              </div>
-                              <span className="ag-active-pill">
-                                <UserCheck size={11} />
-                                <span>Subscription Active</span>
-                              </span>
-                            </div>
-
-                            <div className="ag-quota-row">
-                              <div className="ag-quota-item">
-                                <span className="quota-label">Tier:</span>
-                                <span className="quota-val">Personal (1M Context)</span>
-                              </div>
-                              <div className="ag-quota-item">
-                                <span className="quota-label">Rate Limit:</span>
-                                <span className="quota-val">60 RPM / 4M TPM</span>
-                              </div>
-                            </div>
-
-                            <div className="google-session-actions">
-                              <button
-                                className="google-action-btn switch glass-interactive"
-                                disabled={isLoggingInGoogle}
-                                onClick={async () => {
-                                  setIsLoggingInGoogle(true)
-                                  try {
-                                    await antigravityAuthService.loginWithGoogle()
-                                  } finally {
-                                    setIsLoggingInGoogle(false)
-                                  }
-                                }}
-                              >
-                                <span>Switch Account</span>
-                              </button>
-                              <button
-                                className="google-action-btn logout glass-interactive"
-                                onClick={async () => {
-                                  await antigravityAuthService.logout()
-                                }}
-                              >
-                                <LogOut size={11} />
-                                <span>Sign Out</span>
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="google-signin-prompt">
-                            <p className="google-signin-desc">
-                              Connect your personal Google account to use your Antigravity subscription without needing a manual API key.
-                            </p>
-                            <button
-                              className="google-signin-btn glass-interactive"
-                              disabled={isLoggingInGoogle}
-                              onClick={async () => {
-                                setIsLoggingInGoogle(true)
-                                try {
-                                  await antigravityAuthService.loginWithGoogle()
-                                } finally {
-                                  setIsLoggingInGoogle(false)
-                                }
-                              }}
-                            >
-                              <svg className="google-g-icon" viewBox="0 0 24 24" width="14" height="14">
-                                <path
-                                  fill="#4285F4"
-                                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                                />
-                                <path
-                                  fill="#34A853"
-                                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                                />
-                                <path
-                                  fill="#FBBC05"
-                                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                                />
-                                <path
-                                  fill="#EA4335"
-                                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                                />
-                              </svg>
-                              <span>{isLoggingInGoogle ? 'Connecting Google Account...' : 'Sign In with Google (Antigravity)'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        {!isOllama && (
-                          <div className="prov-input-row">
-                            <label>
-                              {isOpenAI
-                                ? 'API Key or Session Token'
-                                : 'API Key'}
-                            </label>
-                            <div className="input-with-icon">
-                              <input
-                                type={isRevealed ? 'text' : 'password'}
-                                placeholder={`Enter ${prov} API Key...`}
-                                value={cfg.apiKey}
-                                onChange={(e) => handleSaveSettings(prov, 'apiKey', e.target.value)}
-                              />
-                              <button
-                                className="toggle-vis-btn"
-                                onClick={() => setShowKey((prev) => ({ ...prev, [prov]: !prev[prov] }))}
-                              >
-                                {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="prov-input-row">
-                          <label>{isOllama ? 'Host URL' : 'Endpoint / Proxy (Optional)'}</label>
+                    {!isOllama && (
+                      <div className="prov-input-row">
+                        <label>API Key</label>
+                        <div className="input-with-icon">
                           <input
-                            type="text"
-                            placeholder={
-                              isOllama
-                                ? 'http://localhost:11434'
-                                : 'Default API endpoint'
-                            }
-                            value={cfg.endpoint || ''}
-                            onChange={(e) => handleSaveSettings(prov, 'endpoint', e.target.value)}
+                            type={isRevealed ? 'text' : 'password'}
+                            placeholder={provInfo.keyPlaceholder ? `Enter ${provInfo.name} Key (${provInfo.keyPlaceholder})` : `Enter API Key...`}
+                            value={cfg.apiKey || ''}
+                            onChange={(e) => handleSaveSettings(prov, 'apiKey', e.target.value)}
                           />
+                          <button
+                            className="toggle-vis-btn"
+                            onClick={() => setShowKey((prev) => ({ ...prev, [prov]: !prev[prov] }))}
+                          >
+                            {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
                         </div>
-                      </>
+                      </div>
                     )}
+
+                    <div className="prov-input-row">
+                      <label>{isOllama ? 'Host URL' : 'Endpoint / Proxy (Optional)'}</label>
+                      <input
+                        type="text"
+                        placeholder={provInfo.defaultUrl}
+                        value={cfg.endpoint || ''}
+                        onChange={(e) => handleSaveSettings(prov, 'endpoint', e.target.value)}
+                      />
+                    </div>
                   </div>
                 )
               })}
