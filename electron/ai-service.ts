@@ -49,13 +49,22 @@ export async function streamAiResponse(
     } else if (provider === 'claude') {
       await streamClaude(endpoint || 'https://api.anthropic.com', model, messages, cleanKey, controller.signal, onChunk)
     } else if (provider === 'deepseek') {
-      const targetEndpoint = endpoint || 'https://api.deepseek.com'
+      const isOpenRouterKey = cleanKey.startsWith('sk-or-v1-')
+      const targetEndpoint = endpoint || (isOpenRouterKey ? 'https://openrouter.ai/api/v1' : 'https://api.deepseek.com')
       let targetModel = model
-      if (targetEndpoint.includes('api.deepseek.com')) {
+
+      if (targetEndpoint.includes('openrouter.ai')) {
+        if (model === 'deepseek-v4-flash') targetModel = 'deepseek/deepseek-v4-flash'
+        else if (model === 'deepseek-v4-pro') targetModel = 'deepseek/deepseek-v4-pro'
+        else if (model === 'deepseek-chat') targetModel = 'deepseek/deepseek-chat'
+        else if (model === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
+        else if (!targetModel.includes('/')) targetModel = `deepseek/${targetModel}`
+      } else if (targetEndpoint.includes('api.deepseek.com')) {
         if (model === 'deepseek-v4-flash' || model === 'deepseek-v4-pro') {
           targetModel = 'deepseek-chat'
         }
       }
+
       await streamOpenAiCompatible(
         targetEndpoint,
         targetModel,
@@ -121,6 +130,10 @@ async function streamOpenAiCompatible(
   if (apiKey) {
     const cleanKey = apiKey.trim()
     headers['Authorization'] = cleanKey.startsWith('Bearer ') ? cleanKey : `Bearer ${cleanKey}`
+    if (cleanKey.startsWith('sk-or-v1-') || url.includes('openrouter.ai')) {
+      headers['HTTP-Referer'] = 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit'
+      headers['X-Title'] = 'IndoctrinatedEdit'
+    }
   }
 
   const res = await fetch(url, {
@@ -136,7 +149,13 @@ async function streamOpenAiCompatible(
 
   if (!res.ok) {
     const errorText = await res.text()
-    throw new Error(`API error (${res.status}): ${errorText}`)
+    try {
+      const parsed = JSON.parse(errorText)
+      const msg = parsed?.error?.message || parsed?.message || errorText
+      throw new Error(`API error (${res.status}): ${msg}`)
+    } catch {
+      throw new Error(`API error (${res.status}): ${errorText}`)
+    }
   }
 
   if (!res.body) throw new Error('Response body is empty')

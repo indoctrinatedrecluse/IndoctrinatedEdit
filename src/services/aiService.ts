@@ -533,7 +533,9 @@ Your objective is to autonomously execute implementation plans, write high-quali
 
     const runBrowserFetch = async () => {
       try {
-        let baseUrl = providerSettings.endpoint || (model.provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1')
+        const cleanKey = (providerSettings.apiKey || '').trim()
+        const isOpenRouter = cleanKey.startsWith('sk-or-v1-')
+        let baseUrl = providerSettings.endpoint || (isOpenRouter ? 'https://openrouter.ai/api/v1' : (model.provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1'))
         let cleanBase = baseUrl.trim().replace(/\/+$/, '')
         let url = cleanBase
         if (!url.endsWith('/chat/completions')) {
@@ -543,13 +545,22 @@ Your objective is to autonomously execute implementation plans, write high-quali
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         }
-        if (providerSettings.apiKey) {
-          const cleanKey = providerSettings.apiKey.trim()
+        if (cleanKey) {
           headers['Authorization'] = cleanKey.startsWith('Bearer ') ? cleanKey : `Bearer ${cleanKey}`
+          if (isOpenRouter || url.includes('openrouter.ai')) {
+            headers['HTTP-Referer'] = 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit'
+            headers['X-Title'] = 'IndoctrinatedEdit'
+          }
         }
 
         let targetModel = model.id
-        if (model.provider === 'deepseek' && cleanBase.includes('api.deepseek.com')) {
+        if (cleanBase.includes('openrouter.ai')) {
+          if (model.id === 'deepseek-v4-flash') targetModel = 'deepseek/deepseek-v4-flash'
+          else if (model.id === 'deepseek-v4-pro') targetModel = 'deepseek/deepseek-v4-pro'
+          else if (model.id === 'deepseek-chat') targetModel = 'deepseek/deepseek-chat'
+          else if (model.id === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
+          else if (!targetModel.includes('/')) targetModel = `deepseek/${targetModel}`
+        } else if (model.provider === 'deepseek' && cleanBase.includes('api.deepseek.com')) {
           if (targetModel === 'deepseek-v4-flash' || targetModel === 'deepseek-v4-pro') {
             targetModel = 'deepseek-chat'
           }
