@@ -63,6 +63,20 @@ export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettin
 export const PRESET_MODELS: AiModelOption[] = [
   // DeepSeek (Direct API)
   {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek-V4 Flash',
+    provider: 'deepseek',
+    description: 'Ultra-fast low-latency coding and reasoning model for high-throughput tasks',
+    supportsReasoning: true,
+  },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek-V4 Pro',
+    provider: 'deepseek',
+    description: 'High-capability flagship model for deep coding, system design, and multi-file refactoring',
+    supportsReasoning: true,
+  },
+  {
     id: 'deepseek-chat',
     name: 'DeepSeek-V3 (Chat & Code)',
     provider: 'deepseek',
@@ -293,8 +307,8 @@ export class AiService {
   }
 
   private static modeListeners: Set<(state: AiModeState) => void> = new Set()
-  private static inMemoryPlanModelId: string = 'deepseek-reasoner'
-  private static inMemoryActModelId: string = 'deepseek-chat'
+  private static inMemoryPlanModelId: string = 'deepseek-v4-pro'
+  private static inMemoryActModelId: string = 'deepseek-v4-flash'
   private static inMemoryActiveMode: AiChatMode = 'plan'
 
   static getPlanModelId(): string {
@@ -519,15 +533,24 @@ Your objective is to autonomously execute implementation plans, write high-quali
 
     const runBrowserFetch = async () => {
       try {
-        const baseUrl = providerSettings.endpoint || 'https://api.openai.com/v1'
-        const url = baseUrl.replace(/\/+$/, '') + (baseUrl.endsWith('/chat/completions') ? '' : '/chat/completions')
+        let baseUrl = providerSettings.endpoint || (model.provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1')
+        let cleanBase = baseUrl.trim().replace(/\/+$/, '')
+        let url = cleanBase
+        if (!url.endsWith('/chat/completions')) {
+          url = `${url}/chat/completions`
+        }
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        }
+        if (providerSettings.apiKey) {
+          const cleanKey = providerSettings.apiKey.trim()
+          headers['Authorization'] = cleanKey.startsWith('Bearer ') ? cleanKey : `Bearer ${cleanKey}`
+        }
 
         const res = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(providerSettings.apiKey ? { Authorization: `Bearer ${providerSettings.apiKey}` } : {}),
-          },
+          headers,
           body: JSON.stringify({
             model: model.id,
             messages: formattedMessages,

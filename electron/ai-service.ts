@@ -1,3 +1,4 @@
+import { IpcMain } from 'electron'
 import { AiProvider, AiStreamChunk } from '../packages/sdk/types'
 
 export interface AiRequestOptions {
@@ -101,14 +102,18 @@ async function streamOpenAiCompatible(
   signal: AbortSignal,
   onChunk: (chunk: AiStreamChunk) => void
 ): Promise<void> {
-  const cleanBase = baseUrl.replace(/\/+$/, '')
-  const url = cleanBase.endsWith('/chat/completions') ? cleanBase : `${cleanBase}/chat/completions`
+  let cleanBase = baseUrl.trim().replace(/\/+$/, '')
+  let url = cleanBase
+  if (!url.endsWith('/chat/completions')) {
+    url = `${url}/chat/completions`
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
   if (apiKey) {
-    headers['Authorization'] = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`
+    const cleanKey = apiKey.trim()
+    headers['Authorization'] = cleanKey.startsWith('Bearer ') ? cleanKey : `Bearer ${cleanKey}`
   }
 
   const res = await fetch(url, {
@@ -420,4 +425,28 @@ async function streamGemini(
       }
     }
   }
+}
+
+/**
+ * Registers all AI streaming IPC handlers with Electron main process
+ */
+export function setupIPC(ipcMain: IpcMain): void {
+  ipcMain.handle('ai:listOllamaModels', async (_, host?: string) => {
+    return listOllamaModels(host)
+  })
+
+  ipcMain.handle('ai:cancelStream', async (_, requestId: string) => {
+    cancelAiStream(requestId)
+    return true
+  })
+
+  ipcMain.handle('ai:startStream', async (event, requestId: string, options: AiRequestOptions) => {
+    const channel = `ai:chunk:${requestId}`
+    streamAiResponse(requestId, options, (chunk) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(channel, chunk)
+      }
+    })
+    return true
+  })
 }

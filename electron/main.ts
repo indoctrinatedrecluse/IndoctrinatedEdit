@@ -11,10 +11,7 @@ import {
   initGitRepository,
 } from './git-service'
 import {
-  streamAiResponse,
-  cancelAiStream,
-  listOllamaModels,
-  AiRequestOptions,
+  setupIPC as setupAiIPC,
 } from './ai-service'
 import {
   detectToolchain,
@@ -371,22 +368,7 @@ ipcMain.handle('git:init', async (_, cwd?: string) => {
 // ==========================================
 // AI Multi-Model Service IPC Handlers
 // ==========================================
-ipcMain.handle('ai:listOllamaModels', async (_, host?: string) => {
-  return await listOllamaModels(host)
-})
-
-ipcMain.handle('ai:cancelStream', async (_, requestId: string) => {
-  cancelAiStream(requestId)
-})
-
-ipcMain.handle('ai:startStream', async (event, requestId: string, options: AiRequestOptions) => {
-  streamAiResponse(requestId, options, (chunk) => {
-    if (!event.sender.isDestroyed()) {
-      event.sender.send(`ai:chunk:${requestId}`, chunk)
-    }
-  })
-  return true
-})
+setupAiIPC(ipcMain)
 
 // ==========================================
 // Antigravity Python SDK & Personal Account IPC
@@ -459,6 +441,8 @@ updateService.setupIPC(ipcMain, () => win)
 // Licensing & Activation IPC Handlers
 // ==========================================
 licenseService.setupIPC(ipcMain)
+
+
 
 app.on('second-instance', () => {
   if (win && !win.isDestroyed()) {
