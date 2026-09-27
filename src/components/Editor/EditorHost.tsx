@@ -776,9 +776,20 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       setIsRenameOpen(true)
     })
 
-    // Register Ctrl+K (Inline AI Copilot)
-    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyK, () => {
+    // Register Ctrl+I (Inline AI Copilot)
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyI, () => {
       setIsCopilotOpen(true)
+    })
+
+    editor.addAction({
+      id: 'open-inline-ai-copilot',
+      label: 'AI: Inline Code Copilot (Ctrl+I)',
+      keybindings: [monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyI],
+      contextMenuGroupId: '1_modification',
+      contextMenuOrder: 1.1,
+      run: () => {
+        setIsCopilotOpen(true)
+      },
     })
 
     // Register Context Menu & Keybinding Action: Open Live Markdown Preview to the Side

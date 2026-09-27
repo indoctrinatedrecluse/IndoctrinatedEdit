@@ -3129,37 +3129,43 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         }
 
         .message-bubble {
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 12px;
-          line-height: 1.5;
+          padding: 10px 14px;
+          border-radius: 10px;
+          font-size: 12.5px;
+          line-height: 1.55;
           word-break: break-word;
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
 
         .user-bubble {
-          background: rgba(10, 132, 255, 0.22);
-          border: 1px solid rgba(10, 132, 255, 0.35);
+          background: linear-gradient(135deg, rgba(10, 132, 255, 0.26) 0%, rgba(94, 92, 230, 0.18) 100%);
+          border: 1px solid rgba(10, 132, 255, 0.42);
           color: #FFFFFF;
-          border-bottom-right-radius: 2px;
+          border-bottom-right-radius: 3px;
+          box-shadow: 0 4px 18px rgba(10, 132, 255, 0.15), 0 1px 3px rgba(0, 0, 0, 0.4);
         }
 
         .assistant-bubble {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #FFFFFF;
-          border-bottom-left-radius: 2px;
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: rgba(255, 255, 255, 0.95);
+          border-bottom-left-radius: 3px;
         }
 
         .attached-context-chip {
           display: inline-flex;
           align-items: center;
-          gap: 5px;
-          padding: 3px 8px;
-          background: rgba(0, 240, 255, 0.08);
-          border: 1px solid rgba(0, 240, 255, 0.25);
-          border-radius: 6px;
-          font-size: 10px;
+          gap: 6px;
+          padding: 4px 10px;
+          background: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(10, 132, 255, 0.08) 100%);
+          border: 1px solid rgba(0, 240, 255, 0.32);
+          border-radius: 7px;
+          font-size: 10.5px;
           color: #5AC8FA;
+          box-shadow: 0 2px 8px rgba(0, 240, 255, 0.12);
         }
 
         .reasoning-card {

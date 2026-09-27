@@ -1427,7 +1427,7 @@ export const App: React.FC = () => {
       { id: 'editor.findReferences', title: 'Find All References', category: 'Editor', shortcut: 'Shift+F12', description: 'Find all symbol occurrences across workspace', handler: () => getActiveEditor()?.findReferences() },
       { id: 'editor.renameSymbol', title: 'Rename Symbol', category: 'Editor', shortcut: 'F2', description: 'Refactor identifier across all workspace files', handler: () => getActiveEditor()?.openRename() },
       { id: 'git.resolveConflicts', title: 'Git: Open 3-Way Merge Conflict Studio', category: 'Git', description: 'Resolve merge conflicts with visual comparison and one-click actions', handler: () => getActiveEditor()?.openMergeStudio() },
-      { id: 'ai.inlineCopilot', title: 'AI: Inline Code Copilot', category: 'AI', shortcut: 'Ctrl+K', description: 'Generate, refactor, and transform selected code with inline AI prompt', handler: () => getActiveEditor()?.openCopilot() },
+      { id: 'ai.inlineCopilot', title: 'AI: Inline Code Copilot', category: 'AI', shortcut: 'Ctrl+I', description: 'Generate, refactor, and transform selected code with inline AI prompt', handler: () => getActiveEditor()?.openCopilot() },
 
       // Editing & Multi-Cursor Actions
       { id: 'edit.format', title: 'Format Document', category: 'Editor', shortcut: 'Shift+Alt+F', description: 'Auto-format active code buffer', handler: () => getActiveEditor()?.formatDocument() },
