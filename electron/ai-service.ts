@@ -49,9 +49,16 @@ export async function streamAiResponse(
     } else if (provider === 'claude') {
       await streamClaude(endpoint || 'https://api.anthropic.com', model, messages, cleanKey, controller.signal, onChunk)
     } else if (provider === 'deepseek') {
+      const targetEndpoint = endpoint || 'https://api.deepseek.com'
+      let targetModel = model
+      if (targetEndpoint.includes('api.deepseek.com')) {
+        if (model === 'deepseek-v4-flash' || model === 'deepseek-v4-pro') {
+          targetModel = 'deepseek-chat'
+        }
+      }
       await streamOpenAiCompatible(
-        endpoint || 'https://api.deepseek.com',
-        model,
+        targetEndpoint,
+        targetModel,
         messages,
         cleanKey,
         controller.signal,

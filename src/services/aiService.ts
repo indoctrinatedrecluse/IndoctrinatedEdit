@@ -548,11 +548,18 @@ Your objective is to autonomously execute implementation plans, write high-quali
           headers['Authorization'] = cleanKey.startsWith('Bearer ') ? cleanKey : `Bearer ${cleanKey}`
         }
 
+        let targetModel = model.id
+        if (model.provider === 'deepseek' && cleanBase.includes('api.deepseek.com')) {
+          if (targetModel === 'deepseek-v4-flash' || targetModel === 'deepseek-v4-pro') {
+            targetModel = 'deepseek-chat'
+          }
+        }
+
         const res = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify({
-            model: model.id,
+            model: targetModel,
             messages: formattedMessages,
             stream: true,
           }),
