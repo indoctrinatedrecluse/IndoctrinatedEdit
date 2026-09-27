@@ -190,9 +190,10 @@ async function streamOpenAiCompatible(
             if (delta.content) {
               onChunk({ text: delta.content })
             }
-            // Capture reasoning tokens for models like DeepSeek-R1 or o3-mini
-            if (delta.reasoning_content) {
-              onChunk({ reasoning: delta.reasoning_content })
+            // Capture reasoning tokens for models with CoT reasoning
+            const reasoningChunk = delta.reasoning_content || delta.reasoning || delta.thought
+            if (reasoningChunk) {
+              onChunk({ reasoning: reasoningChunk })
             }
           }
         } catch {

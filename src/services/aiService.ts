@@ -61,7 +61,36 @@ export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettin
 }
 
 export const PRESET_MODELS: AiModelOption[] = [
-  // DeepSeek (Direct API)
+  // Google Gemini (Direct Google AI Studio API)
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash (Flagship)',
+    provider: 'gemini',
+    description: 'Latest flagship multimodal model with deep CoT reasoning, 1M context, and high speed',
+    supportsReasoning: true,
+  },
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
+    provider: 'gemini',
+    description: 'High-throughput reasoning model with hybrid CoT thinking and rapid streaming',
+    supportsReasoning: true,
+  },
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    provider: 'gemini',
+    description: 'Ultra-fast low-latency assistant for real-time suggestions and code edits',
+  },
+  {
+    id: 'gemini-3.1-pro',
+    name: 'Gemini 3.1 Pro (Deep Coding)',
+    provider: 'gemini',
+    description: 'Pro reasoning model for complex architectural analysis, multi-file synthesis, and 2M context',
+    supportsReasoning: true,
+  },
+
+  // DeepSeek (Direct API / OpenRouter)
   {
     id: 'deepseek-v4-flash',
     name: 'DeepSeek-V4 Flash',
@@ -76,79 +105,20 @@ export const PRESET_MODELS: AiModelOption[] = [
     description: 'High-capability flagship model for deep coding, system design, and multi-file refactoring',
     supportsReasoning: true,
   },
-  {
-    id: 'deepseek-chat',
-    name: 'DeepSeek-V3 (Chat & Code)',
-    provider: 'deepseek',
-    description: 'Flagship 671B MoE model with exceptional coding, architecture, and multi-turn refactoring',
-  },
-  {
-    id: 'deepseek-reasoner',
-    name: 'DeepSeek-R1 (Reasoning)',
-    provider: 'deepseek',
-    description: 'Reinforcement learning CoT model displaying step-by-step thinking process',
-    supportsReasoning: true,
-  },
-
-  // Google Gemini (Direct API)
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro (Deep Reasoning)',
-    provider: 'gemini',
-    description: 'Top-tier code generation, complex architectural reasoning, and massive context',
-    supportsReasoning: true,
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Ultra-Fast)',
-    provider: 'gemini',
-    description: 'High-speed multimodal coding model engineered for rapid streaming',
-  },
-  {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
-    provider: 'gemini',
-    description: 'Next-generation low-latency model with real-time tool execution',
-  },
-  {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro (2M Context)',
-    provider: 'gemini',
-    description: 'Deep architectural coding, multi-file repo synthesis, and 2M token context reasoning',
-    supportsReasoning: true,
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
-    provider: 'gemini',
-    description: 'Lightweight, fast coding assistant with 1M context window',
-  },
 
   // Anthropic Claude (Direct API)
   {
-    id: 'claude-3-7-sonnet-20250219',
-    name: 'Claude 3.7 Sonnet (Hybrid Reasoning)',
+    id: 'claude-4.6-opus',
+    name: 'Claude 4.6 Opus',
     provider: 'claude',
-    description: 'Anthropic hybrid reasoning model with benchmark-leading coding capability',
+    description: 'Top-tier frontier intelligence for complex systems engineering, deep refactoring, and planning',
     supportsReasoning: true,
   },
   {
-    id: 'claude-3-5-sonnet-20241022',
-    name: 'Claude 3.5 Sonnet',
+    id: 'claude-4.6-sonnet',
+    name: 'Claude 4.6 Sonnet',
     provider: 'claude',
-    description: 'State-of-the-art coding, debugging, and nuanced code reviews',
-  },
-  {
-    id: 'claude-3-5-haiku-20241022',
-    name: 'Claude 3.5 Haiku',
-    provider: 'claude',
-    description: 'Ultra-fast and cost-efficient code completion and analysis',
-  },
-  {
-    id: 'claude-3-opus-20240229',
-    name: 'Claude 3 Opus',
-    provider: 'claude',
-    description: 'Anthropic flagship model for deep synthesis, complex refactorings, and system design',
+    description: 'State-of-the-art coding, debugging, architecture, and hybrid CoT reasoning',
     supportsReasoning: true,
   },
 
@@ -164,20 +134,6 @@ export const PRESET_MODELS: AiModelOption[] = [
     name: 'OpenAI GPT-4o Mini',
     provider: 'openai',
     description: 'Ultra-fast and cost-efficient coding assistant',
-  },
-  {
-    id: 'o3-mini',
-    name: 'OpenAI o3-mini (Reasoning)',
-    provider: 'openai',
-    description: 'High-speed STEM, algorithmic logic, and coding CoT reasoning model',
-    supportsReasoning: true,
-  },
-  {
-    id: 'o1',
-    name: 'OpenAI o1 (Deep Reasoning)',
-    provider: 'openai',
-    description: 'Deep reasoning for complex algorithms, architecture, and mathematics',
-    supportsReasoning: true,
   },
 ]
 
@@ -295,9 +251,10 @@ export class AiService {
 
   static getActiveModelId(): string {
     if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) || 'deepseek-chat'
+      const stored = localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY)
+      if (stored && PRESET_MODELS.some((m) => m.id === stored)) return stored
     }
-    return 'deepseek-chat'
+    return 'gemini-3.8-flash'
   }
 
   static setActiveModelId(modelId: string): void {
@@ -307,8 +264,8 @@ export class AiService {
   }
 
   private static modeListeners: Set<(state: AiModeState) => void> = new Set()
-  private static inMemoryPlanModelId: string = 'deepseek-v4-pro'
-  private static inMemoryActModelId: string = 'deepseek-v4-flash'
+  private static inMemoryPlanModelId: string = 'gemini-3.1-pro'
+  private static inMemoryActModelId: string = 'gemini-3.8-flash'
   private static inMemoryActiveMode: AiChatMode = 'plan'
 
   static getPlanModelId(): string {

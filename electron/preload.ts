@@ -202,6 +202,7 @@ export interface ElectronAPI {
   openFileDialog: () => Promise<FileOpenResult | null>
   openFolderDialog: () => Promise<FolderOpenResult | null>
   readFolder: (folderPath: string) => Promise<FolderOpenResult | null>
+  listWorkspaceFiles: (rootPath: string, maxFiles?: number) => Promise<Array<{ name: string; relativePath: string; path: string; isDirectory: boolean }>>
   checkExists: (targetPath: string) => Promise<boolean>
   readFile: (filePath: string) => Promise<string>
   saveFile: (filePath: string, content: string) => Promise<boolean>
@@ -249,6 +250,7 @@ const api: ElectronAPI = {
   openFileDialog: () => ipcRenderer.invoke('dialog:openFile'),
   openFolderDialog: () => ipcRenderer.invoke('dialog:openFolder'),
   readFolder: (folderPath: string) => ipcRenderer.invoke('fs:readFolder', folderPath),
+  listWorkspaceFiles: (rootPath: string, maxFiles?: number) => ipcRenderer.invoke('fs:listWorkspaceFiles', rootPath, maxFiles),
   checkExists: (targetPath: string) => ipcRenderer.invoke('fs:checkExists', targetPath),
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
   saveFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:saveFile', filePath, content),

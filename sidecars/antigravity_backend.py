@@ -53,7 +53,7 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
 ]
 
-DEFAULT_MODEL = "gemini-3.7-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 
 def log(msg, level="INFO"):
@@ -666,15 +666,17 @@ class AntigravityBackendHandler(BaseHTTPRequestHandler):
 
     def _resolve_model_name(self, raw_model):
         """Maps Antigravity UI model IDs to valid upstream model identifiers."""
-        m = raw_model.replace("antigravity-", "").replace("gemini-", "")
+        m = raw_model.replace("antigravity-", "").replace("gemini-", "").lower()
+        if "3-8" in m or "3.8" in m:
+            return "gemini-3.8-flash"
         if "3-7" in m or "3.7" in m:
             return "gemini-3.7-flash"
-        if "2-5-pro" in m or "2.5-pro" in m:
-            return "gemini-2.5-pro"
-        if "2-5-flash" in m or "2.5-flash" in m:
-            return "gemini-2.5-flash"
+        if "3-6" in m or "3.6" in m:
+            return "gemini-3.6-flash"
+        if "3-1" in m or "3.1" in m or "pro" in m:
+            return "gemini-3.1-pro"
         if "claude" in m:
-            return "gemini-3.7-flash"  # Hybrid CoT reasoning proxy
+            return "gemini-3.8-flash"  # Hybrid CoT reasoning proxy
         return DEFAULT_MODEL
 
     def _handle_chat_stream(self, req_json):

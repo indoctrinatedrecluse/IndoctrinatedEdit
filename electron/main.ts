@@ -307,6 +307,44 @@ ipcMain.handle('fs:readFolder', async (_, folderPath: string) => {
   }
 })
 
+ipcMain.handle('fs:listWorkspaceFiles', async (_, rootPath: string, maxFiles: number = 2000) => {
+  try {
+    const results: Array<{ name: string; relativePath: string; path: string; isDirectory: boolean }> = []
+    const ignored = new Set(['.git', 'node_modules', 'dist', 'dist-electron', 'build', '.idea', '.vscode', '.gemini', 'target'])
+
+    async function walk(dir: string, relPrefix: string = '', depth: number = 0) {
+      if (depth > 10 || results.length >= maxFiles) return
+      let entries: import('node:fs').Dirent[] = []
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+
+      for (const entry of entries) {
+        if (ignored.has(entry.name) || entry.name.startsWith('.')) continue
+        const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name
+        const fullPath = path.join(dir, entry.name)
+
+        if (entry.isDirectory()) {
+          results.push({ name: entry.name, relativePath: relPath, path: fullPath, isDirectory: true })
+          await walk(fullPath, relPath, depth + 1)
+        } else {
+          results.push({ name: entry.name, relativePath: relPath, path: fullPath, isDirectory: false })
+        }
+
+        if (results.length >= maxFiles) break
+      }
+    }
+
+    await walk(rootPath)
+    return results
+  } catch (err) {
+    console.error('Failed to list workspace files:', err)
+    return []
+  }
+})
+
 ipcMain.handle('fs:checkExists', async (_, targetPath: string) => {
   try {
     await fs.access(targetPath)
