@@ -238,7 +238,7 @@ export class UpdateService {
    */
   public async checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult> {
     const activeChannel = channel || this.config.channel || 'stable'
-    const currentVersion = app.getVersion ? app.getVersion() : '5.0.2'
+    const currentVersion = app.getVersion ? app.getVersion() : '5.0.3'
 
     this.saveConfig({ lastCheckedTimestamp: Date.now() })
 

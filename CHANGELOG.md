@@ -5,6 +5,44 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.3] - 2026-09-28
+
+### 🚀 Feature & Stabilization Release — Next-Gen AI Presets (Gemini 3.8/3.7/3.6/3.1, Claude 4.6, DeepSeek-V4), Multi-Anchor Licensing Persistence & Backend Routing Optimization
+
+IndoctrinatedEdit 5.0.3 introduces next-generation AI model presets with hybrid Chain-of-Thought (CoT) reasoning, establishes a resilient 5-tier self-healing storage architecture for node-locked licensing, and optimizes sidecar proxy routing:
+
+#### 🧠 Next-Gen AI Model Presets & Hybrid Reasoning Support
+- **Google Gemini 3.x Series**:
+  - Set default active flagship model to **Gemini 3.8 Flash** (`gemini-3.8-flash`) featuring 1M context, high streaming throughput, and deep CoT reasoning.
+  - Added **Gemini 3.7 Flash** (hybrid CoT thinking), **Gemini 3.6 Flash** (ultra-low latency), and **Gemini 3.1 Pro** (2M context deep architectural reasoning and multi-file synthesis).
+  - Configured default Plan mode to `gemini-3.1-pro` and Act mode to `gemini-3.8-flash`.
+- **Anthropic Claude 4.6 Generation**:
+  - Integrated **Claude 4.6 Opus** for complex systems engineering and autonomous refactoring.
+  - Integrated **Claude 4.6 Sonnet** for state-of-the-art coding, debugging, and hybrid reasoning.
+- **DeepSeek-V4 & Dynamic OpenRouter Routing**:
+  - Added native presets for **DeepSeek-V4 Flash** and **DeepSeek-V4 Pro**.
+  - Added automatic OpenRouter credential detection and model identifier re-mapping for seamless cross-provider key usage.
+
+#### 🛡️ Multi-Anchor Self-Healing License Architecture
+- **5-Tier Storage Redundancy**:
+  - License state and hardware validation are now replicated and reconciled across:
+    1. Windows Registry `HKCU\Software\Indoctrinated\IndoctrinatedEdit` (Current User)
+    2. Windows Registry `HKLM\Software\Indoctrinated\IndoctrinatedEdit` (Local Machine)
+    3. `%ProgramData%\Indoctrinated\IndoctrinatedEdit`
+    4. User home configuration directory (`~/.indoctrinated-edit`)
+    5. Local Application Data (`%LocalAppData%\IndoctrinatedEdit`)
+- **Self-Healing Reconciliation**:
+  - Reading valid license tokens from any available anchor automatically restores and heals missing or altered entries across all remaining storage anchors.
+
+#### ⚡ Sidecar & Antigravity Backend Optimizations
+- **Enhanced Model Resolution**:
+  - Upgraded backend model mapper to dynamically route incoming requests to Gemini 3.8/3.7/3.6/3.1 and 2.5/2.0 series with zero-configuration fallbacks.
+- **API Key & Header Synchronization**:
+  - Injected explicit `x-goog-api-key` headers for Google AI Studio calls to prevent auth handshake drops.
+  - Synchronized `X-Antigravity-Client` and `X-Goog-Api-Client` headers to version `5.0.3`.
+
+---
+
 ## [5.0.2] - 2026-09-27
 
 ### ⚡ Hotfix Release — In-Editor Inline Copilot Redesign, Streaming AI Integration & Liquid Glass Chat Polishing
