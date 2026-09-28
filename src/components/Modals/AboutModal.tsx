@@ -12,7 +12,7 @@ interface AboutModalProps {
 export const AboutModal: React.FC<AboutModalProps> = ({
   isOpen,
   onClose,
-  version = '5.0.3',
+  version = '5.1.0',
 }) => {
   // Close on Escape key
   useEffect(() => {

@@ -2012,7 +2012,7 @@ export const App: React.FC = () => {
             setIsLicenseOpen(false)
           }
         }}
-        version="5.0.3"
+        version="5.1.0"
         isForceLockout={isLicenseLockout}
       />
 

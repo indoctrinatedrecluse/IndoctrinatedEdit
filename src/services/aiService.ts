@@ -155,6 +155,49 @@ export class AiService {
   private static autoApproveSettings: AiAutoApproveSettings | null = null
   private static autoApproveListeners: Set<(settings: AiAutoApproveSettings) => void> = new Set()
 
+  static getChatHistory(workspaceRoot: string, modelId: string): AiChatMessage[] | null {
+    if (typeof localStorage === 'undefined' || !workspaceRoot) return null
+    try {
+      const key = `indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`
+      const raw = localStorage.getItem(key)
+      if (raw) {
+        return JSON.parse(raw) as AiChatMessage[]
+      }
+    } catch (err) {
+      console.warn('Failed to load chat history', err)
+    }
+    return null
+  }
+
+  static saveChatHistory(workspaceRoot: string, modelId: string, messages: AiChatMessage[]): void {
+    if (typeof localStorage === 'undefined' || !workspaceRoot) return
+    try {
+      // Hard truncate history to avoid localStorage quota issues
+      let historyToSave = messages
+      // A query is user + assistant. 40 messages = 20 queries + welcome message.
+      if (historyToSave.length > 40) {
+        const welcome = historyToSave[0]
+        const recent = historyToSave.slice(-4) // keep last 4 to be safe (e.g. user, tool_result, assistant)
+        historyToSave = [welcome, ...recent]
+      }
+      
+      const key = `indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`
+      localStorage.setItem(key, JSON.stringify(historyToSave))
+    } catch (err) {
+      console.warn('Failed to save chat history', err)
+    }
+  }
+
+  static clearChatHistory(workspaceRoot: string, modelId: string): void {
+    if (typeof localStorage === 'undefined' || !workspaceRoot) return
+    try {
+      const key = `indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`
+      localStorage.removeItem(key)
+    } catch (err) {
+      console.warn('Failed to clear chat history', err)
+    }
+  }
+
   static getSettings(): AiSettingsMap {
     if (!this.settings) {
       try {

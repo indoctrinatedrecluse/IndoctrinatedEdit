@@ -54,18 +54,12 @@ export async function streamAiResponse(
       let targetModel = model
 
       if (targetEndpoint.includes('openrouter.ai')) {
-        if (model === 'deepseek-v4-flash') targetModel = 'deepseek/deepseek-v4-flash'
-        else if (model === 'deepseek-v4-pro') targetModel = 'deepseek/deepseek-v4-pro'
-        else if (model === 'deepseek-chat') targetModel = 'deepseek/deepseek-chat'
-        else if (model === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
-        else if (!targetModel.includes('/')) targetModel = `deepseek/${targetModel}`
-      } else if (targetEndpoint.includes('api.deepseek.com')) {
-        if (model === 'deepseek-v4-flash') {
-          targetModel = 'deepseek-flash'
-        } else if (model === 'deepseek-v4-pro') {
-          targetModel = 'deepseek-pro'
+        // OpenRouter requires provider-prefixed model IDs
+        if (!targetModel.includes('/')) {
+          targetModel = `deepseek/${targetModel}`
         }
       }
+      // Direct api.deepseek.com: pass model ID as-is (deepseek-chat, deepseek-reasoner, etc.)
 
       await streamOpenAiCompatible(
         targetEndpoint,
@@ -392,7 +386,7 @@ async function streamGemini(
     contents,
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768,
     },
   }
 

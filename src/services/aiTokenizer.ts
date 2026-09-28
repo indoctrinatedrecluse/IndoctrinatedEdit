@@ -17,38 +17,31 @@ export interface TokenBreakdown {
 
 // Known context window limits per model family
 const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  // Gemini Models (1M - 2M tokens)
-  'gemini-3.7-flash': 1_048_576,
-  'gemini-3.8-flash': 1_048_576,
-  'gemini-3.1-pro': 2_097_152,
-  'gemini-2.5-flash': 1_048_576,
+  // Gemini Models
   'gemini-2.5-pro': 1_048_576,
-  'antigravity-gemini-3-7-flash': 1_048_576,
-  'antigravity-gemini-3-8-flash': 1_048_576,
-  'antigravity-gemini-3-1-pro': 2_097_152,
-  'antigravity-gemini-2-5-pro': 1_048_576,
+  'gemini-2.5-flash': 1_048_576,
+  'gemini-2.0-flash': 1_048_576,
+  'gemini-2.0-flash-thinking-exp': 1_048_576,
+  // Legacy Gemini (keep for backward compat with stored settings)
+  'gemini-2.5-flash-preview': 1_048_576,
+  'gemini-2.5-pro-preview': 1_048_576,
 
   // Claude Models (200k tokens)
+  'claude-sonnet-4-5': 200_000,
+  'claude-opus-4-5': 200_000,
   'claude-3-7-sonnet': 200_000,
   'claude-3-7-opus': 200_000,
   'claude-3-5-sonnet': 200_000,
-  'antigravity-claude-3-7-sonnet': 200_000,
-  'antigravity-claude-3-7-opus': 200_000,
 
-  // DeepSeek Models (128k - 1M tokens)
-  'deepseek-v4-flash': 1_000_000,
-  'deepseek-v4-pro': 128_000,
-  'deepseek-chat': 128_000,
-  'deepseek-reasoner': 128_000,
-  'antigravity-deepseek-v4': 128_000,
+  // DeepSeek Models (64k context)
+  'deepseek-chat': 64_000,
+  'deepseek-reasoner': 64_000,
 
-  // OpenAI Models (128k - 200k tokens)
+  // OpenAI Models
   'gpt-4o': 128_000,
   'gpt-4o-mini': 128_000,
-  'chatgpt-4o-latest': 128_000,
   'o3-mini': 200_000,
-  'gpt-4.5-preview': 128_000,
-  'gpt-4o-codex': 128_000,
+  'chatgpt-4o-latest': 128_000,
 
   // Default fallback
   default: 128_000,

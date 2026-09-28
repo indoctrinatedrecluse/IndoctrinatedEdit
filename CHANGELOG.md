@@ -5,6 +5,17 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-09-29
+
+### ✨ Feature Release — Persistent Chat History, Auto-Truncation, & Context Retrieval
+
+IndoctrinatedEdit 5.1.0 introduces enhanced AI chat history management:
+- **Per-Project & Per-Model Persistence**: Conversation history is now persisted seamlessly across editor restarts, uniquely scoped to both the active workspace and the selected AI model. Switching projects or models automatically swaps the context.
+- **Clear Chat Interface**: Added a convenient one-click option to clear the existing conversation and start a new one.
+- **Smart History Truncation**: Automatically manages token context by truncating long histories (e.g. crossing 20+ queries), preserving the original system instructions and the most recent queries to maintain continuity without bloat.
+
+---
+
 ## [5.0.3] - 2026-09-28
 
 ### 🚀 Feature & Stabilization Release — Next-Gen AI Presets (Gemini 3.8/3.7/3.6/3.1, Claude 4.6, DeepSeek-V4), Multi-Anchor Licensing Persistence & Backend Routing Optimization

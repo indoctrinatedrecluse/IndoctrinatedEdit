@@ -66,6 +66,7 @@ import {
   AiToolExecutor,
   AiToolParser,
   AiToolsRegistry,
+  stripToolCallBlocks,
 } from '../../services/aiToolsService'
 import { DiagnosticsService } from '../../services/diagnosticsService'
 
@@ -111,15 +112,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [showKey, setShowKey] = useState<Record<string, boolean>>({})
 
+  const DEFAULT_WELCOME_MSG: AiChatMessage = {
+    id: 'welcome-msg',
+    role: 'assistant',
+    content: `Hello! I'm your **IndoctrinatedEdit** AI Assistant.\n\nChoose **Plan Mode** for architecture, research & design without code modifications, or **Act Mode** to write code, edit files, and execute commands. Type **\`@\`** to inject editor context, or **\`/\`** for instant slash commands!`,
+    timestamp: Date.now(),
+  }
+
   // Chat State
-  const [messages, setMessages] = useState<AiChatMessage[]>([
-    {
-      id: 'welcome-msg',
-      role: 'assistant',
-      content: `Hello! I'm your **IndoctrinatedEdit** AI Assistant.\n\nChoose **Plan Mode** for architecture, research & design without code modifications, or **Act Mode** to write code, edit files, and execute commands. Type **\`@\`** to inject editor context, or **\`/\`** for instant slash commands!`,
-      timestamp: Date.now(),
-    },
-  ])
+  const [messages, setMessages] = useState<AiChatMessage[]>([DEFAULT_WELCOME_MSG])
   const [inputText, setInputText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [cancelFn, setCancelFn] = useState<(() => void) | null>(null)
@@ -137,6 +138,33 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [mentionFilter, setMentionFilter] = useState('')
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashFilter, setSlashFilter] = useState('')
+
+  // Load chat history when project or model changes
+  useEffect(() => {
+    if (workspaceRoot && selectedModelId) {
+      const history = AiService.getChatHistory(workspaceRoot, selectedModelId)
+      if (history && history.length > 0) {
+        setMessages(history)
+      } else {
+        setMessages([DEFAULT_WELCOME_MSG])
+      }
+    }
+  }, [workspaceRoot, selectedModelId])
+
+  // Save chat history whenever messages change
+  useEffect(() => {
+    if (workspaceRoot && selectedModelId && messages.length > 0) {
+      AiService.saveChatHistory(workspaceRoot, selectedModelId, messages)
+    }
+  }, [messages, workspaceRoot, selectedModelId])
+
+  const handleClearChat = () => {
+    if (workspaceRoot && selectedModelId) {
+      AiService.clearChatHistory(workspaceRoot, selectedModelId)
+      setMessages([DEFAULT_WELCOME_MSG])
+      setAttachedContext(null)
+    }
+  }
   const [menuIndex, setMenuIndex] = useState(0)
 
   // Interactive Tools & Diff States
@@ -475,7 +503,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     }
   }
 
-  const triggerAutonomousFollowup = (_result: AiToolResult, history: AiChatMessage[], _iteration: number) => {
+  const triggerAutonomousFollowup = (result: AiToolResult, history: AiChatMessage[], _iteration: number) => {
     const assistantMsgId = `assistant-agent-${Date.now()}`
     const assistantMsg: AiChatMessage = {
       id: assistantMsgId,
@@ -486,23 +514,49 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       timestamp: Date.now(),
     }
 
-    const updatedHistory: AiChatMessage[] = [...history, assistantMsg]
+    // Build updated history that includes the tool result so the model can see it
+    const toolResultMsg: AiChatMessage = {
+      id: `tool-result-${Date.now()}`,
+      role: 'user',
+      content: `Tool \`${result.toolName}\` result:\n\`\`\`\n${result.output || result.error || 'No output'}\n\`\`\``,
+      timestamp: Date.now(),
+    }
+
+    const updatedHistory: AiChatMessage[] = [...history, toolResultMsg, assistantMsg]
     setMessages(updatedHistory)
     setIsStreaming(true)
 
-    const cancel = AiService.streamChat(selectedModel, history, (chunk) => {
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === assistantMsgId) {
-            return {
-              ...msg,
-              content: chunk.text ? msg.content + chunk.text : msg.content,
-              reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
+    const systemPrompt = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
+    const trimmedHistory = AiService.trimConversationHistory([...history, toolResultMsg], systemPrompt, selectedModel.id)
+    const systemMsg: AiChatMessage = {
+      id: `sys-agent-${Date.now()}`,
+      role: 'system',
+      content: systemPrompt,
+      timestamp: Date.now(),
+    }
+
+    let accumulatedText = ''
+    const cancel = AiService.streamChat(selectedModel, [systemMsg, ...trimmedHistory], (chunk) => {
+      if (chunk.text) {
+        accumulatedText += chunk.text
+        const displayText = stripToolCallBlocks(accumulatedText)
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === assistantMsgId) {
+              return { ...msg, content: displayText }
             }
-          }
-          return msg
-        })
-      )
+            return msg
+          })
+        )
+      } else if (chunk.reasoning) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId
+              ? { ...msg, reasoning: (msg.reasoning || '') + chunk.reasoning }
+              : msg
+          )
+        )
+      }
 
       if (chunk.done || chunk.error) {
         setIsStreaming(false)
@@ -597,33 +651,47 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
     let accumulatedText = ''
 
-    // Prepend system prompt for current mode
+    // Compute system prompt once per send (not every render)
+    const systemPrompt = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
+
+    // Auto-trim history to avoid max_tokens errors
+    const trimmedHistory = AiService.trimConversationHistory(newHistory, systemPrompt, selectedModel.id)
+
     const systemMsg: AiChatMessage = {
       id: `sys-${Date.now()}`,
       role: 'system',
-      content: systemPromptForMode,
+      content: systemPrompt,
       timestamp: Date.now(),
     }
 
-    const streamHistory = [systemMsg, ...newHistory]
+    const streamHistory = [systemMsg, ...trimmedHistory]
 
     const cancel = AiService.streamChat(selectedModel, streamHistory, async (chunk) => {
       if (chunk.text) {
         accumulatedText += chunk.text
-      }
-
-      setMessages((prevMessages) => {
-        return prevMessages.map((msg) => {
-          if (msg.id === assistantMsgId) {
-            return {
-              ...msg,
-              content: chunk.text ? msg.content + chunk.text : msg.content,
-              reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
+        // Strip tool_call fences from displayed content so bubbles never show as empty
+        const displayText = stripToolCallBlocks(accumulatedText)
+        setMessages((prevMessages) => {
+          return prevMessages.map((msg) => {
+            if (msg.id === assistantMsgId) {
+              return {
+                ...msg,
+                content: displayText,
+                reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
+              }
             }
-          }
-          return msg
+            return msg
+          })
         })
-      })
+      } else if (chunk.reasoning) {
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg.id === assistantMsgId
+              ? { ...msg, reasoning: (msg.reasoning || '') + chunk.reasoning }
+              : msg
+          )
+        )
+      }
 
       if (chunk.done || chunk.error) {
         setIsStreaming(false)
@@ -644,7 +712,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             })
           })
         } else {
-          // Parse any tool calls emitted by the model
+          // Parse any tool calls emitted by the model from the RAW (unstripped) accumulated text
           const parsedCalls = AiToolParser.parseToolCalls(accumulatedText)
           if (parsedCalls.length > 0) {
             setMessages((prev) =>
@@ -794,9 +862,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     s.label.toLowerCase().includes(slashFilter) || s.desc.toLowerCase().includes(slashFilter)
   )
 
-  // Parse markdown code blocks
+  // Parse markdown code blocks — strips tool_call fences first since those render as UI cards
   const renderMessageContent = (msg: AiChatMessage) => {
-    const parts = msg.content.split(/(```[\w-]*\n[\s\S]*?\n```)/g)
+    const cleanContent = stripToolCallBlocks(msg.content)
+    const parts = cleanContent.split(/(```[\w-]*\n[\s\S]*?\n```)/g)
 
     return (
       <div className="message-content-wrapper">
@@ -1037,10 +1106,16 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         <div className="ai-header-right">
           <button
             className="icon-btn glass-interactive"
+            onClick={handleClearChat}
+            title="Clear Chat History"
+          >
+            <Trash2 size={13} />
+          </button>
+          <button
+            className="icon-btn glass-interactive"
             onClick={() => {
               window.dispatchEvent(new CustomEvent('open-mcp-studio'))
-            }}
-            title={`MCP Host Studio: ${McpService.getServers().filter((s) => s.enabled).length} active servers, ${McpService.listTools().length} tools`}
+            }}            title={`MCP Host Studio: ${McpService.getServers().filter((s) => s.enabled).length} active servers, ${McpService.listTools().length} tools`}
           >
             <Server size={13} />
           </button>

@@ -3,6 +3,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import './index.css'
+import { loadDevApiKeys } from './services/devEnvLoader'
+
+// Pre-fill AI API keys from .env.local (dev only, gitignored, never committed)
+loadDevApiKeys()
 
 // Global Viewport Scroll Lock & Stabilization (Prevents PageDown / navigation keys from scrolling root window layout)
 const lockScroll = () => {

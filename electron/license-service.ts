@@ -40,7 +40,7 @@ export interface LicenseActionResult {
 
 const LICENSOR_SERVER_URL = process.env.LICENSOR_SERVER_URL || 'https://licensor-h5zdysrkqa-uc.a.run.app'
 const PRODUCT_ID = 'indoctrinated-edit'
-const APP_VERSION = '5.0.3'
+const APP_VERSION = '5.1.0'
 const REG_KEY_USER = 'HKCU\\Software\\Indoctrinated\\IndoctrinatedEdit'
 const REG_KEY_MACHINE = 'HKLM\\Software\\Indoctrinated\\IndoctrinatedEdit'
 
