@@ -61,7 +61,41 @@ export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettin
 }
 
 export const PRESET_MODELS: AiModelOption[] = [
-  // Google Gemini (Direct Google AI Studio API — real model IDs)
+  // Google Gemini (Direct Google AI Studio API)
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    provider: 'gemini',
+    description: 'Fast flagship model with 1M context window',
+    supportsReasoning: false,
+  },
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
+    provider: 'gemini',
+    description: 'Fast flagship model with 1M context window',
+    supportsReasoning: false,
+  },
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    provider: 'gemini',
+    description: 'Ultra-fast low-latency model for real-time suggestions and quick edits',
+  },
+  {
+    id: 'gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro Preview',
+    provider: 'gemini',
+    description: 'Preview model with deep architectural reasoning and multi-file synthesis',
+    supportsReasoning: false,
+  },
+  {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    provider: 'gemini',
+    description: 'Gemini 3.5 Flash',
+    supportsReasoning: false,
+  },
   {
     id: 'gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
@@ -82,27 +116,38 @@ export const PRESET_MODELS: AiModelOption[] = [
     provider: 'gemini',
     description: 'Ultra-fast low-latency model for real-time suggestions and quick edits',
   },
+
+  // DeepSeek (via OpenRouter / Direct API)
   {
-    id: 'gemini-2.0-flash-thinking-exp',
-    name: 'Gemini 2.0 Flash Thinking',
-    provider: 'gemini',
-    description: 'Experimental extended thinking variant of 2.0 Flash for deep reasoning tasks',
+    id: 'deepseek/deepseek-v4.1-flash',
+    name: 'DeepSeek V4.1 Flash',
+    provider: 'deepseek',
+    description: 'DeepSeek V4.1 Flash',
+  },
+  {
+    id: 'deepseek/deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    provider: 'deepseek',
+    description: 'DeepSeek V4 Pro',
+  },
+  {
+    id: 'deepseek/deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'deepseek',
+    description: 'DeepSeek V4 Flash',
+  },
+  {
+    id: 'deepseek/deepseek-r1',
+    name: 'DeepSeek R1',
+    provider: 'deepseek',
+    description: 'DeepSeek R1: deep chain-of-thought reasoning, matches o1-level on coding benchmarks',
     supportsReasoning: true,
   },
-
-  // DeepSeek (Direct API at api.deepseek.com — real model IDs)
   {
-    id: 'deepseek-chat',
+    id: 'deepseek/deepseek-chat',
     name: 'DeepSeek V3 (Chat)',
     provider: 'deepseek',
     description: 'DeepSeek-V3: state-of-the-art open-source coding and reasoning, 64k context',
-  },
-  {
-    id: 'deepseek-reasoner',
-    name: 'DeepSeek R1 (Reasoner)',
-    provider: 'deepseek',
-    description: 'DeepSeek-R1: deep chain-of-thought reasoning, matches o1-level on coding benchmarks',
-    supportsReasoning: true,
   },
 
   // Anthropic Claude (Direct API)
