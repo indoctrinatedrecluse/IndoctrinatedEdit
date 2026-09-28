@@ -806,6 +806,7 @@ Your objective is to autonomously execute implementation plans, write high-quali
             model: targetModel,
             messages: formattedMessages,
             stream: true,
+            max_tokens: 8192,
           }),
           signal: controller.signal,
         })

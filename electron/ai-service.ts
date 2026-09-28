@@ -145,6 +145,7 @@ async function streamOpenAiCompatible(
       model,
       messages,
       stream: true,
+      max_tokens: 8192,
     }),
     signal,
   })
