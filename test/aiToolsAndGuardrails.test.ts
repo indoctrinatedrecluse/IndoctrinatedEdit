@@ -179,13 +179,11 @@ describe('AI Tools Registry & Security Guardrails', () => {
       expect(toolNames).toContain('trigger_project_run')
       expect(toolNames).toContain('open_editor_file')
     })
-
     it('should generate a comprehensive tools system prompt', () => {
       const prompt = AiToolsRegistry.getToolsSystemPrompt()
-      expect(prompt).toContain('### Tool: `read_file`')
-      expect(prompt).toContain('### Tool: `propose_file_edit`')
-      expect(prompt).toContain('### Tool: `execute_terminal_command`')
-      expect(prompt).toContain('```tool_call')
+      expect(prompt).toContain('<tool name="read_file">')
+      expect(prompt).toContain('<tool name="propose_file_edit">')
+      expect(prompt).toContain('<tool name="execute_terminal_command">')
     })
   })
 

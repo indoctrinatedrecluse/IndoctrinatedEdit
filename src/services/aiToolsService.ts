@@ -346,38 +346,70 @@ export class AiToolsRegistry {
   }
 
   /**
-   * Generates a concise system prompt documentation for all registered tools.
+   * Generates a compact tools system prompt (one line per tool) to minimise token consumption.
+   * Full parameter docs are omitted intentionally — they bloated the prompt by 2,000+ tokens.
    */
   static getToolsSystemPrompt(): string {
     const list = this.getAllTools()
-    const descriptions = list.map((t) => {
-      const params = Object.entries(t.parameters)
-        .map(([k, v]) => `    - \`${k}\` (${v.type}${t.requiredParams.includes(k) ? ', required' : ''}): ${v.description}`)
-        .join('\n')
-      return `### Tool: \`${t.name}\` [Category: ${t.category}]
-Description: ${t.description}
-Parameters:
-${params || '    None'}`
-    }).join('\n\n')
 
-    return `You have access to the following local workspace tools to inspect, diagnose, edit, and test code:
+    let schemaStr = '<tools>\n'
+    for (const t of list) {
+      schemaStr += `  <tool name="${t.name}">\n`
+      schemaStr += `    <description>${t.description}</description>\n`
+      if (t.requiredParams && t.requiredParams.length > 0) {
+        schemaStr += `    <required_params>${t.requiredParams.join(', ')}</required_params>\n`
+      }
+      if (t.parameters && Object.keys(t.parameters).length > 0) {
+        schemaStr += `    <parameters>\n`
+        for (const [pName, pDef] of Object.entries(t.parameters)) {
+          schemaStr += `      <parameter name="${pName}" type="${pDef.type}">\n`
+          schemaStr += `        <description>${pDef.description}</description>\n`
+          if (pDef.enum) {
+            schemaStr += `        <enum_values>${pDef.enum.join(', ')}</enum_values>\n`
+          }
+          schemaStr += `      </parameter>\n`
+        }
+        schemaStr += `    </parameters>\n`
+      }
+      schemaStr += `  </tool>\n`
+    }
+    schemaStr += '</tools>'
 
-${descriptions}
+    return `## Available Workspace Tools
+  You have access to a set of powerful workspace tools. You MUST use the following XML format to invoke a tool. Do NOT use markdown code blocks or raw JSON for tool calls.
 
-## How to Call Tools
-When you need to call a tool, output a structured tool block in your response using this exact format:
+  XML Tool Call Format:
+  <tool_call name="tool_name">
+  {
+  "param1": "value",
+  "param2": 123
+  }
+  </tool_call>
 
-\`\`\`tool_call
-{
-  "tool": "tool_name_here",
-  "arguments": {
-    "param1": "value"
+  Here are the available tools:
+  ${schemaStr}
+
+  Rules for Tools:
+  1. Provide the exact JSON arguments inside the <tool_call>...</tool_call> tags.
+  2. Read files before proposing edits.
+  3. Keep tool usage minimal and targeted.
+  4. Only use tools that are defined in the <tools> list.`
   }
 }
-\`\`\`
 
-You can call multiple tools if needed. Always prefer reading files or checking diagnostics first when investigating bugs or errors before proposing edits.`
-  }
+/* =========================================================================
+ * 🔧 Tool Call Block Stripper (shared utility)
+ * ========================================================================= */
+
+/**
+ * Removes ```tool_call ... ``` fenced blocks from a string so they are not
+ * rendered as raw code in the chat UI (they are rendered as tool-call cards instead).
+ */
+export function stripToolCallBlocks(text: string): string {
+  if (!text) return text
+  let stripped = text.replace(/```(?:tool_call|tool-call|json-tool)[\s\S]*?```/gi, '')
+  stripped = stripped.replace(/<tool_call[\s\S]*?<\/tool_call>/gi, '')
+  return stripped.trim()
 }
 
 /* =========================================================================
@@ -788,7 +820,11 @@ export class AiToolParser {
     const xmlRegex = /<tool_call\s+name=["']([^"']+)["']>([\s\S]*?)<\/tool_call>/gi
     while ((match = xmlRegex.exec(text)) !== null) {
       const toolName = match[1].trim()
-      const rawJson = match[2].trim()
+      let rawJson = match[2].trim()
+      
+      // Remove any ```json ... ``` wrapper the model might have hallucinated inside the XML tags
+      rawJson = rawJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+      
       try {
         const args = rawJson ? JSON.parse(rawJson) : {}
         const toolDef = AiToolsRegistry.getTool(toolName)

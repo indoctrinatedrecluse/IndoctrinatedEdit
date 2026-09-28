@@ -61,79 +61,85 @@ export const AUTO_APPROVE_PRESETS: Record<AutoApprovePreset, AiAutoApproveSettin
 }
 
 export const PRESET_MODELS: AiModelOption[] = [
-  // Google Gemini (Direct Google AI Studio API)
+  // Google Gemini (Direct Google AI Studio API — real model IDs)
   {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash (Flagship)',
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
     provider: 'gemini',
-    description: 'Latest flagship multimodal model with deep CoT reasoning, 1M context, and high speed',
+    description: 'Google’s most powerful reasoning model — 1M context, native CoT thinking, best for complex tasks',
     supportsReasoning: true,
   },
   {
-    id: 'gemini-3.7-flash',
-    name: 'Gemini 3.7 Flash',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
     provider: 'gemini',
-    description: 'High-throughput reasoning model with hybrid CoT thinking and rapid streaming',
+    description: 'Fast flagship model with hybrid CoT thinking and 1M context window',
     supportsReasoning: true,
   },
   {
-    id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash',
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
     provider: 'gemini',
-    description: 'Ultra-fast low-latency assistant for real-time suggestions and code edits',
+    description: 'Ultra-fast low-latency model for real-time suggestions and quick edits',
   },
   {
-    id: 'gemini-3.1-pro',
-    name: 'Gemini 3.1 Pro (Deep Coding)',
+    id: 'gemini-2.0-flash-thinking-exp',
+    name: 'Gemini 2.0 Flash Thinking',
     provider: 'gemini',
-    description: 'Pro reasoning model for complex architectural analysis, multi-file synthesis, and 2M context',
+    description: 'Experimental extended thinking variant of 2.0 Flash for deep reasoning tasks',
     supportsReasoning: true,
   },
 
-  // DeepSeek (Direct API / OpenRouter)
+  // DeepSeek (Direct API at api.deepseek.com — real model IDs)
   {
-    id: 'deepseek-v4-flash',
-    name: 'DeepSeek-V4 Flash',
+    id: 'deepseek-chat',
+    name: 'DeepSeek V3 (Chat)',
     provider: 'deepseek',
-    description: 'Ultra-fast low-latency coding and reasoning model for high-throughput tasks',
-    supportsReasoning: true,
+    description: 'DeepSeek-V3: state-of-the-art open-source coding and reasoning, 64k context',
   },
   {
-    id: 'deepseek-v4-pro',
-    name: 'DeepSeek-V4 Pro',
+    id: 'deepseek-reasoner',
+    name: 'DeepSeek R1 (Reasoner)',
     provider: 'deepseek',
-    description: 'High-capability flagship model for deep coding, system design, and multi-file refactoring',
+    description: 'DeepSeek-R1: deep chain-of-thought reasoning, matches o1-level on coding benchmarks',
     supportsReasoning: true,
   },
 
   // Anthropic Claude (Direct API)
   {
-    id: 'claude-4.6-opus',
-    name: 'Claude 4.6 Opus',
+    id: 'claude-sonnet-4-5',
+    name: 'Claude Sonnet 4.5',
     provider: 'claude',
-    description: 'Top-tier frontier intelligence for complex systems engineering, deep refactoring, and planning',
+    description: 'State-of-the-art coding, debugging, architecture, and hybrid CoT reasoning',
     supportsReasoning: true,
   },
   {
-    id: 'claude-4.6-sonnet',
-    name: 'Claude 4.6 Sonnet',
+    id: 'claude-opus-4-5',
+    name: 'Claude Opus 4.5',
     provider: 'claude',
-    description: 'State-of-the-art coding, debugging, architecture, and hybrid CoT reasoning',
+    description: 'Top-tier frontier intelligence for complex systems engineering and deep refactoring',
     supportsReasoning: true,
   },
 
   // OpenAI (Direct API)
   {
     id: 'gpt-4o',
-    name: 'OpenAI GPT-4o',
+    name: 'GPT-4o',
     provider: 'openai',
     description: 'Omni flagship model for complex coding, synthesis and refactoring',
   },
   {
     id: 'gpt-4o-mini',
-    name: 'OpenAI GPT-4o Mini',
+    name: 'GPT-4o Mini',
     provider: 'openai',
     description: 'Ultra-fast and cost-efficient coding assistant',
+  },
+  {
+    id: 'o3-mini',
+    name: 'OpenAI o3-mini',
+    provider: 'openai',
+    description: 'Compact reasoning model optimised for coding with extended thinking',
+    supportsReasoning: true,
   },
 ]
 
@@ -254,7 +260,7 @@ export class AiService {
       const stored = localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY)
       if (stored && PRESET_MODELS.some((m) => m.id === stored)) return stored
     }
-    return 'gemini-3.8-flash'
+    return 'gemini-2.5-flash'
   }
 
   static setActiveModelId(modelId: string): void {
@@ -264,8 +270,8 @@ export class AiService {
   }
 
   private static modeListeners: Set<(state: AiModeState) => void> = new Set()
-  private static inMemoryPlanModelId: string = 'gemini-3.1-pro'
-  private static inMemoryActModelId: string = 'gemini-3.8-flash'
+  private static inMemoryPlanModelId: string = 'gemini-2.5-pro'
+  private static inMemoryActModelId: string = 'gemini-2.5-flash'
   private static inMemoryActiveMode: AiChatMode = 'plan'
 
   static getPlanModelId(): string {
@@ -424,6 +430,62 @@ Your objective is to autonomously execute implementation plans, write high-quali
   }
 
   /**
+   * Automatically trims the oldest messages from history when approaching the context limit.
+   * Keeps the welcome message and the most recent N messages.
+   * Returns a new (possibly shorter) messages array safe to send to the API.
+   */
+  static trimConversationHistory(
+    messages: AiChatMessage[],
+    systemPrompt: string,
+    modelId: string
+  ): AiChatMessage[] {
+    const limit = (() => {
+      const MODEL_LIMITS: Record<string, number> = {
+        'gemini-2.5-pro': 1_048_576, 'gemini-2.5-flash': 1_048_576,
+        'gemini-2.0-flash': 1_048_576, 'gemini-2.0-flash-thinking-exp': 1_048_576,
+        'claude-sonnet-4-5': 200_000, 'claude-opus-4-5': 200_000,
+        'deepseek-chat': 64_000, 'deepseek-reasoner': 64_000,
+        'gpt-4o': 128_000, 'gpt-4o-mini': 128_000, 'o3-mini': 200_000,
+      }
+      return MODEL_LIMITS[modelId] || 128_000
+    })()
+
+    // Simple token estimate: ~3.5 chars per token
+    const est = (s: string) => Math.ceil((s || '').length / 3.5)
+    const sysTokens = est(systemPrompt)
+    const budget = Math.floor(limit * 0.80) - sysTokens // use 80% max, leave headroom
+
+    const getMsgTokens = (m: AiChatMessage) => {
+      let total = est(m.content) + est(m.reasoning || '')
+      if (m.toolCalls) {
+        for (const call of m.toolCalls) {
+          total += est(JSON.stringify(call.arguments))
+        }
+      }
+      if (m.toolResults) {
+        for (const res of m.toolResults) {
+          total += est(res.output) + est(res.error || '')
+        }
+      }
+      return total
+    }
+
+    // If already under budget, return as-is
+    const totalNow = messages.reduce((acc, m) => acc + getMsgTokens(m), 0)
+    if (totalNow <= budget) return messages
+
+    // Keep pinned welcome message, drop from the front until under budget
+    const [welcome, ...rest] = messages
+    let trimmed = [...rest]
+    while (trimmed.length > 2) {
+      const total = trimmed.reduce((acc, m) => acc + getMsgTokens(m), 0)
+      if (total <= budget) break
+      trimmed.shift() // drop oldest
+    }
+    return [welcome, ...trimmed]
+  }
+
+  /**
    * Stream a prompt request with full support for Electron IPC or browser fetch fallback
    */
   static streamChat(
@@ -459,7 +521,7 @@ Your objective is to autonomously execute implementation plans, write high-quali
 
       if (m.toolResults && m.toolResults.length > 0) {
         const resultsText = m.toolResults
-          .map((tr) => `\n\`\`\`tool_result\nTool: ${tr.toolName}\nSuccess: ${tr.success}\nOutput:\n${tr.output}${tr.error ? `\nError: ${tr.error}` : ''}\n\`\`\``)
+          .map((tr) => `\n<tool_result name="${tr.toolName}" success="${tr.success}">\n${tr.error ? `<error>${tr.error}</error>` : ''}\n<output>\n${tr.output}\n</output>\n</tool_result>`)
           .join('\n')
         content = `${content}\n${resultsText}`
       }
@@ -491,6 +553,129 @@ Your objective is to autonomously execute implementation plans, write high-quali
     const runBrowserFetch = async () => {
       try {
         const cleanKey = (providerSettings.apiKey || '').trim()
+
+        // ── Gemini native REST API ────────────────────────────────────────────
+        if (model.provider === 'gemini') {
+          const geminiModel = model.id // e.g. 'gemini-3.8-flash'
+          const baseEndpoint = (providerSettings.endpoint || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '')
+          const url = `${baseEndpoint}/v1beta/models/${geminiModel}:streamGenerateContent?key=${cleanKey}&alt=sse`
+
+          // Convert messages to Gemini format (system instruction + contents)
+          const systemMsg = formattedMessages.find((m) => m.role === 'system')
+          const conversationMsgs = formattedMessages.filter((m) => m.role !== 'system')
+          const contents = conversationMsgs.map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content || '' }],
+          }))
+
+          const body: Record<string, any> = { contents }
+          if (systemMsg?.content) {
+            body.systemInstruction = { parts: [{ text: systemMsg.content }] }
+          }
+          body.generationConfig = { temperature: 0.7 }
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          })
+
+          if (!res.ok) {
+            const errText = await res.text()
+            throw new Error(`Gemini API error (${res.status}): ${errText}`)
+          }
+
+          if (!res.body) throw new Error('Response body empty')
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed || trimmed.startsWith(':')) continue
+              if (trimmed.startsWith('data: ')) {
+                try {
+                  const json = JSON.parse(trimmed.slice(6))
+                  const text = json.candidates?.[0]?.content?.parts?.[0]?.text
+                  if (text) onChunk({ text })
+                } catch { /* partial */ }
+              }
+            }
+          }
+          onChunk({ done: true })
+          return
+        }
+
+        // ── Claude / Anthropic API ─────────────────────────────────────────────
+        if (model.provider === 'claude') {
+          const claudeBase = (providerSettings.endpoint || 'https://api.anthropic.com').replace(/\/+$/, '')
+          const url = `${claudeBase}/v1/messages`
+          const systemMsg = formattedMessages.find((m) => m.role === 'system')
+          const conversationMsgs = formattedMessages.filter((m) => m.role !== 'system')
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': cleanKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: model.id,
+              max_tokens: 16384,
+              system: systemMsg?.content || undefined,
+              messages: conversationMsgs,
+              stream: true,
+            }),
+            signal: controller.signal,
+          })
+
+          if (!res.ok) {
+            const errText = await res.text()
+            throw new Error(`Claude API error (${res.status}): ${errText}`)
+          }
+
+          if (!res.body) throw new Error('Response body empty')
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed || trimmed.startsWith(':')) continue
+              if (trimmed === 'data: [DONE]') { onChunk({ done: true }); return }
+              if (trimmed.startsWith('data: ')) {
+                try {
+                  const json = JSON.parse(trimmed.slice(6))
+                  // Claude stream events: content_block_delta with delta.text
+                  if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+                    onChunk({ text: json.delta.text })
+                  } else if (json.type === 'message_stop') {
+                    onChunk({ done: true })
+                    return
+                  }
+                } catch { /* partial */ }
+              }
+            }
+          }
+          onChunk({ done: true })
+          return
+        }
+
+        // ── OpenAI-compatible (OpenAI, DeepSeek, Ollama, OpenRouter) ──────────
         const isOpenRouter = cleanKey.startsWith('sk-or-v1-')
         let baseUrl = providerSettings.endpoint || (isOpenRouter ? 'https://openrouter.ai/api/v1' : (model.provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1'))
         let cleanBase = baseUrl.trim().replace(/\/+$/, '')
@@ -512,18 +697,13 @@ Your objective is to autonomously execute implementation plans, write high-quali
 
         let targetModel = model.id
         if (cleanBase.includes('openrouter.ai')) {
-          if (model.id === 'deepseek-v4-flash') targetModel = 'deepseek/deepseek-v4-flash'
-          else if (model.id === 'deepseek-v4-pro') targetModel = 'deepseek/deepseek-v4-pro'
-          else if (model.id === 'deepseek-chat') targetModel = 'deepseek/deepseek-chat'
-          else if (model.id === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
-          else if (!targetModel.includes('/')) targetModel = `deepseek/${targetModel}`
-        } else if (model.provider === 'deepseek' && cleanBase.includes('api.deepseek.com')) {
-          if (targetModel === 'deepseek-v4-flash') {
-            targetModel = 'deepseek-flash'
-          } else if (targetModel === 'deepseek-v4-pro') {
-            targetModel = 'deepseek-pro'
+          if (model.provider === 'deepseek' && !targetModel.includes('/')) {
+            // deepseek-reasoner maps to the R1 slug on OpenRouter
+            if (targetModel === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
+            else targetModel = `deepseek/${targetModel}`
           }
         }
+        // Direct api.deepseek.com: pass model ID as-is (deepseek-chat, deepseek-reasoner)
 
         const res = await fetch(url, {
           method: 'POST',
