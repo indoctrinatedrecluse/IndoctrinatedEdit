@@ -50,7 +50,13 @@ export async function streamAiResponse(
       await streamClaude(endpoint || 'https://api.anthropic.com', model, messages, cleanKey, controller.signal, onChunk)
     } else if (provider === 'deepseek') {
       const isOpenRouterKey = cleanKey.startsWith('sk-or-v1-')
-      const targetEndpoint = endpoint || (isOpenRouterKey ? 'https://openrouter.ai/api/v1' : 'https://api.deepseek.com')
+      let targetEndpoint = endpoint || (isOpenRouterKey ? 'https://openrouter.ai/api/v1' : 'https://api.deepseek.com')
+      
+      // Automatically route to OpenRouter if an OpenRouter key is used but the endpoint is still the DeepSeek default
+      if (isOpenRouterKey && targetEndpoint === 'https://api.deepseek.com') {
+        targetEndpoint = 'https://openrouter.ai/api/v1'
+      }
+
       let targetModel = model
 
       if (targetEndpoint.includes('openrouter.ai')) {

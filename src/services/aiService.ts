@@ -763,9 +763,15 @@ Your objective is to autonomously execute implementation plans, write high-quali
           return
         }
 
-        // ── OpenAI-compatible (OpenAI, DeepSeek, Ollama, OpenRouter) ──────────
+        //  OpenAI-compatible (OpenAI, DeepSeek, Ollama, OpenRouter) 
         const isOpenRouter = cleanKey.startsWith('sk-or-v1-')
         let baseUrl = providerSettings.endpoint || (isOpenRouter ? 'https://openrouter.ai/api/v1' : (model.provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1'))
+
+        // Automatically route to OpenRouter if an OpenRouter key is used but the endpoint is still the DeepSeek default
+        if (isOpenRouter && baseUrl === 'https://api.deepseek.com') {
+          baseUrl = 'https://openrouter.ai/api/v1'
+        }
+
         let cleanBase = baseUrl.trim().replace(/\/+$/, '')
         let url = cleanBase
         if (!url.endsWith('/chat/completions')) {
