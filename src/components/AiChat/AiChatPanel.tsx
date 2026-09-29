@@ -498,18 +498,16 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       handleApplyDiff(result.diff)
     }
 
-    // Multi-turn autonomous follow-up if within max iterations
+    // Always trigger followup after a tool is executed to feed the result back to the AI
     const maxIters = autoApprove.maxAutoIterations || 10
-    if (iteration < maxIters && result.success && autoApprove.autoApproveRead) {
-      // Check if there are other pending calls in this message
-      // If not, trigger next turn with tool response
+    if (iteration < maxIters) {
       setTimeout(() => {
         triggerAutonomousFollowup(result, currentHistory, iteration + 1)
       }, 400)
     }
   }
 
-  const triggerAutonomousFollowup = (result: AiToolResult, history: AiChatMessage[], _iteration: number) => {
+  const triggerAutonomousFollowup = (result: AiToolResult, history: AiChatMessage[], iteration: number) => {
     const assistantMsgId = `assistant-agent-${Date.now()}`
     const assistantMsg: AiChatMessage = {
       id: assistantMsgId,
@@ -531,6 +529,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     const updatedHistory: AiChatMessage[] = [...history, toolResultMsg, assistantMsg]
     setMessages(updatedHistory)
     setIsStreaming(true)
+    setExpandedReasoning((prev) => ({ ...prev, [assistantMsgId]: true }))
 
     const systemPrompt = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
     const trimmedHistory = AiService.trimConversationHistory([...history, toolResultMsg], systemPrompt, selectedModel.id)
@@ -542,7 +541,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     }
 
     let accumulatedText = ''
-    const cancel = AiService.streamChat(selectedModel, [systemMsg, ...trimmedHistory], (chunk) => {
+    const cancel = AiService.streamChat(selectedModel, [systemMsg, ...trimmedHistory], async (chunk) => {
       if (chunk.text) {
         accumulatedText += chunk.text
         const displayText = stripToolCallBlocks(accumulatedText)
@@ -567,6 +566,42 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       if (chunk.done || chunk.error) {
         setIsStreaming(false)
         setCancelFn(null)
+
+        if (chunk.error) {
+          setMessages((prevMessages) => {
+            return prevMessages.map((msg) => {
+              if (msg.id === assistantMsgId) {
+                return {
+                  ...msg,
+                  content: msg.content
+                    ? `${msg.content}\n\n*(Error during generation: ${chunk.error})*`
+                    : `⚠️ **Error**: ${chunk.error}\n\nPlease verify your API key or endpoint in AI Settings.`,
+                }
+              }
+              return msg
+            })
+          })
+        } else {
+          // Parse any tool calls emitted by the model from the RAW (unstripped) accumulated text
+          const parsedCalls = AiToolParser.parseToolCalls(accumulatedText)
+          if (parsedCalls.length > 0) {
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id === assistantMsgId) {
+                  return { ...msg, toolCalls: parsedCalls }
+                }
+                return msg
+              })
+            )
+
+            // Execute any auto-approved calls
+            for (const call of parsedCalls) {
+              if (call.status === 'approved' || call.autoApproved) {
+                await executeToolCall(assistantMsgId, call, [...updatedHistory.slice(0, -1), assistantMsg], iteration)
+              }
+            }
+          }
+        }
       }
     })
 
@@ -574,7 +609,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   }
 
   const handleApproveTool = (msgId: string, toolCall: AiToolCall) => {
-    executeToolCall(msgId, toolCall, messages, 0)
+    const msgIndex = messages.findIndex((m) => m.id === msgId)
+    const currentHistory = msgIndex >= 0 ? messages.slice(0, msgIndex + 1) : messages
+    executeToolCall(msgId, toolCall, currentHistory, 0)
   }
 
   const handleRejectTool = (msgId: string, toolCall: AiToolCall) => {
