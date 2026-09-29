@@ -138,15 +138,21 @@ async function streamOpenAiCompatible(
     }
   }
 
+  const bodyPayload: Record<string, any> = {
+    model,
+    messages,
+    stream: true,
+    max_tokens: 8192,
+  }
+
+  if (url.includes('openrouter.ai')) {
+    bodyPayload.include_reasoning = true
+  }
+
   const res = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: true,
-      max_tokens: 8192,
-    }),
+    body: JSON.stringify(bodyPayload),
     signal,
   })
 

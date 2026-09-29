@@ -799,15 +799,21 @@ Your objective is to autonomously execute implementation plans, write high-quali
         }
         // Direct api.deepseek.com: pass model ID as-is (deepseek-chat, deepseek-reasoner)
 
+        const bodyPayload: Record<string, any> = {
+          model: targetModel,
+          messages: formattedMessages,
+          stream: true,
+          max_tokens: 8192,
+        }
+
+        if (url.includes('openrouter.ai')) {
+          bodyPayload.include_reasoning = true
+        }
+
         const res = await fetch(url, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            model: targetModel,
-            messages: formattedMessages,
-            stream: true,
-            max_tokens: 8192,
-          }),
+          body: JSON.stringify(bodyPayload),
           signal: controller.signal,
         })
 
