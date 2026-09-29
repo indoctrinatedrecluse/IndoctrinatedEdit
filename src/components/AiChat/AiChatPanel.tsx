@@ -122,7 +122,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   // Chat State
   const [messages, setMessages] = useState<AiChatMessage[]>([DEFAULT_WELCOME_MSG])
   const [messagesModelId, setMessagesModelId] = useState<string>(actModelId)
-  const [messagesWorkspace, setMessagesWorkspace] = useState<string>(workspaceRoot)
+  const [messagesWorkspace, setMessagesWorkspace] = useState<string>(workspaceRoot || '')
   const [inputText, setInputText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [cancelFn, setCancelFn] = useState<(() => void) | null>(null)
