@@ -121,6 +121,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
   // Chat State
   const [messages, setMessages] = useState<AiChatMessage[]>([DEFAULT_WELCOME_MSG])
+  const [messagesModelId, setMessagesModelId] = useState<string>(actModelId)
+  const [messagesWorkspace, setMessagesWorkspace] = useState<string>(workspaceRoot)
   const [inputText, setInputText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [cancelFn, setCancelFn] = useState<(() => void) | null>(null)
@@ -148,20 +150,24 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       } else {
         setMessages([DEFAULT_WELCOME_MSG])
       }
+      setMessagesModelId(selectedModelId)
+      setMessagesWorkspace(workspaceRoot)
     }
   }, [workspaceRoot, selectedModelId])
 
   // Save chat history whenever messages change
   useEffect(() => {
-    if (workspaceRoot && selectedModelId && messages.length > 0) {
-      AiService.saveChatHistory(workspaceRoot, selectedModelId, messages)
+    if (messagesWorkspace && messagesModelId && messages.length > 0) {
+      AiService.saveChatHistory(messagesWorkspace, messagesModelId, messages)
     }
-  }, [messages, workspaceRoot, selectedModelId])
+  }, [messages, messagesWorkspace, messagesModelId])
 
   const handleClearChat = () => {
     if (workspaceRoot && selectedModelId) {
       AiService.clearChatHistory(workspaceRoot, selectedModelId)
       setMessages([DEFAULT_WELCOME_MSG])
+      setMessagesModelId(selectedModelId)
+      setMessagesWorkspace(workspaceRoot)
       setAttachedContext(null)
     }
   }
