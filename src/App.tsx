@@ -241,6 +241,9 @@ import { conflictResolutionService } from './services/conflictResolutionService'
 
 function getLanguageFromFilename(filename: string, content?: string): string {
   try {
+    const lower = filename.toLowerCase()
+    if (lower.endsWith('.pdf')) return 'pdf'
+    if (lower.endsWith('.docx') || lower.endsWith('.doc')) return 'docx'
     return extensionRegistry.resolveLanguageForFilename(filename, content)
   } catch (err) {
     console.warn('Failed to resolve language from filename:', err)
@@ -928,9 +931,18 @@ export const App: React.FC = () => {
     }
 
     // Read via Electron IPC if running inside desktop app
-    if (window.electronAPI?.readFile && file.path) {
+    if (file.path) {
       try {
-        const content = await window.electronAPI.readFile(file.path)
+        const ext = file.name.toLowerCase().split('.').pop() || ''
+        const isBinaryDoc = ['pdf', 'docx', 'doc'].includes(ext)
+        let content = ''
+        if (isBinaryDoc && window.electronAPI?.readFileBase64) {
+          const b64 = await window.electronAPI.readFileBase64(file.path)
+          const mime = ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          content = `data:${mime};base64,${b64}`
+        } else if (window.electronAPI?.readFile) {
+          content = await window.electronAPI.readFile(file.path)
+        }
         setFileContents((prev) => ({ ...prev, [file.path]: content }))
         if (!tabs.some((t) => t.id === file.path)) {
           setTabs([...tabs, { id: file.path, name: file.name, language: getLanguageFromFilename(file.name) }])
@@ -2012,7 +2024,7 @@ export const App: React.FC = () => {
             setIsLicenseOpen(false)
           }
         }}
-        version="5.1.0"
+        version="5.1.1"
         isForceLockout={isLicenseLockout}
       />
 

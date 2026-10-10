@@ -13,6 +13,7 @@ import {
   Grid2X2,
   Eye,
   BookOpen,
+  FileText,
 } from 'lucide-react'
 import { runService } from '../../services/runService'
 
@@ -57,7 +58,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const activeTab = tabs.find((t) => t.id === activeTabId)
-  const isMarkdownFile = activeTab ? /\.(md|markdown|mdown|mkd|mdx)$/i.test(activeTab.name) : false
+  const isPreviewableDoc = activeTab ? /\.(md|markdown|mdown|mkd|mdx|html|htm|svg|pdf|docx|doc)$/i.test(activeTab.name) : false
 
   // Find active profile info
   const activeProfile = activeTab ? runService.getProfileForLanguage(activeTab.language) : null
@@ -80,6 +81,8 @@ export const TabBar: React.FC<TabBarProps> = ({
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId
           const isNotebook = tab.language === 'ipynb' || tab.name.endsWith('.ipynb') || tab.name.endsWith('.jupyter')
+          const isPdf = tab.language === 'pdf' || tab.name.toLowerCase().endsWith('.pdf')
+          const isWord = tab.language === 'docx' || /\.(docx|doc)$/i.test(tab.name)
           return (
             <div
               key={tab.id}
@@ -88,6 +91,10 @@ export const TabBar: React.FC<TabBarProps> = ({
             >
               {isNotebook ? (
                 <BookOpen size={13} className="tab-icon" color="#FF9F0A" />
+              ) : isPdf ? (
+                <FileText size={13} className="tab-icon" color="#FF453A" />
+              ) : isWord ? (
+                <FileText size={13} className="tab-icon" color="#0A84FF" />
               ) : (
                 <FileCode size={13} className="tab-icon" />
               )}
@@ -121,12 +128,12 @@ export const TabBar: React.FC<TabBarProps> = ({
         <div className="tab-actions-bar" ref={dropdownRef}>
           {/* Split Editor Panes Quick Action Buttons */}
           <div className="tab-split-controls-group">
-            {/* Contextual Live Markdown Preview Button (Active ONLY for markdown files) */}
-            {isMarkdownFile && (
+            {/* Contextual Live Document Preview Button (Active for Markdown, PDF, DOCX, HTML, SVG) */}
+            {isPreviewableDoc && (
               <button
                 className="tab-split-btn md-preview-btn glass-interactive"
                 onClick={onOpenMarkdownPreviewSide}
-                title="Open Live Markdown Preview to the Side (Ctrl+Shift+V)"
+                title="Open Live Document Preview to the Side (Ctrl+Shift+V)"
               >
                 <Eye size={13} className="md-preview-icon" />
                 <span className="md-preview-tag">Preview</span>

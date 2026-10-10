@@ -5,6 +5,32 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1] - 2026-10-10
+
+### 📄 Feature Release — Universal Document & Prose Studio (Native PDF & Word DOCX/DOC Live Viewers)
+
+IndoctrinatedEdit 5.1.1 bundles native viewing support for PDF and Microsoft Word documents directly into the core preview engine and rebrands it to the **Universal Document & Prose Studio** (`indoctrinated.ext.livepreview`):
+
+#### 📑 Native PDF Document Viewer
+- **Chromium Vector Rendering**: Integrated Electron's embedded Chromium PDF engine for high-fidelity multi-page document inspection.
+- **Liquid Glass HUD Controls**: Added floating viewer toolbar with zoom controls (`-`, `+`, 100%), 90° clockwise rotation, quick print, and document size & page metrics.
+- **Extracted Text Layer Mode**: Added a one-click toggle to inspect extracted text runs from stream blocks (`BT ... Tj ... ET`) for fast copy, search, and accessibility.
+
+#### 📝 Microsoft Word (.docx & .doc) Document Studio
+- **Semantic OOXML Conversion**: Powered by `mammoth` — renders headings, styled tables, bullet and numbered lists, inline formatting (bold, italic, strike), blockquotes, and embedded drawings.
+- **Clean Paper White vs. Liquid Glass Dark**: Instant dual-mode switcher allowing readers to view documents in realistic paper sheets or frosted dark glass.
+- **Typography Engine**: Dynamic toggle between modern Sans and editorial Serif font faces.
+- **Document Telemetry**: Displays live word count, character count, heading count, and estimated page counts.
+- **Legacy Word 97–2003 (.doc) Support**: Built-in resilient text stream extractor and informational notice banner for legacy binary OLE2 Word files.
+
+#### 🗂️ In-Editor Tabs & TabBar Integration
+- **Direct Editor Pane Rendering**: Opening `.pdf`, `.docx`, or `.doc` files now renders the native document viewer directly in the editor split grid rather than dumping unreadable binary text into Monaco.
+- **Color-Coded Tab Badging**: Added Ruby badges for PDF and Sapphire badges for Word in the active tab strip.
+- **Contextual Preview Action**: Activated the **Preview** button (`Ctrl+Shift+V`) across all document formats (Markdown, PDF, DOCX, DOC, HTML, SVG).
+- **Binary-Safe IPC Bridge**: Added `fs:readFileBase64` and enabled `plugins: true` in Electron's `BrowserWindow` to eliminate UTF-8 decoding corruption for binary documents.
+
+---
+
 ## [5.1.0] - 2026-09-29
 
 ### ✨ Feature Release — Persistent Chat History, Auto-Truncation, & Context Retrieval

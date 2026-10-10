@@ -82,6 +82,18 @@ export const textSupportManifest: ExtensionManifest = {
       monarchTokensProvider: logMonarchLanguage,
       snippets: plaintextSnippets,
     },
+    {
+      id: 'pdf',
+      extensions: ['.pdf'],
+      aliases: ['PDF Document', 'PDF', 'pdf'],
+      mimetypes: ['application/pdf'],
+    },
+    {
+      id: 'docx',
+      extensions: ['.docx', '.doc'],
+      aliases: ['Microsoft Word', 'Word Document', 'docx', 'doc'],
+      mimetypes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'],
+    },
   ],
 }
 

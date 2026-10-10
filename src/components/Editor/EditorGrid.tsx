@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { EditorHost, EditorHostHandle, SelectionInfo } from './EditorHost'
 import { NotebookEditor } from '../Notebook/NotebookEditor'
+import { LivePreviewView } from '../LivePreview/LivePreviewView'
 import { TabItem } from '../TabBar/TabBar'
 import { ThemeDefinition } from '@sdk/index'
 import { LspRenameResult } from '../../services/lspService'
@@ -252,6 +253,11 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
       (fileName && (fileName.endsWith('.ipynb') || fileName.endsWith('.jupyter'))) ||
       lang === 'ipynb'
     )
+    const isDocument = Boolean(
+      (fileName && /\.(pdf|docx|doc)$/i.test(fileName)) ||
+      lang === 'pdf' ||
+      lang === 'docx'
+    )
 
     return (
       <div
@@ -325,6 +331,12 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
               content={content}
               filePath={currentTabId}
               onChange={(val) => onEditorChange(currentTabId, val)}
+            />
+          ) : isDocument ? (
+            <LivePreviewView
+              activeFileName={fileName}
+              activeFileContent={content}
+              isDocked={false}
             />
           ) : activeTab || currentTabId ? (
             <EditorHost

@@ -1,14 +1,18 @@
-/**
- * IndoctrinatedEdit - Live Markdown, HTML & Mermaid Diagram Preview Engine
- */
+import * as mammoth from 'mammoth'
+
+export type DocumentPreviewType = 'markdown' | 'html' | 'svg' | 'pdf' | 'docx' | 'unsupported'
 
 export interface PreviewMetadata {
-  type: 'markdown' | 'html' | 'svg' | 'unsupported'
+  type: DocumentPreviewType
   title: string
   wordCount: number
   characterCount: number
   mermaidDiagramsCount: number
   headingsCount: number
+  pageCount?: number
+  author?: string
+  fileSize?: string
+  lastModified?: string
 }
 
 export interface MermaidDiagram {
@@ -21,12 +25,26 @@ class PreviewService {
   /**
    * Determine whether a given file name or language is previewable
    */
-  public getPreviewType(fileName: string, language?: string): 'markdown' | 'html' | 'svg' | 'unsupported' {
+  public getPreviewType(fileName: string, language?: string): DocumentPreviewType {
     const ext = fileName.toLowerCase().split('.').pop() || ''
     const lang = (language || '').toLowerCase()
 
-    if (ext === 'md' || ext === 'markdown' || ext === 'mdown' || ext === 'mkd' || ext === 'mdx' || lang === 'markdown' || lang === 'mdx') {
+    if (
+      ext === 'md' ||
+      ext === 'markdown' ||
+      ext === 'mdown' ||
+      ext === 'mkd' ||
+      ext === 'mdx' ||
+      lang === 'markdown' ||
+      lang === 'mdx'
+    ) {
       return 'markdown'
+    }
+    if (ext === 'pdf' || lang === 'pdf') {
+      return 'pdf'
+    }
+    if (ext === 'docx' || ext === 'doc' || lang === 'docx' || lang === 'doc' || lang === 'word') {
+      return 'docx'
     }
     if (ext === 'html' || ext === 'htm' || ext === 'xhtml' || lang === 'html') {
       return 'html'
@@ -444,6 +462,238 @@ class PreviewService {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;')
+  }
+
+  /**
+   * Helper to convert base64 (or data URL) into an ArrayBuffer
+   */
+  public base64ToArrayBuffer(base64OrDataUrl: string): ArrayBuffer {
+    const clean = base64OrDataUrl.replace(/^data:[^;]+;base64,/, '').trim()
+    const binaryString = atob(clean)
+    const len = binaryString.length
+    const bytes = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+    return bytes.buffer
+  }
+
+  /**
+   * Render Microsoft Word DOCX (and DOC) documents into formatted HTML preview
+   */
+  public async renderDocx(
+    content: string | ArrayBuffer,
+    fileName: string = 'document.docx'
+  ): Promise<{ html: string; metadata: PreviewMetadata; textContent: string }> {
+    let arrayBuffer: ArrayBuffer
+
+    if (typeof content === 'string') {
+      if (content.startsWith('data:') || /^[A-Za-z0-9+/=]{100,}/.test(content.slice(0, 200).replace(/\s+/g, ''))) {
+        try {
+          arrayBuffer = this.base64ToArrayBuffer(content)
+        } catch {
+          const encoder = new TextEncoder()
+          arrayBuffer = encoder.encode(content).buffer
+        }
+      } else {
+        const encoder = new TextEncoder()
+        arrayBuffer = encoder.encode(content).buffer
+      }
+    } else {
+      arrayBuffer = content
+    }
+
+    const isDoc = fileName.toLowerCase().endsWith('.doc') && !fileName.toLowerCase().endsWith('.docx')
+
+    // Check if it's a legacy OLE2 Word document or DOCX zip
+    const bytes = new Uint8Array(arrayBuffer)
+    const isZip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
+    const isOle2 = bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0
+
+    let htmlBody = ''
+    let textContent = ''
+    let isLegacy = false
+
+    if (isZip || (!isOle2 && !isDoc)) {
+      try {
+        const mammothFn = (mammoth as any).default || mammoth
+        const result = await mammothFn.convertToHtml({ arrayBuffer })
+        htmlBody = result.value
+        
+        // Extract raw text for search & stats
+        const rawTextRes = await mammothFn.extractRawText({ arrayBuffer })
+        textContent = rawTextRes.value
+      } catch {
+        // If mammoth fails or partial package, fall back to extracted text runs
+        htmlBody = this.extractTextFromBinaryDoc(bytes, fileName)
+        textContent = htmlBody.replace(/<[^>]+>/g, ' ')
+        isLegacy = true
+      }
+    } else {
+      // Legacy Word 97-2003 OLE2 (.doc)
+      htmlBody = this.extractTextFromBinaryDoc(bytes, fileName)
+      textContent = htmlBody.replace(/<[^>]+>/g, ' ')
+      isLegacy = true
+    }
+
+    const words = textContent.trim().split(/\s+/).filter(Boolean).length
+    const chars = textContent.length
+    const headings = (htmlBody.match(/<h[1-6]\b/gi) || []).length
+    const estimatedPages = Math.max(1, Math.ceil(words / 320))
+
+    const wrappedHtml = `
+      <div class="docx-document-container">
+        ${isLegacy ? `
+          <div class="docx-legacy-banner glass-panel">
+            <span class="legacy-badge">📄 Legacy Document</span>
+            <span>Displaying extracted text from <strong>${this.escapeHtml(fileName)}</strong> (Microsoft Word 97–2003 binary format).</span>
+          </div>
+        ` : ''}
+        <article class="docx-document-sheet">
+          ${htmlBody || '<p class="empty-doc-notice">Document contains no readable body text.</p>'}
+        </article>
+      </div>
+    `
+
+    return {
+      html: wrappedHtml,
+      textContent,
+      metadata: {
+        type: 'docx',
+        title: fileName,
+        wordCount: words,
+        characterCount: chars,
+        mermaidDiagramsCount: 0,
+        headingsCount: headings,
+        pageCount: estimatedPages,
+        fileSize: bytes.length > 0 ? `${(bytes.length / 1024).toFixed(1)} KB` : 'Word Document',
+      },
+    }
+  }
+
+  /**
+   * Resilient extractor for legacy Word .doc or non-standard binary document streams
+   */
+  private extractTextFromBinaryDoc(bytes: Uint8Array, fileName: string): string {
+    const textChunks: string[] = []
+    let currentChunk = ''
+
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i]
+      // Printable ASCII characters or newline/tab
+      if ((b >= 32 && b <= 126) || b === 10 || b === 13 || b === 9) {
+        currentChunk += String.fromCharCode(b)
+      } else {
+        if (currentChunk.trim().length >= 4) {
+          textChunks.push(currentChunk.trim())
+        }
+        currentChunk = ''
+      }
+    }
+    if (currentChunk.trim().length >= 4) {
+      textChunks.push(currentChunk.trim())
+    }
+
+    // Filter out common binary keywords & metadata signatures
+    const filtered = textChunks.filter((chunk) => {
+      if (chunk.length < 3) return false
+      if (/^(Microsoft Word|CompObj|WordDocument|SummaryInformation|DocumentSummaryInformation|Table)/i.test(chunk)) {
+        return false
+      }
+      return /[a-zA-Z0-9]/.test(chunk)
+    })
+
+    if (filtered.length === 0) {
+      return `<p>Legacy Microsoft Word binary format detected (${this.escapeHtml(fileName)}). No printable text extracted.</p>`
+    }
+
+    return filtered.map((p) => `<p>${this.escapeHtml(p)}</p>`).join('\n')
+  }
+
+  /**
+   * Render PDF document URL and extract structure metadata
+   */
+  public renderPdf(
+    content: string | ArrayBuffer,
+    fileName: string = 'document.pdf'
+  ): { pdfUrl: string; metadata: PreviewMetadata; extractedText: string } {
+    let pdfUrl = ''
+    let bytes: Uint8Array
+
+    if (typeof content === 'string') {
+      if (content.startsWith('data:application/pdf')) {
+        pdfUrl = content
+        try {
+          const ab = this.base64ToArrayBuffer(content)
+          bytes = new Uint8Array(ab)
+        } catch {
+          bytes = new Uint8Array(0)
+        }
+      } else if (/^[A-Za-z0-9+/=]{100,}/.test(content.slice(0, 200).replace(/\s+/g, ''))) {
+        pdfUrl = `data:application/pdf;base64,${content.trim()}`
+        try {
+          const ab = this.base64ToArrayBuffer(content)
+          bytes = new Uint8Array(ab)
+        } catch {
+          bytes = new Uint8Array(0)
+        }
+      } else {
+        // Plain string (e.g. file URL or raw string)
+        const encoder = new TextEncoder()
+        bytes = encoder.encode(content)
+        try {
+          const base64 = btoa(unescape(encodeURIComponent(content)))
+          pdfUrl = `data:application/pdf;base64,${base64}`
+        } catch {
+          pdfUrl = ''
+        }
+      }
+    } else {
+      bytes = new Uint8Array(content)
+      const blob = new Blob([content], { type: 'application/pdf' })
+      pdfUrl = URL.createObjectURL(blob)
+    }
+
+    // Heuristically extract PDF metadata & approximate page count
+    let pdfString = ''
+    try {
+      const decoder = new TextDecoder('latin1')
+      pdfString = decoder.decode(bytes.slice(0, Math.min(bytes.length, 500000)))
+    } catch {}
+
+    // Match /Count \d+ in Pages dict or count /Type\s*\/Page\b
+    let pageCount = 1
+    const countMatch = pdfString.match(/\/Count\s+(\d+)/)
+    if (countMatch) {
+      pageCount = parseInt(countMatch[1], 10) || 1
+    } else {
+      const pageOccurrences = (pdfString.match(/\/Type\s*\/Page\b/g) || []).length
+      if (pageOccurrences > 0) {
+        pageCount = pageOccurrences
+      }
+    }
+
+    // Extract text in Tj and TJ operators
+    const textMatches = pdfString.match(/\(([^)]+)\)\s*Tj/g) || []
+    const extractedWords = textMatches
+      .map((m) => m.replace(/^\(/, '').replace(/\)\s*Tj$/, ''))
+      .join(' ')
+      .trim()
+
+    return {
+      pdfUrl,
+      extractedText: extractedWords,
+      metadata: {
+        type: 'pdf',
+        title: fileName,
+        wordCount: extractedWords.split(/\s+/).filter(Boolean).length,
+        characterCount: extractedWords.length,
+        mermaidDiagramsCount: 0,
+        headingsCount: 0,
+        pageCount,
+        fileSize: bytes.length > 0 ? `${(bytes.length / 1024).toFixed(1)} KB` : 'PDF Document',
+      },
+    }
   }
 }
 

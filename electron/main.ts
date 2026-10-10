@@ -116,6 +116,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      plugins: true,
     },
   })
 
@@ -246,14 +247,24 @@ ipcMain.handle('dialog:openFile', async () => {
     properties: ['openFile'],
     filters: [
       { name: 'All Files', extensions: ['*'] },
-      { name: 'Source Files', extensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'html', 'css', 'md', 'py', 'rs', 'go', 'cs', 'cpp', 'c'] },
+      { name: 'Documents & Prose', extensions: ['md', 'markdown', 'pdf', 'docx', 'doc', 'txt', 'html', 'ipynb'] },
+      { name: 'Source Files', extensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'html', 'css', 'md', 'py', 'rs', 'go', 'cs', 'cpp', 'c', 'pdf', 'docx', 'doc'] },
     ],
   })
 
   if (result.canceled || result.filePaths.length === 0) return null
   const filePath = result.filePaths[0]
-  const content = await fs.readFile(filePath, 'utf-8')
   const fileName = path.basename(filePath)
+  const ext = path.extname(filePath).toLowerCase()
+  const isBinaryDoc = ['.pdf', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)
+  let content = ''
+  if (isBinaryDoc) {
+    const buf = await fs.readFile(filePath)
+    const mime = ext === '.pdf' ? 'application/pdf' : (ext === '.docx' || ext === '.doc') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/octet-stream'
+    content = `data:${mime};base64,${buf.toString('base64')}`
+  } else {
+    content = await fs.readFile(filePath, 'utf-8')
+  }
   return { path: filePath, name: fileName, content }
 })
 
@@ -356,6 +367,11 @@ ipcMain.handle('fs:checkExists', async (_, targetPath: string) => {
 
 ipcMain.handle('fs:readFile', async (_, filePath: string) => {
   return await fs.readFile(filePath, 'utf-8')
+})
+
+ipcMain.handle('fs:readFileBase64', async (_, filePath: string) => {
+  const buffer = await fs.readFile(filePath)
+  return buffer.toString('base64')
 })
 
 ipcMain.handle('fs:saveFile', async (_, filePath: string, content: string) => {

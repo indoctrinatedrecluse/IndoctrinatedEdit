@@ -231,15 +231,15 @@ class ExtensionRegistry {
       type: 'Built-in',
     })
 
-    // 33. Live Markdown, Static HTML & Mermaid Diagram Studio
+    // 33. Universal Document & Prose Studio (Markdown, PDF, DOCX & Office)
     this.register({
       id: 'indoctrinated.ext.livepreview',
-      name: 'Live Markdown, HTML & Mermaid Diagram Studio',
-      version: '1.0.0',
-      description: 'Split-canvas and dock live preview for Markdown and HTML with GitHub alerts, tables, and Mermaid.js vector diagram rendering.',
+      name: 'Universal Document & Prose Studio',
+      version: '1.2.0',
+      description: 'Split-canvas, in-tab, and dock live document preview for Markdown, PDF, Microsoft Word (DOCX/DOC), HTML, and SVG with GitHub alerts, LaTeX math, and Mermaid.js diagrams.',
       author: 'indoctrinatedrecluse',
       category: 'Tools',
-      iconName: 'Eye',
+      iconName: 'FileText',
       status: 'Active',
       type: 'Built-in',
     })

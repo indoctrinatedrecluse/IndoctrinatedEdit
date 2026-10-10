@@ -205,6 +205,7 @@ export interface ElectronAPI {
   listWorkspaceFiles: (rootPath: string, maxFiles?: number) => Promise<Array<{ name: string; relativePath: string; path: string; isDirectory: boolean }>>
   checkExists: (targetPath: string) => Promise<boolean>
   readFile: (filePath: string) => Promise<string>
+  readFileBase64: (filePath: string) => Promise<string>
   saveFile: (filePath: string, content: string) => Promise<boolean>
   saveFileAs: (defaultName: string, content: string) => Promise<{ path: string; name: string } | null>
 
@@ -253,6 +254,7 @@ const api: ElectronAPI = {
   listWorkspaceFiles: (rootPath: string, maxFiles?: number) => ipcRenderer.invoke('fs:listWorkspaceFiles', rootPath, maxFiles),
   checkExists: (targetPath: string) => ipcRenderer.invoke('fs:checkExists', targetPath),
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
+  readFileBase64: (filePath: string) => ipcRenderer.invoke('fs:readFileBase64', filePath),
   saveFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:saveFile', filePath, content),
   saveFileAs: (defaultName: string, content: string) => ipcRenderer.invoke('dialog:saveFileAs', defaultName, content),
 
