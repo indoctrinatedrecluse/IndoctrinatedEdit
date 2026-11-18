@@ -54,6 +54,12 @@ export class TerminalService {
   private customElectronAPI: any = null
   private detectedShells: ShellProfile[] = []
   private config: TerminalConfig | null = null
+  private configListeners = new Set<(cfg: TerminalConfig) => void>()
+
+  public onConfigChange(listener: (cfg: TerminalConfig) => void): () => void {
+    this.configListeners.add(listener)
+    return () => this.configListeners.delete(listener)
+  }
   private tabs: TerminalTab[] = []
   private activeTabId: string | null = null
   private rawStreamBuffers: Map<string, string> = new Map()
@@ -228,6 +234,7 @@ export class TerminalService {
 
   public async saveConfig(updated: Partial<TerminalConfig>): Promise<boolean> {
     this.config = { ...this.getConfig(), ...updated }
+    this.configListeners.forEach((fn) => fn(this.config!))
     const electron = this.getElectronAPI()
     if (electron?.terminal?.saveConfig) {
       return await electron.terminal.saveConfig(this.config)

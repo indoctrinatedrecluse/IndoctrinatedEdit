@@ -104,6 +104,17 @@ class TaskRunnerService {
     return [...this.tasks]
   }
 
+  public addCustomTask(name: string, command: string): ProjectTask {
+    const task: ProjectTask = {
+      id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim() || 'Custom Task',
+      command: command.trim(),
+      source: 'Custom',
+    }
+    this.tasks = [...this.tasks, task]
+    return task
+  }
+
   /**
    * Discover real workspace tasks from package.json, Makefile, and Cargo.toml when in desktop mode.
    */
@@ -167,8 +178,42 @@ class TaskRunnerService {
       // No Cargo.toml
     }
 
+    // 4. pyproject.toml / Python scripts
+    try {
+      const pyRaw = await window.electronAPI.readFile(`${root}/pyproject.toml`)
+      discovered.push({ id: 'py_pytest', name: 'pytest', command: 'pytest -v', source: 'Python' })
+      if (pyRaw.includes('ruff')) {
+        discovered.push({ id: 'py_ruff', name: 'ruff check', command: 'ruff check .', source: 'Python' })
+      }
+    } catch {
+      // No pyproject.toml
+    }
+
+    // 5. .vscode/tasks.json
+    try {
+      const vscRaw = await window.electronAPI.readFile(`${root}/.vscode/tasks.json`)
+      const cleaned = vscRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+      const parsed = JSON.parse(cleaned)
+      if (Array.isArray(parsed.tasks)) {
+        for (const t of parsed.tasks) {
+          if (t?.label && t?.command) {
+            const fullCmd = Array.isArray(t.args) ? `${t.command} ${t.args.join(' ')}` : String(t.command)
+            discovered.push({
+              id: `vsc_${t.label}`,
+              name: t.label,
+              command: fullCmd,
+              source: 'Custom',
+            })
+          }
+        }
+      }
+    } catch {
+      // No .vscode/tasks.json
+    }
+
     if (discovered.length > 0) {
-      this.tasks = discovered
+      const customTasks = this.tasks.filter((t) => t.id.startsWith('custom_'))
+      this.tasks = [...discovered, ...customTasks]
     }
     return this.getTasks()
   }

@@ -362,8 +362,16 @@ export class DiagnosticsService {
           })
         }
 
-        // Missing colon after def/class/if/elif/else/while/for
-        if (/^(def|class|if|elif|else|while|for|try|except|finally)\b/.test(trimmed) && !trimmed.endsWith(':') && !trimmed.includes('#')) {
+        // Missing colon after def/class/if/elif/else/while/for (skip multiline signatures ending with (, [, \, or ,)
+        if (
+          /^(def|class|if|elif|else|while|for|try|except|finally)\b/.test(trimmed) &&
+          !trimmed.endsWith(':') &&
+          !trimmed.endsWith('(') &&
+          !trimmed.endsWith('[') &&
+          !trimmed.endsWith('\\') &&
+          !trimmed.endsWith(',') &&
+          !trimmed.includes('#')
+        ) {
           items.push({
             message: `SyntaxError: expected ':' at the end of statement`,
             severity: 'error',
@@ -384,12 +392,14 @@ export class DiagnosticsService {
         const lineNum = idx + 1
         const trimmed = lineText.trim()
 
-        // Missing semicolon in property definition
+        // Missing semicolon in property definition (skip pseudo-class selectors like :hover, ::before, and multi-line selectors ending in ,)
+        const looksLikeCssProp = /^[a-zA-Z-]+\s*:\s*\S/.test(trimmed)
         if (
-          trimmed.includes(':') &&
+          looksLikeCssProp &&
           !trimmed.endsWith(';') &&
           !trimmed.endsWith('{') &&
           !trimmed.endsWith('}') &&
+          !trimmed.endsWith(',') &&
           !trimmed.startsWith('/*') &&
           !trimmed.startsWith('@')
         ) {
@@ -409,6 +419,125 @@ export class DiagnosticsService {
 
     this.setDiagnostics(filePath, fileName, items)
     return this.fileDiagnostics.get(filePath) || []
+  }
+
+  /**
+   * Ingest real Monaco / LSP diagnostic markers directly into the Problems panel.
+   */
+  public syncExternalMarkers(
+    filePath: string,
+    fileName: string,
+    markers: Array<{
+      message: string
+      severity: number | DiagnosticSeverity
+      startLineNumber: number
+      startColumn: number
+      endLineNumber?: number
+      endColumn?: number
+      source?: string
+      code?: string | number
+    }>
+  ): void {
+    const mapped = markers.map((m) => {
+      let severity: DiagnosticSeverity = 'info'
+      if (typeof m.severity === 'string') {
+        severity = m.severity
+      } else if (m.severity >= 8) {
+        severity = 'error'
+      } else if (m.severity >= 4) {
+        severity = 'warning'
+      } else if (m.severity >= 2) {
+        severity = 'info'
+      } else {
+        severity = 'hint'
+      }
+      return {
+        message: m.message,
+        severity,
+        startLineNumber: m.startLineNumber,
+        startColumn: m.startColumn,
+        endLineNumber: m.endLineNumber ?? m.startLineNumber,
+        endColumn: m.endColumn ?? m.startColumn + 1,
+        source: m.source || 'lsp',
+        code: m.code,
+      }
+    })
+    this.setDiagnostics(filePath, fileName, mapped)
+  }
+
+  /**
+   * Run genuine workspace compiler / linter CLI (`tsc --noEmit`, `ruff check`, `go vet`) via Electron IPC
+   * and publish real diagnostics into the Problems panel.
+   */
+  public async runWorkspaceDiagnostics(workspaceRoot: string, tool: 'tsc' | 'ruff' | 'govet' = 'tsc'): Promise<number> {
+    if (typeof window === 'undefined' || !window.electronAPI?.workspace?.execCommand || !workspaceRoot) {
+      return 0
+    }
+    const cmd =
+      tool === 'tsc'
+        ? 'npx tsc --noEmit --pretty false'
+        : tool === 'ruff'
+        ? 'ruff check --output-format json .'
+        : 'go vet ./...'
+    const res = await window.electronAPI.workspace.execCommand({
+      command: cmd,
+      cwd: workspaceRoot,
+      timeoutMs: 45000,
+    })
+
+    const combined = `${res.stdout}\n${res.stderr}`
+    const grouped = new Map<string, Omit<DiagnosticItem, 'id' | 'filePath' | 'fileName'>[]>()
+
+    if (tool === 'tsc') {
+      const tscRe = /^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$/gm
+      let m: RegExpExecArray | null
+      while ((m = tscRe.exec(combined)) !== null) {
+        const [, fp, lineStr, colStr, sev, code, message] = m
+        const list = grouped.get(fp) || []
+        const line = parseInt(lineStr, 10)
+        const col = parseInt(colStr, 10)
+        list.push({
+          message,
+          severity: sev === 'warning' ? 'warning' : 'error',
+          startLineNumber: line,
+          startColumn: col,
+          endLineNumber: line,
+          endColumn: col + 4,
+          source: 'tsc',
+          code,
+        })
+        grouped.set(fp, list)
+      }
+    } else if (tool === 'ruff') {
+      try {
+        const arr: any[] = JSON.parse(res.stdout)
+        for (const item of arr) {
+          const fp = item.filename || 'unknown.py'
+          const list = grouped.get(fp) || []
+          list.push({
+            message: item.message || 'Ruff lint issue',
+            severity: 'warning',
+            startLineNumber: item.location?.row || 1,
+            startColumn: item.location?.column || 1,
+            endLineNumber: item.end_location?.row || item.location?.row || 1,
+            endColumn: item.end_location?.column || 2,
+            source: 'ruff',
+            code: item.code,
+          })
+          grouped.set(fp, list)
+        }
+      } catch {
+        // ignore non-json output
+      }
+    }
+
+    let count = 0
+    for (const [fp, items] of grouped.entries()) {
+      const fileName = fp.split(/[/\\]/).pop() || fp
+      this.setDiagnostics(fp, fileName, items)
+      count += items.length
+    }
+    return count
   }
 }
 

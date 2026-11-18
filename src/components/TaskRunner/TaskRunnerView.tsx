@@ -1,22 +1,39 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Play,
   Clock,
   Calendar,
   Sparkles,
   RotateCw,
+  Plus,
 } from 'lucide-react'
 import { taskRunnerService, ProjectTask, CronScheduleAnalysis } from '../../services/taskRunnerService'
 import './TaskRunnerView.css'
 
-export const TaskRunnerView: React.FC = () => {
+interface TaskRunnerViewProps {
+  workspaceRoot?: string
+}
+
+export const TaskRunnerView: React.FC<TaskRunnerViewProps> = ({ workspaceRoot }) => {
   const [activeTab, setActiveTab] = useState<'tasks' | 'cron'>('tasks')
   const [tasks, setTasks] = useState<ProjectTask[]>(() => taskRunnerService.getTasks())
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customCmd, setCustomCmd] = useState('')
 
   // Cron state
   const [cronExpr, setCronExpr] = useState<string>('*/15 * * * *')
   const [cronAnalysis, setCronAnalysis] = useState<CronScheduleAnalysis | null>(null)
+
+  const refreshTasks = useCallback(async () => {
+    const found = await taskRunnerService.discoverWorkspaceTasks(workspaceRoot)
+    setTasks(found)
+  }, [workspaceRoot])
+
+  useEffect(() => {
+    void refreshTasks()
+  }, [refreshTasks])
 
   useEffect(() => {
     setCronAnalysis(taskRunnerService.analyzeCron(cronExpr))
@@ -24,9 +41,18 @@ export const TaskRunnerView: React.FC = () => {
 
   const handleRunTask = async (taskId: string) => {
     setRunningTaskId(taskId)
-    await taskRunnerService.runTask(taskId)
+    await taskRunnerService.runTask(taskId, workspaceRoot)
     setTasks(taskRunnerService.getTasks())
     setRunningTaskId(null)
+  }
+
+  const handleAddCustomTask = () => {
+    if (!customName.trim() || !customCmd.trim()) return
+    taskRunnerService.addCustomTask(customName, customCmd)
+    setTasks(taskRunnerService.getTasks())
+    setCustomName('')
+    setCustomCmd('')
+    setShowAddForm(false)
   }
 
   return (
@@ -60,7 +86,39 @@ export const TaskRunnerView: React.FC = () => {
         {/* TAB 1: PROJECT SCRIPTS */}
         {activeTab === 'tasks' && (
           <div className="tasks-section">
-            <span className="section-label">DETECTED PROJECT TASKS</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span className="section-label">DETECTED PROJECT TASKS</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="task-run-btn glass-interactive" onClick={() => setShowAddForm((v) => !v)} title="Add Custom Task">
+                  <Plus size={11} /> Add
+                </button>
+                <button className="task-run-btn glass-interactive" onClick={() => void refreshTasks()} title="Rescan Workspace Tasks">
+                  <RotateCw size={11} /> Rescan
+                </button>
+              </div>
+            </div>
+            {showAddForm && (
+              <div className="task-card glass-panel" style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  type="text"
+                  className="cron-input"
+                  placeholder="Task name (e.g. typecheck)"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="cron-input"
+                  placeholder="Shell command (e.g. npx tsc --noEmit)"
+                  value={customCmd}
+                  onChange={(e) => setCustomCmd(e.target.value)}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="task-run-btn glass-interactive" onClick={handleAddCustomTask}>Save Task</button>
+                  <button className="task-run-btn glass-interactive" onClick={() => setShowAddForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
             <div className="tasks-list">
               {tasks.map((task) => {
                 const isRunning = runningTaskId === task.id

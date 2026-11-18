@@ -22,10 +22,12 @@ import {
 import './TestExplorerPanel.css'
 
 interface TestExplorerPanelProps {
+  workspacePath?: string
   onOpenFileAndNavigate?: (filePath: string, lineNumber: number, column?: number) => void
 }
 
 export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
+  workspacePath,
   onOpenFileAndNavigate,
 }) => {
   const [state, setState] = useState<TestExplorerState>(() =>
@@ -42,6 +44,13 @@ export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
     return () => unsub()
   }, [])
 
+  useEffect(() => {
+    testExplorerService.setWorkspaceRoot(workspacePath)
+    if (workspacePath) {
+      void testExplorerService.discoverWorkspaceTestsAsync(workspacePath)
+    }
+  }, [workspacePath])
+
   const handleRunAll = () => {
     testExplorerService.runAllTests()
   }
@@ -55,7 +64,11 @@ export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
   }
 
   const handleRefresh = () => {
-    testExplorerService.discoverTests()
+    if (workspacePath) {
+      void testExplorerService.discoverWorkspaceTestsAsync(workspacePath)
+    } else {
+      testExplorerService.discoverTests()
+    }
   }
 
   const handleToggleFileCollapse = (filePath: string) => {
@@ -105,7 +118,6 @@ export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
     }
   }
 
-  // Filter files and tests by search query
   const filteredFiles = state.files.filter((file) => {
     if (!searchQuery.trim()) return true
     const q = searchQuery.toLowerCase()
@@ -294,32 +306,50 @@ export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
                           {!isSuiteCollapsed && (
                             <div className="suite-children">
                               {suite.testCases.map((test) => (
-                                <div
-                                  key={test.id}
-                                  className="tree-node-header test-header glass-interactive"
-                                  onClick={() =>
-                                    onOpenFileAndNavigate?.(test.filePath, test.lineNumber)
-                                  }
-                                >
-                                  <span className="indent-spacer" />
-                                  <span className="status-icon-wrap">
-                                    {renderStatusIcon(test.status)}
-                                  </span>
-                                  <FlaskConical size={11} className="node-icon test-color" />
-                                  <span className="node-title test-title">{test.name}</span>
-                                  {test.durationMs !== undefined && (
-                                    <span className="duration-pill">{test.durationMs}ms</span>
-                                  )}
-                                  <button
-                                    className="run-node-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      testExplorerService.runSingleTest(test.id)
-                                    }}
-                                    title={`Run test: ${test.name}`}
+                                <div key={test.id}>
+                                  <div
+                                    className="tree-node-header test-header glass-interactive"
+                                    onClick={() =>
+                                      onOpenFileAndNavigate?.(test.filePath, test.lineNumber)
+                                    }
                                   >
-                                    <Play size={9} fill="currentColor" />
-                                  </button>
+                                    <span className="indent-spacer" />
+                                    <span className="status-icon-wrap">
+                                      {renderStatusIcon(test.status)}
+                                    </span>
+                                    <FlaskConical size={11} className="node-icon test-color" />
+                                    <span className="node-title test-title">{test.name}</span>
+                                    {test.durationMs !== undefined && (
+                                      <span className="duration-pill">{test.durationMs}ms</span>
+                                    )}
+                                    <button
+                                      className="run-node-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        testExplorerService.runSingleTest(test.id)
+                                      }}
+                                      title={`Run test: ${test.name}`}
+                                    >
+                                      <Play size={9} fill="currentColor" />
+                                    </button>
+                                  </div>
+                                  {test.status === 'failed' && test.errorMessage && (
+                                    <pre
+                                      style={{
+                                        margin: '2px 8px 6px 28px',
+                                        padding: '4px 6px',
+                                        fontSize: 10,
+                                        color: '#FF6B6B',
+                                        background: 'rgba(255,69,58,0.1)',
+                                        borderRadius: 4,
+                                        whiteSpace: 'pre-wrap',
+                                        maxHeight: 90,
+                                        overflow: 'auto',
+                                      }}
+                                    >
+                                      {test.errorMessage}
+                                    </pre>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -330,32 +360,50 @@ export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
 
                     {/* Direct Tests outside suites */}
                     {file.directTests.map((test) => (
-                      <div
-                        key={test.id}
-                        className="tree-node-header test-header glass-interactive"
-                        onClick={() =>
-                          onOpenFileAndNavigate?.(test.filePath, test.lineNumber)
-                        }
-                      >
-                        <span className="indent-spacer" />
-                        <span className="status-icon-wrap">
-                          {renderStatusIcon(test.status)}
-                        </span>
-                        <FlaskConical size={11} className="node-icon test-color" />
-                        <span className="node-title test-title">{test.name}</span>
-                        {test.durationMs !== undefined && (
-                          <span className="duration-pill">{test.durationMs}ms</span>
-                        )}
-                        <button
-                          className="run-node-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            testExplorerService.runSingleTest(test.id)
-                          }}
-                          title={`Run test: ${test.name}`}
+                      <div key={test.id}>
+                        <div
+                          className="tree-node-header test-header glass-interactive"
+                          onClick={() =>
+                            onOpenFileAndNavigate?.(test.filePath, test.lineNumber)
+                          }
                         >
-                          <Play size={9} fill="currentColor" />
-                        </button>
+                          <span className="indent-spacer" />
+                          <span className="status-icon-wrap">
+                            {renderStatusIcon(test.status)}
+                          </span>
+                          <FlaskConical size={11} className="node-icon test-color" />
+                          <span className="node-title test-title">{test.name}</span>
+                          {test.durationMs !== undefined && (
+                            <span className="duration-pill">{test.durationMs}ms</span>
+                          )}
+                          <button
+                            className="run-node-btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              testExplorerService.runSingleTest(test.id)
+                            }}
+                            title={`Run test: ${test.name}`}
+                          >
+                            <Play size={9} fill="currentColor" />
+                          </button>
+                        </div>
+                        {test.status === 'failed' && test.errorMessage && (
+                          <pre
+                            style={{
+                              margin: '2px 8px 6px 28px',
+                              padding: '4px 6px',
+                              fontSize: 10,
+                              color: '#FF6B6B',
+                              background: 'rgba(255,69,58,0.1)',
+                              borderRadius: 4,
+                              whiteSpace: 'pre-wrap',
+                              maxHeight: 90,
+                              overflow: 'auto',
+                            }}
+                          >
+                            {test.errorMessage}
+                          </pre>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -368,7 +416,7 @@ export const TestExplorerPanel: React.FC<TestExplorerPanelProps> = ({
             <FlaskConical size={24} className="text-violet-400 opacity-60" />
             <p>No test files discovered in workspace</p>
             <span className="empty-sub">
-              Support for Vitest, Jest, PyTest, Go test, Cargo & Dart
+              Support for Vitest, Jest, PyTest, Go test, Cargo &amp; Dart
             </span>
           </div>
         )}

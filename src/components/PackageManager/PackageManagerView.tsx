@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Package,
   ShieldAlert,
@@ -6,6 +6,9 @@ import {
   CheckCircle,
   Search,
   Scale,
+  RefreshCw,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { packageManagerService, ManifestScanResult } from '../../services/packageManagerService'
 import './PackageManagerView.css'
@@ -13,21 +16,59 @@ import './PackageManagerView.css'
 interface PackageManagerViewProps {
   activeFileName?: string
   activeFileContent?: string
+  workspaceRoot?: string
 }
 
 export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
   activeFileName = 'package.json',
   activeFileContent = '',
+  workspaceRoot,
 }) => {
   const [scanResult, setScanResult] = useState<ManifestScanResult | null>(null)
   const [filterQuery, setFilterQuery] = useState('')
   const [onlyOutdated, setOnlyOutdated] = useState(false)
   const [onlyVulnerable, setOnlyVulnerable] = useState(false)
+  const [isBusy, setIsBusy] = useState(false)
+  const [installInput, setInstallInput] = useState('')
+  const [cliOutput, setCliOutput] = useState<string | null>(null)
+
+  const loadWorkspaceManifest = useCallback(
+    async (opts?: { runOutdated?: boolean; runAudit?: boolean }) => {
+      if (workspaceRoot && window.electronAPI?.readFile) {
+        setIsBusy(true)
+        try {
+          const live = await packageManagerService.scanWorkspaceAsync(workspaceRoot, opts)
+          if (live) {
+            setScanResult(live)
+            return
+          }
+        } finally {
+          setIsBusy(false)
+        }
+      }
+      const res = packageManagerService.parseManifest(activeFileName, activeFileContent)
+      setScanResult(res)
+    },
+    [workspaceRoot, activeFileName, activeFileContent]
+  )
 
   useEffect(() => {
-    const res = packageManagerService.parseManifest(activeFileName, activeFileContent)
-    setScanResult(res)
-  }, [activeFileName, activeFileContent])
+    void loadWorkspaceManifest()
+  }, [loadWorkspaceManifest])
+
+  const handleNpmCli = async (action: 'install' | 'uninstall' | 'update', pkg?: string) => {
+    if (!workspaceRoot) return
+    setIsBusy(true)
+    setCliOutput(`Running npm ${action}${pkg ? ` ${pkg}` : ''}...`)
+    try {
+      const res = await packageManagerService.runNpmAction(action, workspaceRoot, pkg)
+      setCliOutput(res.output || (res.success ? `npm ${action} completed.` : `npm ${action} failed (exit ${res.exitCode})`))
+      if (action === 'install') setInstallInput('')
+      await loadWorkspaceManifest()
+    } finally {
+      setIsBusy(false)
+    }
+  }
 
   const filteredDependencies = (scanResult?.dependencies || []).filter((d) => {
     const matchesName = d.name.toLowerCase().includes(filterQuery.toLowerCase())
@@ -69,8 +110,61 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
           >
             <ShieldAlert size={10} /> Vulnerabilities ({scanResult?.vulnerabilitiesCount || 0})
           </button>
+          {workspaceRoot && scanResult?.ecosystem === 'npm' && (
+            <>
+              <button
+                className="filter-chip"
+                onClick={() => void loadWorkspaceManifest({ runOutdated: true })}
+                disabled={isBusy}
+                title="Run live npm outdated --json"
+              >
+                <RefreshCw size={10} className={isBusy ? 'animate-spin' : ''} /> Check Outdated
+              </button>
+              <button
+                className="filter-chip"
+                onClick={() => void loadWorkspaceManifest({ runAudit: true })}
+                disabled={isBusy}
+                title="Run live npm audit --json"
+              >
+                <ShieldAlert size={10} /> Live Audit
+              </button>
+            </>
+          )}
         </div>
+
+        {workspaceRoot && scanResult?.ecosystem === 'npm' && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <input
+              type="text"
+              className="pkg-search-input"
+              style={{ flex: 1, padding: '4px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+              placeholder="Install npm package (e.g. zod, dayjs)..."
+              value={installInput}
+              onChange={(e) => setInstallInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && installInput.trim()) void handleNpmCli('install', installInput.trim())
+              }}
+            />
+            <button
+              className="filter-chip active"
+              disabled={isBusy || !installInput.trim()}
+              onClick={() => void handleNpmCli('install', installInput.trim())}
+            >
+              <Plus size={10} /> Install
+            </button>
+          </div>
+        )}
       </div>
+
+      {cliOutput && (
+        <div className="glass-panel" style={{ margin: '0 8px 6px', padding: 8, fontSize: 10.5, fontFamily: 'monospace', maxHeight: 110, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, opacity: 0.7 }}>
+            <span>CLI Output</span>
+            <button style={{ background: 'none', border: 'none', color: '#E2E8F0', cursor: 'pointer' }} onClick={() => setCliOutput(null)}>✕</button>
+          </div>
+          {cliOutput}
+        </div>
+      )}
 
       {/* Main Dependencies List */}
       <div className="pkg-body-viewport">
@@ -93,7 +187,7 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
                     {dep.isOutdated ? (
                       <span className="ver-latest-pill">➔ v{dep.latestVersion}</span>
                     ) : (
-                      <span className="ver-up-to-date"><CheckCircle size={10} /> Up to date</span>
+                      <span className="ver-up-to-date"><CheckCircle size={10} /> Declared</span>
                     )}
                   </div>
                 </div>
@@ -103,11 +197,35 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
                     <span className="meta-item"><Scale size={10} /> {dep.license}</span>
                     {dep.approxSizeKb && <span className="meta-item">{dep.approxSizeKb} KB</span>}
                   </div>
-                  {dep.vulnerabilitiesCount && dep.vulnerabilitiesCount > 0 ? (
-                    <span className={`vuln-badge ${dep.highestSeverity}`}>
-                      <ShieldAlert size={10} /> {dep.vulnerabilitiesCount} Advisory ({dep.highestSeverity?.toUpperCase()})
-                    </span>
-                  ) : null}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {dep.vulnerabilitiesCount && dep.vulnerabilitiesCount > 0 ? (
+                      <span className={`vuln-badge ${dep.highestSeverity}`}>
+                        <ShieldAlert size={10} /> {dep.vulnerabilitiesCount} Advisory ({dep.highestSeverity?.toUpperCase()})
+                      </span>
+                    ) : null}
+                    {workspaceRoot && dep.ecosystem === 'npm' && (
+                      <>
+                        {dep.isOutdated && (
+                          <button
+                            className="filter-chip"
+                            disabled={isBusy}
+                            onClick={() => void handleNpmCli('update', dep.name)}
+                            title={`npm update ${dep.name}`}
+                          >
+                            Update
+                          </button>
+                        )}
+                        <button
+                          className="filter-chip"
+                          disabled={isBusy}
+                          onClick={() => void handleNpmCli('uninstall', dep.name)}
+                          title={`npm uninstall ${dep.name}`}
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

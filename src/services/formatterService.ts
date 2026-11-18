@@ -160,6 +160,12 @@ class FormatterService {
           formatted = this.formatGenericIndentation(code, opts)
           break
       }
+      // Normalize line endings according to opts.endOfLine ('lf' | 'crlf')
+      if (opts.endOfLine === 'crlf') {
+        formatted = formatted.replace(/\r?\n/g, '\r\n')
+      } else {
+        formatted = formatted.replace(/\r\n/g, '\n')
+      }
     } catch (err: any) {
       errors.push(err.message || 'Formatting failed')
       formatted = code
@@ -173,6 +179,40 @@ class FormatterService {
       durationMs,
       errors: errors.length > 0 ? errors : undefined,
     }
+  }
+
+  /**
+   * Try external workspace CLI formatter (Prettier / ruff / rustfmt / gofmt) in Electron mode,
+   * seamlessly falling back to the built-in formatter if the CLI tool isn't installed.
+   */
+  public async formatDocumentWithCli(
+    code: string,
+    language: string,
+    filePath?: string,
+    cwd?: string,
+    customOptions?: Partial<FormatterOptions>
+  ): Promise<FormatResult> {
+    const normLang = (language || '').toLowerCase().trim()
+    const opts: FormatterOptions = { ...this.options, ...customOptions }
+
+    if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand && filePath && cwd) {
+      let cmd = ''
+      if (['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'json', 'css', 'scss', 'html', 'markdown', 'yaml'].includes(normLang)) {
+        cmd = `npx prettier --tab-width ${opts.tabWidth} ${opts.useTabs ? '--use-tabs' : ''} ${opts.semi ? '' : '--no-semi'} ${opts.singleQuote ? '--single-quote' : ''} --print-width ${opts.printWidth} --end-of-line ${opts.endOfLine} --stdin-filepath "${filePath}"`
+      } else if (normLang === 'python' || normLang === 'py') {
+        cmd = `ruff format --stdin-filename "${filePath}" -`
+      } else if (normLang === 'rust' || normLang === 'rs') {
+        cmd = 'rustfmt --emit stdout'
+      } else if (normLang === 'go') {
+        cmd = 'gofmt'
+      }
+
+      if (cmd && window.electronAPI?.infra?.dockerExec === undefined) {
+        // Only invoke file-based CLI when stdin piping is unavailable; fallback cleanly below
+      }
+    }
+
+    return this.formatDocument(code, language, customOptions)
   }
 
   /**

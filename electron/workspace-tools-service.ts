@@ -18,6 +18,7 @@ export interface BundleFileEntry {
   rawSizeBytes: number
   gzipSizeBytes: number
   extension: string
+  modules?: Array<{ name: string; sizeKb: number; percentage: number }>
 }
 
 export interface WorkspaceBundleScanResult {
@@ -25,7 +26,7 @@ export interface WorkspaceBundleScanResult {
   totalRawBytes: number
   totalGzipBytes: number
   files: BundleFileEntry[]
-  duplicates: Array<{ name: string; versions: string[] }>
+  duplicates: Array<{ name: string; versions: string[]; dependents?: string[] }>
 }
 
 export interface WorkspaceSearchMatch {
@@ -273,12 +274,50 @@ export async function scanWorkspaceBundle(rootDir: string): Promise<WorkspaceBun
             const gz = zlib.gzipSync(buf, { level: 6 })
             totalRawBytes += buf.length
             totalGzipBytes += gz.length
+            let modules: Array<{ name: string; sizeKb: number; percentage: number }> | undefined
+            if (entry.name.endsWith('.js') || entry.name.endsWith('.mjs')) {
+              try {
+                const mapRaw = await fs.readFile(`${fullPath}.map`, 'utf-8')
+                const mapJson = JSON.parse(mapRaw)
+                if (Array.isArray(mapJson.sources) && mapJson.sources.length > 0) {
+                  const contents: any[] = Array.isArray(mapJson.sourcesContent) ? mapJson.sourcesContent : []
+                  const byPkg = new Map<string, number>()
+                  let totalSrcBytes = 0
+                  for (let si = 0; si < mapJson.sources.length; si++) {
+                    const srcPath = String(mapJson.sources[si] || '').replace(/\\/g, '/')
+                    const nmIdx = srcPath.lastIndexOf('node_modules/')
+                    let label = srcPath
+                    if (nmIdx !== -1) {
+                      const sub = srcPath.slice(nmIdx + 'node_modules/'.length).split('/')
+                      label = sub[0]?.startsWith('@') && sub[1] ? `${sub[0]}/${sub[1]}` : (sub[0] || srcPath)
+                    } else {
+                      label = srcPath.replace(/^(\.\.\/)+/, '')
+                    }
+                    const bytes = typeof contents[si] === 'string' ? Buffer.byteLength(contents[si], 'utf8') : Math.round(buf.length / mapJson.sources.length)
+                    byPkg.set(label, (byPkg.get(label) || 0) + bytes)
+                    totalSrcBytes += bytes
+                  }
+                  const denom = Math.max(1, totalSrcBytes)
+                  modules = Array.from(byPkg.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 15)
+                    .map(([name, bytes]) => ({
+                      name,
+                      sizeKb: Math.round((bytes / 1024) * 10) / 10,
+                      percentage: Math.round((bytes / denom) * 1000) / 10,
+                    }))
+                }
+              } catch {
+                // No sibling source map
+              }
+            }
             files.push({
               name: entry.name,
               relativePath: path.relative(buildDir!, fullPath).replace(/\\/g, '/'),
               rawSizeBytes: buf.length,
               gzipSizeBytes: gz.length,
               extension: path.extname(entry.name).toLowerCase(),
+              modules,
             })
           } catch {
             // ignore unreadable asset

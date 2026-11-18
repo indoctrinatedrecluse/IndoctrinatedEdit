@@ -198,22 +198,22 @@ class BundleAnalyzerService {
     const totalRaw = Math.max(1, scan.totalRawBytes)
     const colors = ['#0A84FF', '#BF5AF2', '#30D158', '#FF9F0A', '#64D2FF', '#FF453A']
 
-    const chunks: BundleChunk[] = scan.files.map((f, idx) => ({
+    const chunks: BundleChunk[] = scan.files.map((f: any, idx) => ({
       id: `live_chunk_${idx}`,
       name: f.relativePath,
       sizeKb: Math.round((f.rawSizeBytes / 1024) * 10) / 10,
       gzipSizeKb: Math.round((f.gzipSizeBytes / 1024) * 10) / 10,
       percentage: Math.round((f.rawSizeBytes / totalRaw) * 1000) / 10,
       isVendor: /vendor|node_modules/i.test(f.relativePath),
-      modules: [],
+      modules: Array.isArray(f.modules) ? f.modules : [],
       color: colors[idx % colors.length],
     }))
 
-    const duplicates: DuplicatePackageAlert[] = scan.duplicates.map((d) => ({
+    const duplicates: DuplicatePackageAlert[] = scan.duplicates.map((d: any) => ({
       packageName: d.name,
       versions: d.versions,
       totalWastedKb: Math.round((d.versions.length - 1) * 24 * 10) / 10,
-      dependents: ['package-lock.json'],
+      dependents: Array.isArray(d.dependents) && d.dependents.length > 0 ? d.dependents : ['package-lock.json'],
     }))
 
     if (chunks.length > 0) {
@@ -239,6 +239,43 @@ class BundleAnalyzerService {
     const rawKb = this.sampleChunks.reduce((acc, c) => acc + c.sizeKb, 0)
     const gzipKb = this.sampleChunks.reduce((acc, c) => acc + c.gzipSizeKb, 0)
     return { rawKb: Math.round(rawKb * 10) / 10, gzipKb: Math.round(gzipKb * 10) / 10 }
+  }
+
+  /**
+   * Fetch genuine package bundle size via Bundlephobia API in Electron desktop mode,
+   * falling back to known estimates or deterministic estimate if offline.
+   */
+  public async estimateImportCostAsync(packageName: string): Promise<ImportCostEstimate> {
+    const clean = packageName.trim()
+    if (!clean) return this.estimateImportCost('')
+
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.httpRequest) {
+      try {
+        const res = await window.electronAPI.infra.httpRequest({
+          url: `https://bundlephobia.com/api/size?package=${encodeURIComponent(clean)}`,
+          method: 'GET',
+          headers: { Accept: 'application/json', 'User-Agent': 'IndoctrinatedEdit' },
+          timeoutMs: 6000,
+        })
+        if (res.ok) {
+          const data = JSON.parse(res.body)
+          if (typeof data.size === 'number' && typeof data.gzip === 'number') {
+            const known = this.importEstimates[clean.toLowerCase()]
+            return {
+              packageName: data.name || clean,
+              sizeKb: Math.round((data.size / 1024) * 10) / 10,
+              gzipKb: Math.round((data.gzip / 1024) * 10) / 10,
+              treeShakeable: Boolean(data.hasJSModule || data.hasJSNext),
+              hasSideEffects: Boolean(data.hasSideEffects),
+              alternative: known?.alternative,
+            }
+          }
+        }
+      } catch {
+        // offline fallback
+      }
+    }
+    return this.estimateImportCost(clean)
   }
 
   public estimateImportCost(packageName: string): ImportCostEstimate {

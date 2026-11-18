@@ -201,7 +201,36 @@ class TaskLaunchConfigService {
   }
 
   /**
-   * Execute a task with variable resolution
+   * Load real `.vscode/tasks.json` and `.vscode/launch.json` from the workspace directory.
+   */
+  public async loadFromWorkspace(workspaceFolder?: string): Promise<{ tasksLoaded: boolean; launchLoaded: boolean }> {
+    let tasksLoaded = false
+    let launchLoaded = false
+    if (!workspaceFolder || typeof window === 'undefined' || !window.electronAPI?.readFile) {
+      return { tasksLoaded, launchLoaded }
+    }
+    const stripJsonc = (raw: string) =>
+      raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+    const root = workspaceFolder.replace(/[\\/]+$/, '')
+    try {
+      const rawTasks = await window.electronAPI.readFile(`${root}/.vscode/tasks.json`)
+      this.parseTasksJson(stripJsonc(rawTasks))
+      tasksLoaded = true
+    } catch {
+      // no .vscode/tasks.json
+    }
+    try {
+      const rawLaunch = await window.electronAPI.readFile(`${root}/.vscode/launch.json`)
+      this.parseLaunchJson(stripJsonc(rawLaunch))
+      launchLoaded = true
+    } catch {
+      // no .vscode/launch.json
+    }
+    return { tasksLoaded, launchLoaded }
+  }
+
+  /**
+   * Execute a task with variable resolution via real workspace CLI in Electron mode.
    */
   public async executeTask(
     task: WorkspaceTask,
@@ -210,12 +239,36 @@ class TaskLaunchConfigService {
     const start = performance.now()
     const resolvedCommand = this.resolveVariables(task.command, context)
     const resolvedArgs = (task.args || []).map((a) => this.resolveVariables(a, context))
-    const fullCommand = [resolvedCommand, ...resolvedArgs].join(' ')
+    const fullCommand = [resolvedCommand, ...resolvedArgs].filter(Boolean).join(' ')
+    const cwd = task.options?.cwd
+      ? this.resolveVariables(task.options.cwd, context)
+      : context.workspaceFolder
 
-    // Simulate task execution
-    await new Promise((resolve) => setTimeout(resolve, 60))
-    const duration = Math.round(performance.now() - start)
+    if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const res = await window.electronAPI.workspace.execCommand({
+        command: fullCommand,
+        cwd,
+        env: task.options?.env,
+        timeoutMs: 120000,
+      })
+      const outputLines = [
+        `> Executing task: ${task.label}`,
+        `> Command: ${fullCommand}`,
+        ...(res.stdout ? res.stdout.split(/\r?\n/) : []),
+        ...(res.stderr ? res.stderr.split(/\r?\n/).map((l) => `[stderr] ${l}`) : []),
+        `Process terminated with exit code ${res.exitCode}.`,
+      ].filter((l) => l !== '')
+      return {
+        taskId: task.label,
+        taskLabel: task.label,
+        commandExecuted: fullCommand,
+        status: res.exitCode === 0 ? 'success' : 'failed',
+        durationMs: res.durationMs,
+        outputLogs: outputLines,
+      }
+    }
 
+    const duration = Math.max(1, Math.round(performance.now() - start))
     return {
       taskId: task.label,
       taskLabel: task.label,

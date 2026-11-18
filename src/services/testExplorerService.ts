@@ -64,10 +64,53 @@ class TestExplorerService {
   private listeners: Set<TestExplorerListener> = new Set()
   private isRunning: boolean = false
   private fileContentsProvider: () => Record<string, string> = () => ({})
+  private workspaceRoot: string | undefined
+
+  public setWorkspaceRoot(root?: string): void {
+    this.workspaceRoot = root
+  }
 
   public registerWorkspace(getFiles: () => Record<string, string>): void {
     this.fileContentsProvider = getFiles
     this.discoverTests()
+  }
+
+  /**
+   * Scan real test files on disk via Electron IPC (plus any open memory buffers).
+   */
+  public async discoverWorkspaceTestsAsync(workspaceRoot?: string): Promise<TestFileItem[]> {
+    const root = workspaceRoot || this.workspaceRoot
+    this.workspaceRoot = root
+    this.discoverTests()
+
+    if (!root || typeof window === 'undefined' || !window.electronAPI?.workspace?.findFiles || !window.electronAPI?.readFile) {
+      return Array.from(this.files.values())
+    }
+
+    try {
+      const found = await window.electronAPI.workspace.findFiles({
+        rootDir: root,
+        maxDepth: 6,
+        maxFiles: 1500,
+        includeExtensions: ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.dart'],
+      })
+      for (const f of found) {
+        if (!this.isTestFilePath(f.relativePath) && !this.isTestFilePath(f.name)) continue
+        if (this.files.has(f.path)) continue
+        try {
+          const content = await window.electronAPI.readFile(f.path)
+          const parsed = this.parseTestFile(f.path, content)
+          if (parsed) this.files.set(f.path, parsed)
+        } catch {
+          // ignore unreadable test file
+        }
+      }
+      this.notify()
+    } catch {
+      // ignore discovery errors
+    }
+
+    return Array.from(this.files.values())
   }
 
   public subscribe(listener: TestExplorerListener): () => void {
@@ -242,6 +285,22 @@ class TestExplorerService {
         })
         continue
       }
+
+      // Rust: #[test] followed by fn test_...
+      if (line.startsWith('#[test]') || line.startsWith('#[tokio::test]')) {
+        const nextLine = (lines[i + 1] || '').trim()
+        const rsMatch = nextLine.match(/^(?:pub\s+)?(?:async\s+)?fn\s+([a-zA-Z0-9_]+)\s*\(/)
+        if (rsMatch) {
+          directTests.push({
+            id: `${filePath}:rs:${rsMatch[1]}:${lineNum + 1}`,
+            name: rsMatch[1],
+            filePath,
+            lineNumber: lineNum + 1,
+            status: 'idle',
+          })
+          continue
+        }
+      }
     }
 
     if (suites.length === 0 && directTests.length === 0) {
@@ -383,32 +442,77 @@ class TestExplorerService {
         return testName ? `go test -v -run "${escapedTest}" ./...` : `go test -v ./...`
       case 'cargotest':
         return testName ? `cargo test "${escapedTest}"` : `cargo test`
+      case 'darttest':
+        return testName ? `dart test "${escapedFile}" --name "${escapedTest}"` : `dart test "${escapedFile}"`
       case 'jest':
-        return testName ? `npx jest "${escapedFile}" -t "${escapedTest}"` : `npx jest "${escapedFile}"`
+        return testName ? `npx jest "${escapedFile}" -t "${escapedTest}" --json` : `npx jest "${escapedFile}" --json`
       case 'vitest':
       default:
-        return testName ? `npx vitest run "${escapedFile}" -t "${escapedTest}"` : `npx vitest run "${escapedFile}"`
+        return testName
+          ? `npx vitest run "${escapedFile}" -t "${escapedTest}" --reporter=json`
+          : `npx vitest run "${escapedFile}" --reporter=json`
     }
+  }
+
+  private parseJsonAssertionResults(
+    stdout: string
+  ): Map<string, { status: TestItemStatus; durationMs?: number; errorMessage?: string }> {
+    const map = new Map<string, { status: TestItemStatus; durationMs?: number; errorMessage?: string }>()
+    const firstBrace = stdout.indexOf('{')
+    const lastBrace = stdout.lastIndexOf('}')
+    if (firstBrace === -1 || lastBrace <= firstBrace) return map
+    try {
+      const json = JSON.parse(stdout.slice(firstBrace, lastBrace + 1))
+      const testResults: any[] = json.testResults || []
+      for (const tr of testResults) {
+        for (const a of tr.assertionResults || []) {
+          const title = String(a.title || a.fullName || '').trim()
+          if (!title) continue
+          const status: TestItemStatus =
+            a.status === 'passed' ? 'passed' : a.status === 'failed' ? 'failed' : 'skipped'
+          map.set(title, {
+            status,
+            durationMs: typeof a.duration === 'number' ? Math.max(1, Math.round(a.duration)) : undefined,
+            errorMessage: Array.isArray(a.failureMessages) && a.failureMessages[0] ? String(a.failureMessages[0]).slice(0, 1200) : undefined,
+          })
+        }
+      }
+    } catch {
+      // non-JSON reporter output
+    }
+    return map
   }
 
   private async executeRealOrFallback(
     file: TestFileItem,
     testName?: string
-  ): Promise<{ passed: boolean; durationMs: number; errorMessage?: string; stackTrace?: string }> {
+  ): Promise<{
+    passed: boolean
+    durationMs: number
+    errorMessage?: string
+    stackTrace?: string
+    perTestResults?: Map<string, { status: TestItemStatus; durationMs?: number; errorMessage?: string }>
+  }> {
     const start = performance.now()
     if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
       const cmd = this.buildRealTestCommand(file, testName)
       const res = await window.electronAPI.workspace.execCommand({
         command: cmd,
+        cwd: this.workspaceRoot,
         timeoutMs: 120000,
       })
       const passed = res.exitCode === 0
       const combined = [res.stderr, res.stdout].filter(Boolean).join('\n').trim()
+      const perTestResults =
+        file.framework === 'vitest' || file.framework === 'jest'
+          ? this.parseJsonAssertionResults(res.stdout)
+          : undefined
       return {
         passed,
         durationMs: res.durationMs,
         errorMessage: passed ? undefined : (combined.split(/\r?\n/).find((l) => /error|fail|assert|expected/i.test(l)) || `Test exited with code ${res.exitCode}`),
         stackTrace: passed ? undefined : combined.slice(0, 4000),
+        perTestResults,
       }
     }
 
@@ -423,7 +527,7 @@ class TestExplorerService {
   private async runFileInternal(file: TestFileItem, onlyFailed: boolean = false): Promise<void> {
     const fileStart = performance.now()
 
-    // In Electron desktop mode, run the real test runner once per file for accurate results
+    // In Electron desktop mode, run the real test runner once per file for accurate per-test results
     if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
       const allTests = [...file.directTests, ...file.suites.flatMap((s) => s.testCases)]
       for (const t of allTests) {
@@ -435,13 +539,25 @@ class TestExplorerService {
       const perTestMs = allTests.length > 0 ? Math.max(1, Math.round(res.durationMs / allTests.length)) : res.durationMs
       for (const t of allTests) {
         if (onlyFailed && t.status !== 'running') continue
-        t.durationMs = perTestMs
-        t.status = res.passed ? 'passed' : 'failed'
-        t.errorMessage = res.errorMessage
-        t.stackTrace = res.stackTrace
+        const exact = res.perTestResults?.get(t.name)
+        if (exact) {
+          t.status = exact.status
+          t.durationMs = exact.durationMs ?? perTestMs
+          t.errorMessage = exact.errorMessage
+          t.stackTrace = exact.errorMessage
+        } else {
+          t.durationMs = perTestMs
+          t.status = res.passed ? 'passed' : 'failed'
+          t.errorMessage = res.errorMessage
+          t.stackTrace = res.stackTrace
+        }
       }
       for (const suite of file.suites) {
-        suite.status = suite.testCases.every((t) => t.status === 'passed') ? 'passed' : 'failed'
+        suite.status = suite.testCases.some((t) => t.status === 'failed')
+          ? 'failed'
+          : suite.testCases.every((t) => t.status === 'passed')
+          ? 'passed'
+          : 'skipped'
       }
       file.durationMs = res.durationMs
       this.updateParentStatus(file)

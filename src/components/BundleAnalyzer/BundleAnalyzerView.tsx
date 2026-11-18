@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Package,
   Layers,
@@ -8,34 +8,69 @@ import {
   Copy,
   Check,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react'
 import {
   bundleAnalyzerService,
   BundleChunk,
+  DuplicatePackageAlert,
+  ImportCostEstimate,
 } from '../../services/bundleAnalyzerService'
 import './BundleAnalyzerView.css'
 
-export const BundleAnalyzerView: React.FC = () => {
+interface BundleAnalyzerViewProps {
+  workspaceRoot?: string
+}
+
+export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspaceRoot }) => {
   const [activeTab, setActiveTab] = useState<'treemap' | 'cost' | 'duplicates'>('treemap')
   const [selectedChunk, setSelectedChunk] = useState<BundleChunk | null>(null)
   const [pkgSearchInput, setPkgSearchInput] = useState<string>('lodash')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [chunks, setChunks] = useState<BundleChunk[]>(() => bundleAnalyzerService.getChunks())
+  const [duplicateAlerts, setDuplicateAlerts] = useState<DuplicatePackageAlert[]>(() => bundleAnalyzerService.getDuplicates())
+  const [isLive, setIsLive] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
+  const [importEstimate, setImportEstimate] = useState<ImportCostEstimate>(() =>
+    bundleAnalyzerService.estimateImportCost('lodash')
+  )
 
-  const chunks = useMemo(() => {
-    return bundleAnalyzerService.getChunks()
-  }, [])
+  const runScan = useCallback(async () => {
+    if (!workspaceRoot) return
+    setIsScanning(true)
+    try {
+      const res = await bundleAnalyzerService.analyzeWorkspace(workspaceRoot)
+      setChunks(res.chunks)
+      setDuplicateAlerts(res.duplicates)
+      setIsLive(res.isLive)
+    } finally {
+      setIsScanning(false)
+    }
+  }, [workspaceRoot])
 
-  const totalSize = useMemo(() => {
-    return bundleAnalyzerService.getTotalSizeKb()
-  }, [])
+  useEffect(() => {
+    void runScan()
+  }, [runScan])
 
-  const duplicateAlerts = useMemo(() => {
-    return bundleAnalyzerService.getDuplicates()
-  }, [])
-
-  const importEstimate = useMemo(() => {
-    return bundleAnalyzerService.estimateImportCost(pkgSearchInput)
+  useEffect(() => {
+    if (!pkgSearchInput.trim()) return
+    let cancelled = false
+    setImportEstimate(bundleAnalyzerService.estimateImportCost(pkgSearchInput))
+    const timer = setTimeout(() => {
+      void bundleAnalyzerService.estimateImportCostAsync(pkgSearchInput).then((live) => {
+        if (!cancelled) setImportEstimate(live)
+      })
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [pkgSearchInput])
+
+  const totalSize = {
+    rawKb: Math.round(chunks.reduce((acc, c) => acc + c.sizeKb, 0) * 10) / 10,
+    gzipKb: Math.round(chunks.reduce((acc, c) => acc + c.gzipSizeKb, 0) * 10) / 10,
+  }
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text)
@@ -92,8 +127,19 @@ export const BundleAnalyzerView: React.FC = () => {
         </div>
         <div className="stat-card">
           <span className="stat-label">Total Chunks</span>
-          <span className="stat-val">{chunks.length}</span>
+          <span className="stat-val">{chunks.length} {isLive ? '• LIVE' : ''}</span>
         </div>
+        {workspaceRoot && (
+          <button
+            className="export-report-btn glass-interactive"
+            onClick={() => void runScan()}
+            disabled={isScanning}
+            title="Rescan Workspace dist/build Artifacts"
+          >
+            <RefreshCw size={12} className={isScanning ? 'animate-spin' : ''} />
+            <span>{isScanning ? 'Scanning' : 'Rescan'}</span>
+          </button>
+        )}
         <button
           className="export-report-btn glass-interactive"
           onClick={() =>

@@ -72,6 +72,11 @@ class GlobalSearchService {
   private listeners: Set<SearchListener> = new Set()
   private replaceListeners: Set<ReplaceListener> = new Set()
   private lastResults: GlobalSearchResultSummary | null = null
+  private workspaceRoot: string | undefined
+
+  public setWorkspaceRoot(root?: string) {
+    this.workspaceRoot = root
+  }
 
   /**
    * Bind workspace file content providers
@@ -270,6 +275,72 @@ class GlobalSearchService {
       if (totalMatches >= maxResults) break
     }
 
+    // Also search closed workspace files on disk via Electron IPC when a workspace root is set
+    if (
+      totalMatches < maxResults &&
+      this.workspaceRoot &&
+      typeof window !== 'undefined' &&
+      window.electronAPI?.workspace?.searchText
+    ) {
+      const openPaths = new Set(Object.keys(files).map((p) => p.replace(/\\/g, '/').toLowerCase()))
+      try {
+        const diskQuery = matchWholeWord && !isRegex
+          ? `\\b${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`
+          : query
+        const diskHits = await window.electronAPI.workspace.searchText({
+          rootDir: this.workspaceRoot,
+          query: diskQuery,
+          isRegex: isRegex || matchWholeWord,
+          caseSensitive: matchCase,
+          filePattern: includePattern,
+          maxMatches: Math.min(500, maxResults - totalMatches),
+        })
+
+        const byDiskFile = new Map<string, SearchMatch[]>()
+        for (const hit of diskHits) {
+          const normPath = hit.filePath.replace(/\\/g, '/').toLowerCase()
+          if (openPaths.has(normPath)) continue
+          if (!this.matchesGlob(hit.relativePath, includePattern, excludePattern)) continue
+
+          const fileName = hit.filePath.split(/[/\\]/).pop() || hit.filePath
+          regex.lastIndex = 0
+          const m = regex.exec(hit.lineText)
+          const matchStart = m ? m.index : 0
+          const matchText = m ? m[0] : query
+          const matchEnd = matchStart + matchText.length
+
+          const list = byDiskFile.get(hit.filePath) || []
+          list.push({
+            id: `${hit.filePath}:${hit.lineNumber}:${matchStart}`,
+            filePath: hit.filePath,
+            fileName,
+            lineNumber: hit.lineNumber,
+            columnStart: matchStart + 1,
+            columnEnd: matchEnd + 1,
+            lineContent: hit.lineText,
+            matchText,
+            previewPrefix: hit.lineText.substring(Math.max(0, matchStart - 30), matchStart),
+            previewMatch: matchText,
+            previewSuffix: hit.lineText.substring(matchEnd, Math.min(hit.lineText.length, matchEnd + 40)),
+          })
+          byDiskFile.set(hit.filePath, list)
+          totalMatches++
+          if (totalMatches >= maxResults) break
+        }
+
+        for (const [fp, matches] of byDiskFile.entries()) {
+          fileResults.push({
+            filePath: fp,
+            fileName: fp.split(/[/\\]/).pop() || fp,
+            matches,
+            isCollapsed: false,
+          })
+        }
+      } catch {
+        // ignore disk search errors
+      }
+    }
+
     const durationMs = Math.round(performance.now() - startTime)
     const resultSummary: GlobalSearchResultSummary = {
       query,
@@ -363,6 +434,47 @@ class GlobalSearchService {
 
     for (const diff of preview.diffs) {
       this.fileUpdateHandler(diff.filePath, diff.modifiedContent)
+    }
+
+    // Also replace across closed disk files found in lastResults when in Electron desktop mode
+    if (
+      this.workspaceRoot &&
+      this.lastResults &&
+      typeof window !== 'undefined' &&
+      window.electronAPI?.readFile &&
+      window.electronAPI?.saveFile
+    ) {
+      const openPaths = new Set(Object.keys(this.fileContentsProvider()).map((p) => p.replace(/\\/g, '/').toLowerCase()))
+      const { matchCase = false, matchWholeWord = false, isRegex = false, preserveCase = false } = options
+      let pattern = isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (matchWholeWord) pattern = `\\b${pattern}\\b`
+      const regex = new RegExp(pattern, matchCase ? 'g' : 'gi')
+
+      for (const fr of this.lastResults.fileResults) {
+        if (openPaths.has(fr.filePath.replace(/\\/g, '/').toLowerCase())) continue
+        try {
+          const orig = await window.electronAPI.readFile(fr.filePath)
+          let count = 0
+          const next = orig.replace(regex, (matched) => {
+            count++
+            return preserveCase ? this.applyPreserveCase(matched, replacement) : replacement
+          })
+          if (count > 0 && next !== orig) {
+            await window.electronAPI.saveFile(fr.filePath, next)
+            preview.totalReplaced += count
+            preview.filesAffected += 1
+            preview.diffs.push({
+              filePath: fr.filePath,
+              fileName: fr.fileName,
+              originalContent: orig,
+              modifiedContent: next,
+              matchCount: count,
+            })
+          }
+        } catch {
+          // skip unreadable disk file
+        }
+      }
     }
 
     for (const listener of this.replaceListeners) {

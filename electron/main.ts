@@ -31,6 +31,7 @@ import {
   getRemoteInfo,
 } from './git-service'
 import { setupDebugIPC, disposeDebugSessions } from './debug-adapter-service'
+import { setupLspIPC, disposeLspClients } from './lsp-client-service'
 import { setupWorkspaceToolsIPC } from './workspace-tools-service'
 import { mcpClientManager, setupMcpClientIPC } from './mcp-client-service'
 import { infraSocketManager, setupInfraIPC } from './infra-ipc-service'
@@ -259,6 +260,9 @@ function disposeAllSubsystems() {
   } catch {}
   try {
     disposeDebugSessions()
+  } catch {}
+  try {
+    disposeLspClients()
   } catch {}
   try {
     updateService.triggerPendingInstallOnQuit()
@@ -558,6 +562,11 @@ ipcMain.handle('git:remoteInfo', async (_, cwd?: string) => {
 // Real Multi-Runtime Debug Adapter (CDP / DAP)
 // ==========================================
 setupDebugIPC(ipcMain, () => win)
+
+// ==========================================
+// Real Language Server Protocol (LSP) Client
+// ==========================================
+setupLspIPC(ipcMain, () => win)
 
 // ==========================================
 // Workspace CLI, Bundle, Search & Binary IPC

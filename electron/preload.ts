@@ -68,6 +68,13 @@ export interface ElectronGitAPI {
   remoteInfo: (cwd?: string) => Promise<{ url: string; owner?: string; repo?: string }>
 }
 
+export interface ElectronLspAPI {
+  syncDocument: (opts: { language: string; rootDir: string; filePath: string; content: string }) => Promise<{ available: boolean }>
+  definition: (opts: { language: string; rootDir: string; filePath: string; line: number; character: number }) => Promise<{ filePath: string; lineNumber: number; column: number } | null>
+  references: (opts: { language: string; rootDir: string; filePath: string; line: number; character: number }) => Promise<Array<{ filePath: string; lineNumber: number; column: number }> | null>
+  onDiagnostics: (cb: (payload: { filePath: string; diagnostics: any[] }) => void) => () => void
+}
+
 export interface ElectronDebugAPI {
   start: (options: {
     target: 'node' | 'python' | 'rust' | 'go'
@@ -415,6 +422,9 @@ export interface ElectronAPI {
   // Real Multi-Runtime Debug Adapter (CDP / DAP)
   debug: ElectronDebugAPI
 
+  // Real Language Server Protocol (LSP) Client
+  lsp: ElectronLspAPI
+
   // Lifecycle notification
   notifyReady: () => Promise<void>
 }
@@ -492,6 +502,17 @@ const api: ElectronAPI = {
       const handler = (_: unknown, ev: any) => callback(ev)
       ipcRenderer.on('debug:event', handler)
       return () => ipcRenderer.removeListener('debug:event', handler)
+    },
+  },
+
+  lsp: {
+    syncDocument: (opts) => ipcRenderer.invoke('lsp:syncDocument', opts),
+    definition: (opts) => ipcRenderer.invoke('lsp:definition', opts),
+    references: (opts) => ipcRenderer.invoke('lsp:references', opts),
+    onDiagnostics: (cb) => {
+      const handler = (_: unknown, payload: any) => cb(payload)
+      ipcRenderer.on('lsp:diagnostics', handler)
+      return () => ipcRenderer.removeListener('lsp:diagnostics', handler)
     },
   },
 

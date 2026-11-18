@@ -120,7 +120,7 @@ class LspService {
   }
 
   /**
-   * Find all occurrences/references of a symbol across the workspace
+   * Find all occurrences/references of a symbol across the workspace (skipping strings and comments)
    */
   public findReferences(symbolName: string): LspLocation[] {
     if (!symbolName || !symbolName.trim()) return []
@@ -134,13 +134,16 @@ class LspService {
     for (const [filePath, content] of Object.entries(files)) {
       if (typeof content !== 'string') continue
       const lines = content.split(/\r?\n/)
+      const masks = this.buildCodeCharMask(lines)
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
+        const mask = masks[i]
         let match: RegExpExecArray | null
         regex.lastIndex = 0
 
         while ((match = regex.exec(line)) !== null) {
+          if (!mask[match.index]) continue
           results.push({
             filePath,
             lineNumber: i + 1,
@@ -152,6 +155,96 @@ class LspService {
     }
 
     return results
+  }
+
+  /**
+   * Async workspace-wide definition lookup: tries real stdio LSP first, then disk searchText, then open buffers.
+   */
+  public async findDefinitionAsync(
+    symbolName: string,
+    currentFilePath: string,
+    opts?: { language?: string; rootDir?: string; line?: number; character?: number }
+  ): Promise<LspLocation | null> {
+    if (typeof window !== 'undefined' && opts?.rootDir && opts?.language && opts?.line && window.electronAPI?.lsp?.definition) {
+      const lspHit = await window.electronAPI.lsp.definition({
+        language: opts.language,
+        rootDir: opts.rootDir,
+        filePath: currentFilePath,
+        line: opts.line,
+        character: opts.character || 1,
+      }).catch(() => null)
+      if (lspHit) return lspHit
+    }
+
+    const localDef = this.findDefinition(symbolName, currentFilePath, opts?.line)
+    if (localDef) return localDef
+
+    if (typeof window !== 'undefined' && opts?.rootDir && window.electronAPI?.workspace?.searchText) {
+      const escaped = symbolName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const matches = await window.electronAPI.workspace.searchText({
+        rootDir: opts.rootDir,
+        query: `(?:function|class|interface|type|enum|const|let|var|def|fn|func)\\s+${escaped}\\b`,
+        isRegex: true,
+        caseSensitive: true,
+        maxMatches: 10,
+      }).catch(() => [])
+      if (matches.length > 0) {
+        return {
+          filePath: matches[0].filePath,
+          lineNumber: matches[0].lineNumber,
+          column: Math.max(1, matches[0].lineText.indexOf(symbolName) + 1),
+          lineContent: matches[0].lineText,
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Async workspace-wide references lookup: tries real stdio LSP first, then disk searchText + open buffers.
+   */
+  public async findReferencesAsync(
+    symbolName: string,
+    opts?: { language?: string; rootDir?: string; filePath?: string; line?: number; character?: number }
+  ): Promise<LspLocation[]> {
+    if (typeof window !== 'undefined' && opts?.rootDir && opts?.language && opts?.filePath && opts?.line && window.electronAPI?.lsp?.references) {
+      const lspRefs = await window.electronAPI.lsp.references({
+        language: opts.language,
+        rootDir: opts.rootDir,
+        filePath: opts.filePath,
+        line: opts.line,
+        character: opts.character || 1,
+      }).catch(() => null)
+      if (lspRefs && lspRefs.length > 0) return lspRefs
+    }
+
+    const memRefs = this.findReferences(symbolName)
+    if (typeof window !== 'undefined' && opts?.rootDir && window.electronAPI?.workspace?.searchText) {
+      const escaped = symbolName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const diskMatches = await window.electronAPI.workspace.searchText({
+        rootDir: opts.rootDir,
+        query: `\\b${escaped}\\b`,
+        isRegex: true,
+        caseSensitive: true,
+        maxMatches: 200,
+      }).catch(() => [])
+
+      const seen = new Set(memRefs.map((r) => `${r.filePath}:${r.lineNumber}`))
+      for (const m of diskMatches) {
+        const key = `${m.filePath}:${m.lineNumber}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          memRefs.push({
+            filePath: m.filePath,
+            lineNumber: m.lineNumber,
+            column: Math.max(1, m.lineText.indexOf(symbolName) + 1),
+            lineContent: m.lineText,
+          })
+        }
+      }
+    }
+    return memRefs
   }
 
   /**

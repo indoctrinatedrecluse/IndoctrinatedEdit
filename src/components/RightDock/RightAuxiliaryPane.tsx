@@ -531,7 +531,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
             activeFileContent={activeFileContent}
           />
         )}
-        {activeTab === 'bundle' && <BundleAnalyzerView />}
+        {activeTab === 'bundle' && <BundleAnalyzerView workspaceRoot={workspaceRoot} />}
         {activeTab === 'svg' && (
           isUnlocked ? (
             <SvgStudioView />
@@ -615,10 +615,11 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <PackageManagerView
             activeFileName={activeFileName}
             activeFileContent={activeFileContent}
+            workspaceRoot={workspaceRoot}
           />
         )}
 
-        {activeTab === 'tasks' && <TaskRunnerView />}
+        {activeTab === 'tasks' && <TaskRunnerView workspaceRoot={workspaceRoot} />}
 
         {activeTab === 'ai' && (
           isUnlocked ? (

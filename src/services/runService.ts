@@ -4,6 +4,7 @@
  */
 
 import { terminalService } from './terminalService'
+import { outputChannelService } from './outputChannelService'
 
 export interface RunProfile {
   id: string
@@ -565,6 +566,50 @@ export class RunService {
         (typeof window !== 'undefined' && window.electronAPI?.platform === 'win32') ||
         (typeof process !== 'undefined' && process.platform === 'win32')
 
+      // Chain preLaunch -> main -> postLaunch cleanly without arbitrary sleep timers
+      const toShellChain = (cmds: string[]): string => {
+        const cleaned = cmds.map((c) => c.trim()).filter(Boolean)
+        if (cleaned.length === 0) return ''
+        if (!isWin) return cleaned.join(' && ')
+        const expanded: string[] = []
+        for (const cmd of cleaned) {
+          if (cmd.includes(' && ')) {
+            expanded.push(...cmd.split(' && ').map((s) => s.trim()).filter(Boolean))
+          } else {
+            expanded.push(cmd)
+          }
+        }
+        const [first, ...rest] = expanded
+        return rest.length > 0
+          ? `${first}; ${rest.map((c) => `if ($LASTEXITCODE -eq 0) { ${c} }`).join('; ')}`
+          : first
+      }
+
+      const chainedCommand = toShellChain([
+        resolved.preLaunchCommand || '',
+        resolved.command,
+        resolved.postLaunchCommand || '',
+      ])
+
+      // Output Channel target mode: run via Electron workspace CLI and stream into OutputChannelService
+      if (profile.terminalTarget === 'output' && typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+        outputChannelService.append('Run & Tasks', `> [${profile.name}] ${chainedCommand}`, 'info')
+        const res = await window.electronAPI.workspace.execCommand({
+          command: chainedCommand,
+          cwd: resolved.cwd !== '.' ? resolved.cwd : context.workspacePath,
+          env: resolved.env,
+          timeoutMs: 120000,
+        })
+        if (res.stdout) outputChannelService.append('Run & Tasks', res.stdout.trimEnd(), 'info')
+        if (res.stderr) outputChannelService.append('Run & Tasks', res.stderr.trimEnd(), 'error')
+        outputChannelService.append(
+          'Run & Tasks',
+          `Process exited with code ${res.exitCode} (${res.durationMs}ms)`,
+          res.exitCode === 0 ? 'success' : 'error'
+        )
+        return res.exitCode === 0
+      }
+
       // Apply environment variables before execution
       const envEntries = Object.entries(resolved.env || {}).filter(([k]) => Boolean(k.trim()))
       if (envEntries.length > 0) {
@@ -585,39 +630,11 @@ export class RunService {
         `\x1b[35m╰────────────────────────────────────────────────────────────────────────\x1b[0m\r\n`
 
       terminalService.appendOutput(targetTab.id, banner)
-
-      // 1. Run Pre-launch step if configured
-      if (resolved.preLaunchCommand) {
-        terminalService.appendOutput(
-          targetTab.id,
-          `\x1b[33m> Pre-Launch: ${resolved.preLaunchCommand}\x1b[0m\r\n`
-        )
-        await terminalService.write(targetTab.id, `${resolved.preLaunchCommand}\r\n`)
-        await new Promise((r) => setTimeout(r, 400))
-      }
-
-      // 2. Translate POSIX "cmd1 && cmd2" safely on Windows PowerShell 5.1
-      let finalCommand = resolved.command
-      if (isWin && finalCommand.includes(' && ')) {
-        const [firstCmd, ...restCmds] = finalCommand.split(' && ')
-        const chain = restCmds.map((c) => `if ($LASTEXITCODE -eq 0) { ${c} }`).join('; ')
-        finalCommand = `${firstCmd}; ${chain}`
-      }
-
       terminalService.appendOutput(
         targetTab.id,
-        `\x1b[32m> Executing: ${finalCommand}\x1b[0m\r\n`
+        `\x1b[32m> Executing: ${chainedCommand}\x1b[0m\r\n`
       )
-      await terminalService.write(targetTab.id, `${finalCommand}\r\n`)
-
-      // 3. Run Post-launch step if configured
-      if (resolved.postLaunchCommand) {
-        terminalService.appendOutput(
-          targetTab.id,
-          `\x1b[36m> Post-Launch: ${resolved.postLaunchCommand}\x1b[0m\r\n`
-        )
-        await terminalService.write(targetTab.id, `${resolved.postLaunchCommand}\r\n`)
-      }
+      await terminalService.write(targetTab.id, `${chainedCommand}\r\n`)
 
       return true
     } catch (err) {

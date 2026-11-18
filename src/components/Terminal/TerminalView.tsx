@@ -27,10 +27,22 @@ interface XTermPaneProps {
   isActive: boolean
   fontSize?: number
   fontFamily?: string
+  cursorStyle?: 'block' | 'underline' | 'bar'
+  cursorBlink?: boolean
+  scrollback?: number
   onTermReady?: (tabId: string, term: Terminal) => void
 }
 
-const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fontFamily, onTermReady }) => {
+const XTermPane: React.FC<XTermPaneProps> = ({
+  tab,
+  isActive,
+  fontSize = 13,
+  fontFamily,
+  cursorStyle = 'block',
+  cursorBlink = true,
+  scrollback = 5000,
+  onTermReady,
+}) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -53,8 +65,8 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
           : undefined
 
     const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
+      cursorBlink,
+      cursorStyle,
       fontSize,
       fontFamily:
         fontFamily || "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
@@ -82,7 +94,7 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
         brightWhite: '#ffffff',
       },
       allowTransparency: true,
-      scrollback: 5000,
+      scrollback,
       // `convertEol` MUST stay disabled. It rewrites every LF as CRLF in the
       // output stream, which destroys the explicit cursor addressing that
       // full-screen TUIs (`ir pmon`, `ir nettop`, htop, curses apps) depend on.
@@ -147,7 +159,22 @@ const XTermPane: React.FC<XTermPaneProps> = ({ tab, isActive, fontSize = 13, fon
       xtermRef.current = null
       fitAddonRef.current = null
     }
-  }, [tab.id, fontSize, fontFamily])
+  }, [tab.id])
+
+  // Live-update xterm.js options when Terminal Config changes without recreating the PTY session
+  useEffect(() => {
+    const term = xtermRef.current
+    if (!term) return
+    term.options.fontSize = fontSize
+    term.options.fontFamily = fontFamily || "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace"
+    term.options.cursorStyle = cursorStyle
+    term.options.cursorBlink = cursorBlink
+    term.options.scrollback = scrollback
+    try {
+      fitAddonRef.current?.fit()
+      terminalService.resize(tab.id, term.cols, term.rows)
+    } catch {}
+  }, [tab.id, fontSize, fontFamily, cursorStyle, cursorBlink, scrollback])
 
   useEffect(() => {
     if (isActive && xtermRef.current) {
@@ -184,6 +211,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
   // the on-screen control pad arm themselves without user intervention.
   const [autoTuiTabIds, setAutoTuiTabIds] = useState<string[]>([])
   const [ptyDiagnostics, setPtyDiagnostics] = useState<TerminalDiagnostics | null>(null)
+  const [termConfig, setTermConfig] = useState(() => terminalService.getConfig())
+
+  useEffect(() => {
+    return terminalService.onConfigChange((cfg) => setTermConfig(cfg))
+  }, [])
 
   // Initialize terminal subsystem on mount
   useEffect(() => {
@@ -193,6 +225,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       const detected = await terminalService.initialize()
       if (!isMounted) return
       setProfiles(detected)
+      setTermConfig(terminalService.getConfig())
       setPtyDiagnostics(terminalService.getPtyDiagnostics())
 
       const existingTabs = terminalService.getTabs()
@@ -472,7 +505,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ onOpenConfig, worksp
       <div className={`terminal-viewport-container ${splitTab ? 'split-active' : ''}`}>
         {activeTab ? (
           <div className="terminal-pane" data-tui-active={isActiveTabTui ? 'true' : 'false'}>
-            <XTermPane tab={activeTab} isActive={true} onTermReady={handleTermReady} />
+            <XTermPane
+              tab={activeTab}
+              isActive={true}
+              fontSize={termConfig.fontSize}
+              fontFamily={termConfig.fontFamily}
+              cursorStyle={termConfig.cursorStyle === 'line' ? 'bar' : termConfig.cursorStyle}
+              cursorBlink={termConfig.cursorBlink}
+              scrollback={termConfig.scrollback}
+              onTermReady={handleTermReady}
+            />
             {/* TUI Interactive On-Screen Quick Control Pad */}
             {isActiveTabTui && (
               <div className="tui-keypad-toolbar">

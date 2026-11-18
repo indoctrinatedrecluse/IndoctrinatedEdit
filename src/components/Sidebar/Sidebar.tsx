@@ -466,11 +466,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {activeView === 'search' && (
-        <GlobalSearchPanel onOpenFileAndNavigate={onOpenFileAndNavigate} />
+        <GlobalSearchPanel workspacePath={workspacePath} onOpenFileAndNavigate={onOpenFileAndNavigate} />
       )}
 
       {activeView === 'testing' && (
-        <TestExplorerPanel onOpenFileAndNavigate={onOpenFileAndNavigate} />
+        <TestExplorerPanel workspacePath={workspacePath} onOpenFileAndNavigate={onOpenFileAndNavigate} />
       )}
 
       {activeView === 'settings' && (

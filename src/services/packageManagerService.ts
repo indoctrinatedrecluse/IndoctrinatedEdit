@@ -76,6 +76,82 @@ class PackageManagerService {
     }
   }
 
+  /**
+   * Scan the real workspace manifest (package.json / requirements.txt / Cargo.toml / go.mod)
+   * and enrich npm dependencies with real `npm outdated --json` and `npm audit --json` telemetry.
+   */
+  public async scanWorkspaceAsync(
+    workspacePath: string,
+    options?: { runOutdated?: boolean; runAudit?: boolean }
+  ): Promise<ManifestScanResult | null> {
+    if (typeof window === 'undefined' || !window.electronAPI?.readFile || !workspacePath) {
+      return null
+    }
+    const root = workspacePath.replace(/[\\/]+$/, '')
+    const candidates = ['package.json', 'requirements.txt', 'Cargo.toml', 'go.mod']
+    let result: ManifestScanResult | null = null
+
+    for (const fileName of candidates) {
+      try {
+        const content = await window.electronAPI.readFile(`${root}/${fileName}`)
+        result = this.parseManifest(fileName, content)
+        break
+      } catch {
+        // try next manifest type
+      }
+    }
+    if (!result) return null
+
+    if (result.ecosystem === 'npm') {
+      if (options?.runOutdated) {
+        const out = await this.runNpmAction('outdated', root)
+        try {
+          const jsonStart = out.output.indexOf('{')
+          if (jsonStart !== -1) {
+            const parsed = JSON.parse(out.output.slice(jsonStart))
+            for (const dep of result.dependencies) {
+              const info = parsed[dep.name]
+              if (info?.latest) {
+                dep.latestVersion = String(info.latest)
+                dep.isOutdated = dep.currentVersion !== dep.latestVersion
+              }
+            }
+          }
+        } catch {
+          // ignore non-JSON npm outdated
+        }
+      }
+      if (options?.runAudit) {
+        const aud = await this.runNpmAction('audit', root)
+        try {
+          const jsonStart = aud.output.indexOf('{')
+          if (jsonStart !== -1) {
+            const parsed = JSON.parse(aud.output.slice(jsonStart))
+            const vulns = parsed.vulnerabilities || {}
+            for (const dep of result.dependencies) {
+              const v = vulns[dep.name]
+              if (v) {
+                dep.vulnerabilitiesCount = Array.isArray(v.via) ? v.via.length : 1
+                const sev = String(v.severity || 'moderate').toLowerCase()
+                dep.highestSeverity = (['critical', 'high', 'moderate', 'low'].includes(sev) ? sev : 'moderate') as DependencyItem['highestSeverity']
+              } else {
+                dep.vulnerabilitiesCount = 0
+                dep.highestSeverity = 'none'
+              }
+            }
+          }
+        } catch {
+          // ignore non-JSON npm audit
+        }
+      }
+
+      result.outdatedCount = result.dependencies.filter((d) => d.isOutdated).length
+      result.vulnerabilitiesCount = result.dependencies.reduce((acc, d) => acc + (d.vulnerabilitiesCount || 0), 0)
+    }
+
+    return result
+  }
+
   private parseNpmPackageJson(filePath: string, content: string): ManifestScanResult {
     const dependencies: DependencyItem[] = []
     try {
@@ -87,32 +163,21 @@ class PackageManagerService {
 
       for (const [name, rawVersion] of Object.entries(allDeps)) {
         const cleanVer = String(rawVersion).trim().replace(/^[\^~>=<]+\s*/, '')
-        const mockLatest = this.calculateMockLatest(cleanVer)
-        const isOutdated = cleanVer !== mockLatest
-        const vuln = this.checkMockVulnerability(name)
 
         dependencies.push({
           name,
           currentVersion: cleanVer,
-          latestVersion: mockLatest,
-          isOutdated,
+          latestVersion: cleanVer,
+          isOutdated: false,
           ecosystem: 'npm',
           license: this.getMockLicense(name),
-          approxSizeKb: this.deterministicSizeKb(name),
-          vulnerabilitiesCount: vuln.count,
-          highestSeverity: vuln.severity,
-          description: `Core package module for ${name}`,
+          vulnerabilitiesCount: 0,
+          highestSeverity: 'none',
+          description: `Declared in ${filePath}`,
         })
       }
     } catch {
-      // Return sample packages if empty/malformed
-      dependencies.push(
-        { name: 'react', currentVersion: '18.3.1', latestVersion: '19.0.0', isOutdated: true, ecosystem: 'npm', license: 'MIT', approxSizeKb: 312, vulnerabilitiesCount: 0, highestSeverity: 'none' },
-        { name: 'lucide-react', currentVersion: '0.454.0', latestVersion: '0.454.0', isOutdated: false, ecosystem: 'npm', license: 'ISC', approxSizeKb: 140, vulnerabilitiesCount: 0, highestSeverity: 'none' },
-        { name: 'framer-motion', currentVersion: '11.11.10', latestVersion: '12.0.0', isOutdated: true, ecosystem: 'npm', license: 'MIT', approxSizeKb: 450, vulnerabilitiesCount: 0, highestSeverity: 'none' },
-        { name: 'axios', currentVersion: '0.21.1', latestVersion: '1.7.9', isOutdated: true, ecosystem: 'npm', license: 'MIT', approxSizeKb: 180, vulnerabilitiesCount: 1, highestSeverity: 'high' },
-        { name: 'monaco-editor', currentVersion: '0.52.2', latestVersion: '0.52.2', isOutdated: false, ecosystem: 'npm', license: 'MIT', approxSizeKb: 4200, vulnerabilitiesCount: 0, highestSeverity: 'none' }
-      )
+      // Return empty manifest cleanly if malformed
     }
 
     const outdatedCount = dependencies.filter((d) => d.isOutdated).length
@@ -242,27 +307,6 @@ class PackageManagerService {
       vulnerabilitiesCount: 0,
       dependencies,
     }
-  }
-
-  private calculateMockLatest(curr: string): string {
-    const parts = curr.split('.')
-    if (parts.length >= 3) {
-      const major = parseInt(parts[0], 10)
-      if (major > 0 && Math.random() > 0.6) {
-        return `${major + 1}.0.0`
-      }
-    }
-    return curr
-  }
-
-  private checkMockVulnerability(name: string): { count: number; severity: DependencyItem['highestSeverity'] } {
-    if (name.toLowerCase() === 'axios') {
-      return { count: 1, severity: 'high' }
-    }
-    if (name.toLowerCase().includes('lodash')) {
-      return { count: 1, severity: 'moderate' }
-    }
-    return { count: 0, severity: 'none' }
   }
 
   private getMockLicense(name: string): string {

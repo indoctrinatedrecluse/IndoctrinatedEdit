@@ -23,10 +23,12 @@ import {
 } from '../../services/globalSearchService'
 
 interface GlobalSearchPanelProps {
+  workspacePath?: string
   onOpenFileAndNavigate?: (filePath: string, lineNumber: number, column?: number) => void
 }
 
 export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({
+  workspacePath,
   onOpenFileAndNavigate,
 }) => {
   const [query, setQuery] = useState('')
@@ -52,7 +54,11 @@ export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({
 
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Subscribe to search service
+  // Subscribe to search service & keep workspace root synced
+  useEffect(() => {
+    globalSearchService.setWorkspaceRoot(workspacePath)
+  }, [workspacePath])
+
   useEffect(() => {
     const unsub = globalSearchService.subscribe((newResults) => {
       setResults(newResults)
