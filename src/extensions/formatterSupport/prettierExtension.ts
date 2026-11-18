@@ -54,15 +54,35 @@ const SUPPORTED_LANGUAGES = [
   'go',
   'sql',
   'xml',
+  'cpp',
+  'c',
+  'java',
+  'csharp',
+  'php',
+  'ruby',
+  'swift',
+  'kotlin',
+  'dart',
+  'lua',
+  'zig',
+  'gdscript',
+  'shell',
+  'powershell',
+  'julia',
+  'vue',
+  'svelte',
+  'graphql',
+  'prisma',
+  'solidity',
 ]
 
-
-export function registerPrettierExtension(monacoInstance: typeof monaco): void {
+export function registerPrettierExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  const disposables: monaco.IDisposable[] = []
 
   for (const lang of SUPPORTED_LANGUAGES) {
     try {
       // 1. Document Formatting Edit Provider
-      monacoInstance.languages.registerDocumentFormattingEditProvider(lang, {
+      const d1 = monacoInstance.languages.registerDocumentFormattingEditProvider(lang, {
         async provideDocumentFormattingEdits(model) {
           const text = model.getValue()
           const result = await formatterService.formatDocument(text, lang)
@@ -77,9 +97,10 @@ export function registerPrettierExtension(monacoInstance: typeof monaco): void {
           ]
         },
       })
+      if (d1) disposables.push(d1)
 
       // 2. Document Range Formatting Edit Provider (scoped strictly to selected lines)
-      monacoInstance.languages.registerDocumentRangeFormattingEditProvider(lang, {
+      const d2 = monacoInstance.languages.registerDocumentRangeFormattingEditProvider(lang, {
         async provideDocumentRangeFormattingEdits(model, range) {
           const text = model.getValue()
           const result = await formatterService.formatRange(
@@ -110,6 +131,7 @@ export function registerPrettierExtension(monacoInstance: typeof monaco): void {
           ]
         },
       })
+      if (d2) disposables.push(d2)
     } catch {
       // ignore registration if language already has formatting provider
     }
@@ -117,7 +139,7 @@ export function registerPrettierExtension(monacoInstance: typeof monaco): void {
 
   // Register Formatter Configuration Snippets for .prettierrc & .editorconfig
   try {
-    monacoInstance.languages.registerCompletionItemProvider('json', {
+    const d3 = monacoInstance.languages.registerCompletionItemProvider('json', {
       provideCompletionItems: (model, position) => {
         const word = model.getWordUntilPosition(position)
         const range = {
@@ -150,7 +172,10 @@ export function registerPrettierExtension(monacoInstance: typeof monaco): void {
         }
       },
     })
+    if (d3) disposables.push(d3)
   } catch {
     // ignore
   }
+
+  return disposables
 }

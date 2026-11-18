@@ -320,6 +320,176 @@ export class RunService {
         cwd: '${workspaceFolder}',
         isDefault: false,
       },
+      {
+        id: 'run.swift.file',
+        name: 'Swift: Run Active File',
+        language: 'swift',
+        scope: 'file',
+        commandTemplate: 'swift "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.kotlin.file',
+        name: 'Kotlin: Compile & Run Active File',
+        language: 'kotlin',
+        scope: 'file',
+        commandTemplate: 'kotlinc "${file}" -include-runtime -d "${fileDirname}/${fileBasenameNoExtension}.jar" && java -jar "${fileDirname}/${fileBasenameNoExtension}.jar" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.gdscript.file',
+        name: 'Godot: Run GDScript Scene/Script',
+        language: 'gdscript',
+        scope: 'file',
+        commandTemplate: 'godot --headless --script "${file}" ${args}',
+        args: [],
+        cwd: '${workspaceFolder}',
+        isDefault: true,
+      },
+      {
+        id: 'run.bat.file',
+        name: 'Windows Batch: Run .bat/.cmd Script',
+        language: 'bat',
+        scope: 'file',
+        commandTemplate: 'cmd /c "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.scala.file',
+        name: 'Scala: Run Active File',
+        language: 'scala',
+        scope: 'file',
+        commandTemplate: 'scala "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.haskell.file',
+        name: 'Haskell: Run with runghc',
+        language: 'haskell',
+        scope: 'file',
+        commandTemplate: 'runghc "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.erlang.file',
+        name: 'Erlang: Run with escript',
+        language: 'erlang',
+        scope: 'file',
+        commandTemplate: 'escript "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.clojure.file',
+        name: 'Clojure: Run Active File',
+        language: 'clojure',
+        scope: 'file',
+        commandTemplate: 'clojure -M "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.ocaml.file',
+        name: 'OCaml: Run Active File',
+        language: 'ocaml',
+        scope: 'file',
+        commandTemplate: 'ocaml "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.odin.file',
+        name: 'Odin: Run Active File',
+        language: 'odin',
+        scope: 'file',
+        commandTemplate: 'odin run "${file}" -file -- ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.nim.file',
+        name: 'Nim: Compile & Run Active File',
+        language: 'nim',
+        scope: 'file',
+        commandTemplate: 'nim c -r "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.wat.file',
+        name: 'WebAssembly Text: Run with wasmtime',
+        language: 'wat',
+        scope: 'file',
+        commandTemplate: 'wasmtime "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.solidity.test',
+        name: 'Solidity: Foundry Test',
+        language: 'solidity',
+        scope: 'project',
+        commandTemplate: 'forge test ${args}',
+        args: [],
+        cwd: '${workspaceFolder}',
+        isDefault: true,
+      },
+      {
+        id: 'run.prolog.file',
+        name: 'SWI-Prolog: Consult Active File',
+        language: 'prolog',
+        scope: 'file',
+        commandTemplate: 'swipl -s "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.lisp.file',
+        name: 'Common Lisp: Run with SBCL',
+        language: 'lisp',
+        scope: 'file',
+        commandTemplate: 'sbcl --script "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.scheme.file',
+        name: 'Scheme / Racket: Run Active File',
+        language: 'scheme',
+        scope: 'file',
+        commandTemplate: 'racket "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
+      {
+        id: 'run.lean.file',
+        name: 'Lean 4: Check Active File',
+        language: 'lean',
+        scope: 'file',
+        commandTemplate: 'lean "${file}" ${args}',
+        args: [],
+        cwd: '${fileDirname}',
+        isDefault: true,
+      },
     ]
   }
 
@@ -355,16 +525,33 @@ export class RunService {
       sh: 'shell',
       bash: 'shell',
       zsh: 'shell',
+      ksh: 'shell',
+      fish: 'shell',
       ps1: 'powershell',
       psm1: 'powershell',
+      psd1: 'powershell',
+      cmd: 'bat',
+      batch: 'bat',
       rs: 'rust',
       golang: 'go',
       cs: 'csharp',
       dotnet: 'csharp',
+      vb: 'csharp',
       rb: 'ruby',
       jl: 'julia',
       ex: 'elixir',
       exs: 'elixir',
+      kt: 'kotlin',
+      kts: 'kotlin',
+      gd: 'gdscript',
+      hs: 'haskell',
+      erl: 'erlang',
+      clj: 'clojure',
+      ml: 'ocaml',
+      sol: 'solidity',
+      pro: 'prolog',
+      rkt: 'scheme',
+      scm: 'scheme',
     }
 
     const normalizedLang = aliasMap[lang] || lang
@@ -482,14 +669,15 @@ export class RunService {
   public resolveRunCommand(profile: RunProfile, context: RunContext): ResolvedRunCommand {
     let rawCommand = profile.commandTemplate || ''
 
-    // If a custom interpreter path is set (and differs from the template's leading token), substitute cleanly
+    // If a custom interpreter path is set (and differs from the template's leading interpreter), substitute cleanly
     if (profile.interpreterPath && profile.interpreterPath.trim()) {
       const interp = profile.interpreterPath.trim()
       if (!rawCommand.startsWith(interp + ' ') && rawCommand !== interp) {
-        const parts = rawCommand.split(' ')
-        if (parts.length > 0 && parts[0]) {
-          const formattedInterp = /[\\/]/.test(interp) && /\s/.test(interp) ? `"${interp}"` : interp
-          rawCommand = formattedInterp + rawCommand.slice(parts[0].length)
+        const formattedInterp = /[\\/]/.test(interp) && /\s/.test(interp) ? `"${interp}"` : interp
+        // Strip multi-word default runners like `npx tsx` before substituting custom interpreter
+        const multiWordMatch = rawCommand.match(/^(?:npx\s+\S+|uv\s+run|cargo\s+run|go\s+run|\S+)/)
+        if (multiWordMatch) {
+          rawCommand = formattedInterp + rawCommand.slice(multiWordMatch[0].length)
         }
       }
     }
@@ -567,6 +755,10 @@ export class RunService {
         (typeof process !== 'undefined' && process.platform === 'win32')
 
       // Chain preLaunch -> main -> postLaunch cleanly without arbitrary sleep timers
+      const normalizeWinSegment = (seg: string): string => {
+        // In PowerShell, a double-quoted executable path like `"path/to/bin"` is parsed as a string literal unless prefixed with `& `
+        return seg.startsWith('"') ? `& ${seg}` : seg
+      }
       const toShellChain = (cmds: string[]): string => {
         const cleaned = cmds.map((c) => c.trim()).filter(Boolean)
         if (cleaned.length === 0) return ''
@@ -574,9 +766,9 @@ export class RunService {
         const expanded: string[] = []
         for (const cmd of cleaned) {
           if (cmd.includes(' && ')) {
-            expanded.push(...cmd.split(' && ').map((s) => s.trim()).filter(Boolean))
+            expanded.push(...cmd.split(' && ').map((s) => normalizeWinSegment(s.trim())).filter(Boolean))
           } else {
-            expanded.push(cmd)
+            expanded.push(normalizeWinSegment(cmd))
           }
         }
         const [first, ...rest] = expanded

@@ -290,8 +290,15 @@ export class ConflictResolutionService {
       const rawExt = parts.length > 1 ? parts[parts.length - 1] : lowerBase
       const extKey = lowerBase === rawExt ? lowerBase : rawExt
 
-      // Support exact filenames (e.g. "package.json", "dockerfile") and multi-dot extensions
-      // (e.g. "gradle.kts", "mcp.json", "blade.php") while keeping .ts/.js path-heuristic tiers intact.
+      // Support exact filenames (e.g. "package.json", "dockerfile", "cmakelists.txt"), Dockerfile.* variants,
+      // and multi-dot extensions (e.g. "gradle.kts", "mcp.json", "blade.php")
+      if (lowerBase.startsWith('dockerfile.') || lowerBase.endsWith('.dockerfile')) {
+        return { languageId: 'dockerfile', resolvedBy: 'exact', isFallback: false }
+      }
+      if (lowerBase === 'cmakelists.txt' || lowerBase.endsWith('.cmake')) {
+        return { languageId: 'cmake', resolvedBy: 'exact', isFallback: false }
+      }
+
       let claimants = this.fileExtensionMap.get(lowerBase)
       if (!claimants && parts.length >= 3) {
         const multiDotKey = parts.slice(-2).join('.')
@@ -757,7 +764,47 @@ export class ConflictResolutionService {
       toml: 'ini',
       ini: 'ini',
       log: 'log',
+      csv: 'csv',
+      tsv: 'csv',
       txt: 'plaintext',
+      vue: 'vue',
+      svelte: 'svelte',
+      razor: 'razor',
+      graphql: 'graphql',
+      gql: 'graphql',
+      prisma: 'prisma',
+      tf: 'hcl',
+      hcl: 'hcl',
+      tfvars: 'hcl',
+      dockerfile: 'dockerfile',
+      cmake: 'cmake',
+      ex: 'elixir',
+      exs: 'elixir',
+      erl: 'erlang',
+      hs: 'haskell',
+      clj: 'clojure',
+      ml: 'ocaml',
+      odin: 'odin',
+      nim: 'nim',
+      asm: 'assembly',
+      nasm: 'assembly',
+      wat: 'wat',
+      move: 'move',
+      cairo: 'cairo',
+      vy: 'vyper',
+      lisp: 'lisp',
+      el: 'lisp',
+      scm: 'scheme',
+      rkt: 'scheme',
+      lean: 'lean',
+      tla: 'tla',
+      als: 'tla',
+      gd: 'gdscript',
+      zig: 'zig',
+      m: 'matlab',
+      bat: 'bat',
+      cmd: 'bat',
+      npmrc: 'ini',
     }
 
     return fallbackMap[ext] || 'plaintext'

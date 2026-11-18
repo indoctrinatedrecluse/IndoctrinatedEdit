@@ -61,8 +61,9 @@ export async function extractVersion(
 ): Promise<string | undefined> {
   try {
     const isWindowsBatchShim = process.platform === 'win32' && /\.(cmd|bat)$/i.test(executablePath)
-    const { stdout, stderr } = await execFileAsync(executablePath, [versionFlag], {
-      timeout: 4000,
+    const args = versionFlag.includes(' ') ? versionFlag.split(' ') : [versionFlag]
+    const { stdout, stderr } = await execFileAsync(executablePath, args, {
+      timeout: 8000,
       windowsHide: true,
       shell: isWindowsBatchShim,
     })

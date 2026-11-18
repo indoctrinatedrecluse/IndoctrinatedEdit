@@ -16,6 +16,31 @@ import {
   adocSnippets,
 } from './textSnippets'
 
+const csvMonarchLanguage: monaco.languages.IMonarchLanguage = {
+  tokenizer: {
+    root: [
+      [/"([^"]|"")*"/, 'string'],
+      [/,/, 'delimiter'],
+      [/\b-?\d+(\.\d+)?\b/, 'number'],
+      [/\b(true|false|null|NULL|NA)\b/, 'keyword'],
+      [/[^,"\r\n]+/, 'identifier'],
+    ],
+  },
+}
+
+const csvSnippets = [
+  {
+    label: 'csv-table-header',
+    detail: 'CSV Table with Header',
+    documentation: 'Insert a standard RFC 4180 CSV header and sample rows',
+    insertText: [
+      'id,name,email,role',
+      '1,"${1:Alice Smith}",${2:alice@example.com},${3:admin}',
+      '2,"${4:Bob Jones}",${5:bob@example.com},${6:developer}',
+    ].join('\n'),
+  },
+]
+
 export const textSupportManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.text-pack',
   name: 'Universal Text & Prose Language Pack',
@@ -31,7 +56,8 @@ export const textSupportManifest: ExtensionManifest = {
     markdownSnippets.length +
     plaintextSnippets.length +
     rstSnippets.length +
-    adocSnippets.length,
+    adocSnippets.length +
+    csvSnippets.length,
   languages: [
     {
       id: 'textile',
@@ -83,6 +109,14 @@ export const textSupportManifest: ExtensionManifest = {
       snippets: plaintextSnippets,
     },
     {
+      id: 'csv',
+      extensions: ['.csv', '.tsv'],
+      aliases: ['CSV', 'TSV', 'csv'],
+      mimetypes: ['text/csv', 'text/tab-separated-values'],
+      monarchTokensProvider: csvMonarchLanguage,
+      snippets: csvSnippets,
+    },
+    {
       id: 'pdf',
       extensions: ['.pdf'],
       aliases: ['PDF Document', 'PDF', 'pdf'],
@@ -99,8 +133,9 @@ export const textSupportManifest: ExtensionManifest = {
 
 // Track if already registered to avoid duplicated Monaco providers
 
-export function registerTextSupportExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerTextSupportExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  const disposables: monaco.IDisposable[] = []
+  if (!monacoInstance) return disposables
 
   textSupportManifest.languages?.forEach((lang) => {
     // 1. Register language if not already known to Monaco
@@ -116,17 +151,19 @@ export function registerTextSupportExtension(monacoInstance: typeof monaco) {
 
     // 2. Set Language Configuration (brackets, comments, autoclose)
     if (lang.configuration) {
-      monacoInstance.languages.setLanguageConfiguration(lang.id, lang.configuration)
+      const d = monacoInstance.languages.setLanguageConfiguration(lang.id, lang.configuration)
+      if (d) disposables.push(d)
     }
 
     // 3. Set Monarch Tokens Provider (syntax tokenizer)
     if (lang.monarchTokensProvider) {
-      monacoInstance.languages.setMonarchTokensProvider(lang.id, lang.monarchTokensProvider)
+      const d = monacoInstance.languages.setMonarchTokensProvider(lang.id, lang.monarchTokensProvider)
+      if (d) disposables.push(d)
     }
 
     // 4. Register Completion Item Provider for Snippets
     if (lang.snippets && lang.snippets.length > 0) {
-      monacoInstance.languages.registerCompletionItemProvider(lang.id, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang.id, {
         provideCompletionItems: (model, position) => {
           const word = model.getWordUntilPosition(position)
           const range: monaco.IRange = {
@@ -149,6 +186,9 @@ export function registerTextSupportExtension(monacoInstance: typeof monaco) {
           return { suggestions }
         },
       })
+      if (d) disposables.push(d)
     }
   })
+
+  return disposables
 }

@@ -183,13 +183,59 @@ export class DiagnosticsService {
 
     // 2. TypeScript / JavaScript Syntax & Common Lint Checks
     if (['typescript', 'javascript', 'typescriptreact', 'javascriptreact'].includes(lang) || /\.(ts|tsx|js|jsx)$/i.test(fileName)) {
+      let inLintBlockComment = false
+      const stripStringsAndComments = (raw: string): string => {
+        let out = ''
+        let quote: string | null = null
+        for (let i = 0; i < raw.length; i++) {
+          const ch = raw[i]
+          const next = raw[i + 1]
+          if (inLintBlockComment) {
+            if (ch === '*' && next === '/') {
+              inLintBlockComment = false
+              out += '  '
+              i++
+            } else {
+              out += ' '
+            }
+            continue
+          }
+          if (quote) {
+            out += ' '
+            if (ch === '\\' && i + 1 < raw.length) {
+              out += ' '
+              i++
+            } else if (ch === quote) {
+              quote = null
+            }
+            continue
+          }
+          if (ch === '/' && next === '/') {
+            break
+          }
+          if (ch === '/' && next === '*') {
+            inLintBlockComment = true
+            out += '  '
+            i++
+            continue
+          }
+          if (ch === '"' || ch === "'" || ch === '`') {
+            quote = ch
+            out += ' '
+            continue
+          }
+          out += ch
+        }
+        return out
+      }
+
       lines.forEach((lineText, idx) => {
         const lineNum = idx + 1
-        const trimmed = lineText.trim()
+        const codeOnly = stripStringsAndComments(lineText)
 
-        // Unused console.log warning
-        if (/\bconsole\.(log|debug)\s*\(/.test(lineText) && !trimmed.startsWith('//')) {
-          const col = lineText.indexOf('console.') + 1
+        // Unused console.log warning (ignoring strings & comments)
+        if (/\bconsole\.(log|debug)\s*\(/.test(codeOnly)) {
+          const col = codeOnly.indexOf('console.') + 1
           items.push({
             message: 'Unexpected console statement. Avoid logging in production builds.',
             severity: 'warning',
@@ -203,8 +249,8 @@ export class DiagnosticsService {
         }
 
         // Use of var instead of let/const
-        if (/\bvar\s+[a-zA-Z_$]/.test(lineText) && !trimmed.startsWith('//')) {
-          const col = lineText.indexOf('var ') + 1
+        if (/\bvar\s+[a-zA-Z_$]/.test(codeOnly)) {
+          const col = codeOnly.indexOf('var ') + 1
           items.push({
             message: 'Unexpected var, use let or const instead.',
             severity: 'warning',
@@ -218,8 +264,8 @@ export class DiagnosticsService {
         }
 
         // Use of == instead of ===
-        if (/[^=!><]==[^=]/.test(lineText) && !trimmed.startsWith('//') && !lineText.includes('/*')) {
-          const col = lineText.indexOf('==') + 1
+        if (/[^=!><]==[^=]/.test(codeOnly)) {
+          const col = codeOnly.indexOf('==') + 1
           items.push({
             message: 'Expected "===" and instead saw "==".',
             severity: 'warning',
@@ -528,6 +574,26 @@ export class DiagnosticsService {
         }
       } catch {
         // ignore non-json output
+      }
+    } else if (tool === 'govet') {
+      const govetRe = /^(.+?\.go):(\d+):(?:(\d+):)?\s+(.+)$/gm
+      let m: RegExpExecArray | null
+      while ((m = govetRe.exec(combined)) !== null) {
+        const [, fp, lineStr, colStr, message] = m
+        const list = grouped.get(fp) || []
+        const line = parseInt(lineStr, 10)
+        const col = colStr ? parseInt(colStr, 10) : 1
+        list.push({
+          message: message.trim(),
+          severity: 'warning',
+          startLineNumber: line,
+          startColumn: col,
+          endLineNumber: line,
+          endColumn: col + 4,
+          source: 'go vet',
+          code: 'govet',
+        })
+        grouped.set(fp, list)
       }
     }
 

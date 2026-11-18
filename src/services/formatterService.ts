@@ -156,6 +156,29 @@ class FormatterService {
           formatted = this.formatGo(code, opts)
           break
 
+        case 'cpp':
+        case 'c':
+        case 'java':
+        case 'csharp':
+        case 'php':
+        case 'swift':
+        case 'kotlin':
+        case 'dart':
+        case 'zig':
+        case 'solidity':
+        case 'move':
+        case 'cairo':
+        case 'odin':
+        case 'graphql':
+        case 'prisma':
+          formatted = this.formatBraceLanguage(code, opts)
+          break
+
+        case 'vue':
+        case 'svelte':
+          formatted = this.formatHtml(code, opts)
+          break
+
         default:
           formatted = this.formatGenericIndentation(code, opts)
           break
@@ -196,19 +219,33 @@ class FormatterService {
     const opts: FormatterOptions = { ...this.options, ...customOptions }
 
     if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand && filePath && cwd) {
+      const startTime = performance.now()
+      const safePath = filePath.replace(/"/g, '\\"')
       let cmd = ''
-      if (['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'json', 'css', 'scss', 'html', 'markdown', 'yaml'].includes(normLang)) {
-        cmd = `npx prettier --tab-width ${opts.tabWidth} ${opts.useTabs ? '--use-tabs' : ''} ${opts.semi ? '' : '--no-semi'} ${opts.singleQuote ? '--single-quote' : ''} --print-width ${opts.printWidth} --end-of-line ${opts.endOfLine} --stdin-filepath "${filePath}"`
+      if (['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'json', 'css', 'scss', 'html', 'markdown', 'yaml', 'vue', 'graphql'].includes(normLang)) {
+        cmd = `npx prettier --tab-width ${opts.tabWidth} ${opts.useTabs ? '--use-tabs' : ''} ${opts.semi ? '' : '--no-semi'} ${opts.singleQuote ? '--single-quote' : ''} --trailing-comma ${opts.trailingComma} --print-width ${opts.printWidth} --end-of-line ${opts.endOfLine} "${safePath}"`
       } else if (normLang === 'python' || normLang === 'py') {
-        cmd = `ruff format --stdin-filename "${filePath}" -`
+        cmd = `ruff format --quiet "${safePath}"`
       } else if (normLang === 'rust' || normLang === 'rs') {
-        cmd = 'rustfmt --emit stdout'
+        cmd = `rustfmt --emit stdout "${safePath}"`
       } else if (normLang === 'go') {
-        cmd = 'gofmt'
+        cmd = `gofmt "${safePath}"`
       }
 
-      if (cmd && window.electronAPI?.infra?.dockerExec === undefined) {
-        // Only invoke file-based CLI when stdin piping is unavailable; fallback cleanly below
+      if (cmd) {
+        try {
+          const res = await window.electronAPI.workspace.execCommand({ command: cmd, cwd, timeoutMs: 12000 })
+          if (res.exitCode === 0 && res.stdout && res.stdout.trim().length > 0) {
+            return {
+              formatted: res.stdout,
+              hasChanges: res.stdout !== code,
+              language: normLang,
+              durationMs: Math.round(performance.now() - startTime),
+            }
+          }
+        } catch {
+          // Fall back cleanly to built-in formatter
+        }
       }
     }
 
@@ -578,9 +615,14 @@ class FormatterService {
     const result: string[] = []
 
     for (let i = 0; i < lines.length; i++) {
-      let line = lines[i]
-      if (line.includes(':') && !line.trim().startsWith('#')) {
-        line = line.replace(/:\s*([^\s])/, ': $1')
+      let line = lines[i].replace(/[ \t]+$/, '')
+      const trimmed = line.trim()
+      if (trimmed && !trimmed.startsWith('#')) {
+        // Only normalize the YAML mapping key colon (never colons inside quotes or URLs like postgres:// or "3000:3000")
+        const keyMatch = line.match(/^(\s*(?:-\s+)?[A-Za-z0-9_.-]+):(\S.*)$/)
+        if (keyMatch && !keyMatch[2].startsWith('//')) {
+          line = `${keyMatch[1]}: ${keyMatch[2]}`
+        }
       }
       result.push(line)
     }
@@ -671,11 +713,20 @@ class FormatterService {
       'ALTER TABLE', 'DROP TABLE', 'PRIMARY KEY', 'FOREIGN KEY'
     ]
 
-    let formatted = code
+    // Protect SQL single-quoted strings and -- line comments before uppercasing keywords
+    const stashed: string[] = []
+    const protectedSql = code.replace(/'(?:''|[^'])*'|--[^\r\n]*/g, (m) => {
+      const idx = stashed.push(m) - 1
+      return `__SQL_STASH_${idx}__`
+    })
+
+    let formatted = protectedSql
     for (const kw of keywords) {
       const reg = new RegExp(`\\b${kw}\\b`, 'gi')
       formatted = formatted.replace(reg, kw)
     }
+
+    formatted = formatted.replace(/__SQL_STASH_(\d+)__/g, (_, i) => stashed[Number(i)] ?? '')
 
     const lines = formatted.split(/\r?\n/)
     const result: string[] = []
@@ -688,7 +739,11 @@ class FormatterService {
         continue
       }
 
-      const isMainClause = /^(SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|JOIN|LEFT JOIN|RIGHT JOIN|ORDER BY|GROUP BY|HAVING)/i.test(line)
+      if (line.startsWith(')')) {
+        indentLevel = Math.max(0, indentLevel - 1)
+      }
+
+      const isMainClause = /^(SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|JOIN|LEFT JOIN|RIGHT JOIN|ORDER BY|GROUP BY|HAVING|CREATE TABLE)/i.test(line)
       if (isMainClause) {
         indentLevel = 0
       }
@@ -696,8 +751,8 @@ class FormatterService {
       const indentation = this.getIndentString(opts, indentLevel)
       result.push(indentation + line)
 
-      if (line.startsWith('SELECT') || line.startsWith('SET')) {
-        indentLevel = 1
+      if (line.startsWith('SELECT') || line.startsWith('SET') || line.endsWith('(')) {
+        indentLevel++
       }
     }
 
