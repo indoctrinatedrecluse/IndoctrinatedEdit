@@ -92,6 +92,7 @@ function parseCronField(
 }
 
 class TaskRunnerService {
+  private customTasksStorageKey = 'indoctrinated_custom_tasks'
   private tasks: ProjectTask[] = [
     { id: 'task_build', name: 'build', command: 'npm run build', source: 'package.json' },
     { id: 'task_test', name: 'test', command: 'npm test', source: 'package.json' },
@@ -99,6 +100,36 @@ class TaskRunnerService {
     { id: 'task_lint', name: 'lint', command: 'npm run lint', source: 'package.json' },
   ]
   private workspaceRoot: string | undefined
+
+  constructor() {
+    this.loadPersistedCustomTasks()
+  }
+
+  private loadPersistedCustomTasks() {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    try {
+      const raw = localStorage.getItem(this.customTasksStorageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          const nonCustom = this.tasks.filter((t) => !t.id.startsWith('custom_'))
+          this.tasks = [...nonCustom, ...parsed]
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private persistCustomTasks() {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    try {
+      const customTasks = this.tasks.filter((t) => t.source === 'Custom' && t.id.startsWith('custom_'))
+      localStorage.setItem(this.customTasksStorageKey, JSON.stringify(customTasks))
+    } catch {
+      // ignore
+    }
+  }
 
   public getTasks(): ProjectTask[] {
     return [...this.tasks]
@@ -112,7 +143,18 @@ class TaskRunnerService {
       source: 'Custom',
     }
     this.tasks = [...this.tasks, task]
+    this.persistCustomTasks()
     return task
+  }
+
+  public deleteCustomTask(taskId: string): boolean {
+    const prevLen = this.tasks.length
+    this.tasks = this.tasks.filter((t) => t.id !== taskId)
+    if (this.tasks.length !== prevLen) {
+      this.persistCustomTasks()
+      return true
+    }
+    return false
   }
 
   /**
@@ -297,22 +339,42 @@ class TaskRunnerService {
     }
 
     let explanation = 'Runs '
-    if (minRaw === '*' && hourRaw === '*') explanation += 'every minute'
-    else if (minRaw.startsWith('*/') && hourRaw === '*') explanation += `every ${minRaw.slice(2)} minutes`
-    else if (hourRaw === '*') explanation += `at minute ${minRaw} of every hour`
-    else if (hourRaw.startsWith('*/')) explanation += `at minute ${minRaw} past every ${hourRaw.slice(2)} hours`
-    else explanation += `at ${hourRaw.padStart(2, '0')}:${minRaw.padStart(2, '0')}`
+    if (minRaw === '*' && hourRaw === '*') {
+      explanation += 'every minute'
+    } else if (minRaw.startsWith('*/') && hourRaw === '*') {
+      explanation += `every ${minRaw.slice(2)} minutes`
+    } else if (minRaw.startsWith('*/')) {
+      explanation += `every ${minRaw.slice(2)} minutes during hour(s) [${hourRaw}]`
+    } else if (hourRaw === '*') {
+      explanation += `at minute ${minRaw} of every hour`
+    } else if (hourRaw.startsWith('*/')) {
+      explanation += `at minute ${minRaw} past every ${hourRaw.slice(2)} hours`
+    } else if (minRaw.includes(',') || minRaw.includes('-') || hourRaw.includes(',') || hourRaw.includes('-')) {
+      explanation += `at minute(s) [${minRaw}] of hour(s) [${hourRaw}]`
+    } else {
+      explanation += `at ${hourRaw.padStart(2, '0')}:${minRaw.padStart(2, '0')}`
+    }
 
     if (dowRaw !== '*') {
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-      const dayLabels = Array.from(dowP.values).sort((a, b) => a - b).map((d) => days[d] || String(d))
-      explanation += ` on ${dayLabels.join(', ')}`
+      if (dowRaw === '1-5') {
+        explanation += ' on weekdays (Mon–Fri)'
+      } else if (dowRaw === '6,0' || dowRaw === '0,6') {
+        explanation += ' on weekends (Sat–Sun)'
+      } else {
+        const dayLabels = Array.from(dowP.values).sort((a, b) => a - b).map((d) => days[d] || String(d))
+        explanation += ` on ${dayLabels.join(', ')}`
+      }
     }
     if (domRaw !== '*') {
-      explanation += ` on day ${domRaw} of the month`
+      explanation += domRaw.includes(',') || domRaw.includes('-')
+        ? ` on days [${domRaw}] of the month`
+        : ` on day ${domRaw} of the month`
     }
     if (monRaw !== '*') {
-      explanation += ` in month ${monRaw}`
+      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const monLabels = Array.from(monP.values).sort((a, b) => a - b).map((m) => months[m] || String(m))
+      explanation += ` in ${monLabels.join(', ')}`
     }
 
     // Compute genuine next 10 matching timestamps (searching up to 4 years ahead)

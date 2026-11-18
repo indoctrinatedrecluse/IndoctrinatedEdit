@@ -673,50 +673,118 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
         </div>
 
         {/* TAB 1: INTERACTIVE DATAFRAME TABLE */}
-        {activeTab === 'table' && hasHtml && (
-          <div className="output-table-pane">
-            <div className="table-controls-bar">
-              <div className="table-search-box">
-                <Search size={11} color="#94A3B8" />
-                <input
-                  type="text"
-                  placeholder="Filter rows & columns..."
-                  value={tableSearch[cell.id] || ''}
-                  onChange={(e) => setTableSearch((prev) => ({ ...prev, [cell.id]: e.target.value }))}
-                />
-              </div>
+        {activeTab === 'table' && hasHtml && (() => {
+          const allHtml = cell.outputs
+            .filter((o) => o.data && o.data['text/html'])
+            .map((o) => (Array.isArray(o.data!['text/html']) ? o.data!['text/html'].join('') : String(o.data!['text/html'])))
+            .join('\n')
 
-              <div className="table-actions">
-                <span className="table-dim-badge">150 rows × 5 cols</span>
-                <button
-                  className="table-tool-btn"
-                  onClick={() => {
-                    const csvContent = 'sepal_length,sepal_width,petal_length,petal_width,species\n5.1,3.5,1.4,0.2,setosa\n4.9,3.0,1.4,0.2,setosa\n4.7,3.2,1.3,0.2,setosa\n'
-                    navigator.clipboard.writeText(csvContent)
-                    alert('Exported DataFrame to CSV on clipboard!')
-                  }}
-                >
-                  <Download size={11} />
-                  <span>CSV</span>
-                </button>
-              </div>
-            </div>
+          // Parse real headers & body rows from the HTML table for filtering, dimensions & CSV export
+          const parseHtmlTable = (rawHtml: string) => {
+            const headers: string[] = []
+            const rows: string[][] = []
+            const stripTags = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+            const theadMatch = rawHtml.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i)
+            const headerSrc = theadMatch ? theadMatch[1] : rawHtml
+            const thMatches = headerSrc.match(/<th[^>]*>([\s\S]*?)<\/th>/gi) || []
+            thMatches.forEach((th) => headers.push(stripTags(th)))
+            const tbodyMatch = rawHtml.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i)
+            const bodySrc = tbodyMatch ? tbodyMatch[1] : rawHtml
+            const trMatches = bodySrc.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || []
+            trMatches.forEach((tr) => {
+              if (/<th\b/i.test(tr) && !/<td\b/i.test(tr)) return
+              const tds = tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []
+              if (tds.length > 0) rows.push(tds.map(stripTags))
+            })
+            return { headers, rows }
+          }
 
-            {cell.outputs.map((out, idx) => {
-              if (out.data && out.data['text/html']) {
-                const html = Array.isArray(out.data['text/html']) ? out.data['text/html'].join('') : out.data['text/html']
-                return (
-                  <div
-                    key={idx}
-                    className="output-html-container"
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
+          const parsedTbl = parseHtmlTable(allHtml)
+          const searchTerm = (tableSearch[cell.id] || '').trim().toLowerCase()
+          const filteredRows = searchTerm
+            ? parsedTbl.rows.filter((r) => r.some((c) => c.toLowerCase().includes(searchTerm)))
+            : parsedTbl.rows
+          const colCount = parsedTbl.headers.length || parsedTbl.rows[0]?.length || 0
+
+          const csvEscape = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
+          const buildRealCsv = () => {
+            const csvLines: string[] = []
+            if (parsedTbl.headers.length > 0) csvLines.push(parsedTbl.headers.map(csvEscape).join(','))
+            for (const row of filteredRows) csvLines.push(row.map(csvEscape).join(','))
+            return csvLines.join('\n')
+          }
+
+          return (
+            <div className="output-table-pane">
+              <div className="table-controls-bar">
+                <div className="table-search-box">
+                  <Search size={11} color="#94A3B8" />
+                  <input
+                    type="text"
+                    placeholder="Filter rows & columns..."
+                    value={tableSearch[cell.id] || ''}
+                    onChange={(e) => setTableSearch((prev) => ({ ...prev, [cell.id]: e.target.value }))}
                   />
-                )
-              }
-              return null
-            })}
-          </div>
-        )}
+                </div>
+
+                <div className="table-actions">
+                  <span className="table-dim-badge">
+                    {filteredRows.length}{searchTerm ? `/${parsedTbl.rows.length}` : ''} rows × {colCount} cols
+                  </span>
+                  <button
+                    className="table-tool-btn"
+                    onClick={() => {
+                      navigator.clipboard.writeText(buildRealCsv())
+                      setCopiedOutputCellId(cell.id)
+                      setTimeout(() => setCopiedOutputCellId(null), 1500)
+                    }}
+                    title="Copy filtered DataFrame as CSV"
+                  >
+                    <Download size={11} />
+                    <span>CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              {parsedTbl.rows.length > 0 ? (
+                <div className="output-html-container">
+                  <div className="jupyter-table-wrapper">
+                    <table className="dataframe-table">
+                      {parsedTbl.headers.length > 0 && (
+                        <thead>
+                          <tr>
+                            {parsedTbl.headers.map((h, i) => <th key={i}>{h}</th>)}
+                          </tr>
+                        </thead>
+                      )}
+                      <tbody>
+                        {filteredRows.map((row, rIdx) => (
+                          <tr key={rIdx}>
+                            {row.map((val, cIdx) => <td key={cIdx}>{val}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                cell.outputs.map((out, idx) => {
+                  if (out.data && out.data['text/html']) {
+                    const html = Array.isArray(out.data['text/html']) ? out.data['text/html'].join('') : out.data['text/html']
+                    return (
+                      <div
+                        key={idx}
+                        className="output-html-container"
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
+                      />
+                    )
+                  }
+                  return null
+                })
+              )}
+            </div>
+          )
+        })()}
 
         {/* TAB 2: INTERACTIVE CHART VISUALIZATION */}
         {activeTab === 'chart' && (
@@ -752,10 +820,16 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               <button
                 className="table-tool-btn"
                 onClick={() => {
-                  const svg = jupyterKernelService.generateChartSvg(activeChart)
+                  const inlineSvgOut = cell.outputs.find((o) => o.data && o.data['image/svg+xml'])
+                  const rawSvg = inlineSvgOut?.data?.['image/svg+xml']
+                  const svg = rawSvg
+                    ? (Array.isArray(rawSvg) ? rawSvg.join('') : String(rawSvg))
+                    : jupyterKernelService.generateChartSvg(activeChart)
                   navigator.clipboard.writeText(svg)
-                  alert('Copied vector SVG chart code to clipboard!')
+                  setCopiedOutputCellId(cell.id)
+                  setTimeout(() => setCopiedOutputCellId(null), 1500)
                 }}
+                title="Copy cell SVG chart to clipboard"
               >
                 <Download size={11} />
                 <span>SVG</span>
@@ -1201,52 +1275,66 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                         >
                           {cell.isEditing ? (
                             <div className="markdown-edit-box">
-                              {/* Markdown Quick Formatting Bar */}
+                              {/* Markdown Quick Formatting Bar (preventDefault onMouseDown keeps textarea focused) */}
                               <div className="md-format-toolbar">
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'bold')}
                                   title="Bold"
                                 >
                                   <Bold size={11} />
                                 </button>
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'italic')}
                                   title="Italic"
                                 >
                                   <Italic size={11} />
                                 </button>
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'header')}
                                   title="Heading"
                                 >
                                   <Hash size={11} />
                                 </button>
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'list')}
                                   title="Bullet List"
                                 >
                                   <List size={11} />
                                 </button>
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'code')}
                                   title="Code Block"
                                 >
                                   <Code size={11} />
                                 </button>
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'quote')}
                                   title="Quote"
                                 >
                                   <Quote size={11} />
                                 </button>
                                 <button
+                                  type="button"
                                   className="md-fmt-btn"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleInsertMarkdownFormatting(cell.id, 'table')}
                                   title="Table"
                                 >
@@ -1272,34 +1360,71 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                             <div className="markdown-rendered-view">
                               {cell.source ? (
                                 <div className="md-rendered-body">
-                                  {cell.source.split('\n\n').map((para, pIdx) => {
-                                    if (para.startsWith('# ')) {
-                                      return <h1 key={pIdx}>{para.replace('# ', '')}</h1>
-                                    }
-                                    if (para.startsWith('## ')) {
-                                      return <h2 key={pIdx}>{para.replace('## ', '')}</h2>
-                                    }
-                                    if (para.startsWith('### ')) {
-                                      return <h3 key={pIdx}>{para.replace('### ', '')}</h3>
-                                    }
-                                    if (para.startsWith('- ')) {
-                                      return (
-                                        <ul key={pIdx}>
-                                          {para.split('\n').map((item, iIdx) => (
-                                            <li key={iIdx}>{item.replace(/^[-\*]\s*/, '')}</li>
-                                          ))}
-                                        </ul>
+                                  {(() => {
+                                    const renderInline = (txt: string) =>
+                                      sanitizeHtml(
+                                        txt
+                                          .replace(/&/g, '&amp;')
+                                          .replace(/</g, '&lt;')
+                                          .replace(/>/g, '&gt;')
+                                          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                                          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                                          .replace(/`([^`]+)`/g, '<code>$1</code>')
                                       )
-                                    }
-                                    if (para.startsWith('> ')) {
-                                      return (
-                                        <blockquote key={pIdx} className="md-blockquote">
-                                          {para.replace(/^>\s*/, '')}
-                                        </blockquote>
-                                      )
-                                    }
-                                    return <p key={pIdx}>{para}</p>
-                                  })}
+                                    return cell.source.split('\n\n').map((para, pIdx) => {
+                                      const trimmed = para.trim()
+                                      if (trimmed.startsWith('```')) {
+                                        const codeText = trimmed.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '')
+                                        return <pre key={pIdx} className="md-code-block"><code>{codeText}</code></pre>
+                                      }
+                                      if (trimmed.startsWith('|') && trimmed.includes('\n|')) {
+                                        const rows = trimmed.split('\n').filter((r) => r.trim().startsWith('|') && !/^\|\s*[-:]+/.test(r.trim()))
+                                        const cells = rows.map((r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()))
+                                        if (cells.length > 0) {
+                                          return (
+                                            <table key={pIdx} className="dataframe-table">
+                                              <thead>
+                                                <tr>{cells[0].map((h, hi) => <th key={hi}>{h}</th>)}</tr>
+                                              </thead>
+                                              <tbody>
+                                                {cells.slice(1).map((r, ri) => (
+                                                  <tr key={ri}>{r.map((v, vi) => <td key={vi}>{v}</td>)}</tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          )
+                                        }
+                                      }
+                                      if (trimmed.startsWith('# ')) {
+                                        return <h1 key={pIdx} dangerouslySetInnerHTML={{ __html: renderInline(trimmed.slice(2)) }} />
+                                      }
+                                      if (trimmed.startsWith('## ')) {
+                                        return <h2 key={pIdx} dangerouslySetInnerHTML={{ __html: renderInline(trimmed.slice(3)) }} />
+                                      }
+                                      if (trimmed.startsWith('### ')) {
+                                        return <h3 key={pIdx} dangerouslySetInnerHTML={{ __html: renderInline(trimmed.slice(4)) }} />
+                                      }
+                                      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                                        return (
+                                          <ul key={pIdx}>
+                                            {trimmed.split('\n').map((item, iIdx) => (
+                                              <li key={iIdx} dangerouslySetInnerHTML={{ __html: renderInline(item.replace(/^[-*]\s*/, '')) }} />
+                                            ))}
+                                          </ul>
+                                        )
+                                      }
+                                      if (trimmed.startsWith('> ')) {
+                                        return (
+                                          <blockquote
+                                            key={pIdx}
+                                            className="md-blockquote"
+                                            dangerouslySetInnerHTML={{ __html: renderInline(trimmed.replace(/^>\s*/gm, '')) }}
+                                          />
+                                        )
+                                      }
+                                      return <p key={pIdx} dangerouslySetInnerHTML={{ __html: renderInline(trimmed) }} />
+                                    })
+                                  })()}
                                 </div>
                               ) : (
                                 <span className="empty-md-placeholder">Empty Markdown Cell. Double-click to edit.</span>

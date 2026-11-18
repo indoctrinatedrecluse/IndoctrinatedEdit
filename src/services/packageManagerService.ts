@@ -77,18 +77,41 @@ class PackageManagerService {
   }
 
   /**
+    * List all supported manifest files present in the workspace root.
+    */
+  public async listWorkspaceManifests(workspacePath: string): Promise<string[]> {
+    if (typeof window === 'undefined' || !window.electronAPI?.readFile || !workspacePath) {
+      return []
+    }
+    const root = workspacePath.replace(/[\\/]+$/, '')
+    const candidates = ['package.json', 'requirements.txt', 'Cargo.toml', 'go.mod']
+    const present: string[] = []
+    for (const name of candidates) {
+      try {
+        await window.electronAPI.readFile(`${root}/${name}`)
+        present.push(name)
+      } catch {
+        // not present
+      }
+    }
+    return present
+  }
+
+  /**
    * Scan the real workspace manifest (package.json / requirements.txt / Cargo.toml / go.mod)
    * and enrich npm dependencies with real `npm outdated --json` and `npm audit --json` telemetry.
    */
   public async scanWorkspaceAsync(
     workspacePath: string,
-    options?: { runOutdated?: boolean; runAudit?: boolean }
+    options?: { manifestFileName?: string; runOutdated?: boolean; runAudit?: boolean }
   ): Promise<ManifestScanResult | null> {
     if (typeof window === 'undefined' || !window.electronAPI?.readFile || !workspacePath) {
       return null
     }
     const root = workspacePath.replace(/[\\/]+$/, '')
-    const candidates = ['package.json', 'requirements.txt', 'Cargo.toml', 'go.mod']
+    const candidates = options?.manifestFileName
+      ? [options.manifestFileName]
+      : ['package.json', 'requirements.txt', 'Cargo.toml', 'go.mod']
     let result: ManifestScanResult | null = null
 
     for (const fileName of candidates) {
@@ -162,19 +185,39 @@ class PackageManagerService {
   }
 
   /**
-   * Real, documented NVD/GHSA advisories checked deterministically offline when `npm audit` has not yet run.
+   * Real, documented NVD/GHSA/RUSTSEC advisories checked deterministically offline across npm, PyPI, and Cargo ecosystems.
    */
-  private checkKnownAdvisories(name: string, version: string): { count: number; severity: DependencyItem['highestSeverity']; note?: string } {
-    const advisories: Array<{ pkg: string; fixedIn: string; severity: DependencyItem['highestSeverity']; cve: string }> = [
-      { pkg: 'axios', fixedIn: '0.21.2', severity: 'high', cve: 'CVE-2021-3749' },
-      { pkg: 'lodash', fixedIn: '4.17.21', severity: 'high', cve: 'CVE-2021-23337' },
-      { pkg: 'minimist', fixedIn: '1.2.6', severity: 'critical', cve: 'CVE-2021-44906' },
-      { pkg: 'node-fetch', fixedIn: '2.6.7', severity: 'high', cve: 'CVE-2022-0235' },
-      { pkg: 'json5', fixedIn: '2.2.2', severity: 'high', cve: 'CVE-2022-46175' },
+  public checkKnownAdvisories(
+    name: string,
+    version: string,
+    ecosystem: 'npm' | 'pypi' | 'cargo' | 'golang' = 'npm'
+  ): { count: number; severity: DependencyItem['highestSeverity']; note?: string } {
+    const advisories: Array<{
+      eco: 'npm' | 'pypi' | 'cargo' | 'golang'
+      pkg: string
+      fixedIn: string
+      severity: DependencyItem['highestSeverity']
+      cve: string
+    }> = [
+      // npm
+      { eco: 'npm', pkg: 'axios', fixedIn: '0.21.2', severity: 'high', cve: 'CVE-2021-3749' },
+      { eco: 'npm', pkg: 'lodash', fixedIn: '4.17.21', severity: 'high', cve: 'CVE-2021-23337' },
+      { eco: 'npm', pkg: 'minimist', fixedIn: '1.2.6', severity: 'critical', cve: 'CVE-2021-44906' },
+      { eco: 'npm', pkg: 'node-fetch', fixedIn: '2.6.7', severity: 'high', cve: 'CVE-2022-0235' },
+      { eco: 'npm', pkg: 'json5', fixedIn: '2.2.2', severity: 'high', cve: 'CVE-2022-46175' },
+      // pypi
+      { eco: 'pypi', pkg: 'requests', fixedIn: '2.31.0', severity: 'moderate', cve: 'CVE-2023-32681' },
+      { eco: 'pypi', pkg: 'urllib3', fixedIn: '2.0.7', severity: 'high', cve: 'CVE-2023-45803' },
+      { eco: 'pypi', pkg: 'flask', fixedIn: '2.2.5', severity: 'high', cve: 'CVE-2023-30861' },
+      { eco: 'pypi', pkg: 'cryptography', fixedIn: '41.0.6', severity: 'high', cve: 'CVE-2023-49083' },
+      { eco: 'pypi', pkg: 'jinja2', fixedIn: '3.1.3', severity: 'moderate', cve: 'CVE-2024-22195' },
+      // cargo
+      { eco: 'cargo', pkg: 'tokio', fixedIn: '1.38.1', severity: 'moderate', cve: 'RUSTSEC-2024-0357' },
+      { eco: 'cargo', pkg: 'openssl', fixedIn: '0.10.60', severity: 'high', cve: 'RUSTSEC-2023-0044' },
     ]
     const clean = version.replace(/[^0-9.].*$/, '')
-    if (!/^\d+\.\d+\.\d+$/.test(clean)) return { count: 0, severity: 'none' }
-    const hit = advisories.find((a) => a.pkg === name && this.compareSemver(clean, a.fixedIn) < 0)
+    if (!/^\d+(\.\d+)+$/.test(clean)) return { count: 0, severity: 'none' }
+    const hit = advisories.find((a) => a.eco === ecosystem && a.pkg.toLowerCase() === name.toLowerCase() && this.compareSemver(clean, a.fixedIn) < 0)
     if (hit) {
       return { count: 1, severity: hit.severity, note: `${hit.cve} (fixed in >=${hit.fixedIn})` }
     }
@@ -231,7 +274,8 @@ class PackageManagerService {
       const match = line.match(/^([a-zA-Z0-9_-]+)(?:==|>=|<=)?(.*)/)
       if (match) {
         const name = match[1]
-        const ver = match[2] || '1.0.0'
+        const ver = (match[2] || '1.0.0').trim()
+        const adv = this.checkKnownAdvisories(name, ver, 'pypi')
         dependencies.push({
           name,
           currentVersion: ver,
@@ -240,8 +284,9 @@ class PackageManagerService {
           ecosystem: 'pypi',
           license: 'MIT',
           approxSizeKb: 240,
-          vulnerabilitiesCount: 0,
-          highestSeverity: 'none',
+          vulnerabilitiesCount: adv.count,
+          highestSeverity: adv.severity,
+          description: adv.note ? `Advisory ${adv.note}` : `Declared in ${filePath}`,
         })
       }
     }
@@ -251,7 +296,7 @@ class PackageManagerService {
       ecosystem: 'pypi',
       totalDependencies: dependencies.length,
       outdatedCount: 0,
-      vulnerabilitiesCount: 0,
+      vulnerabilitiesCount: dependencies.reduce((acc, d) => acc + (d.vulnerabilitiesCount || 0), 0),
       dependencies,
     }
   }
@@ -284,16 +329,19 @@ class PackageManagerService {
           ver = rawVal.replace(/^["']|["']$/g, '').split('#')[0].trim().replace(/^["']|["']$/g, '')
         }
         if (!name) continue
+        const cleanVer = ver || 'latest'
+        const adv = this.checkKnownAdvisories(name, cleanVer, 'cargo')
         dependencies.push({
           name,
-          currentVersion: ver || 'latest',
-          latestVersion: ver || 'latest',
+          currentVersion: cleanVer,
+          latestVersion: cleanVer,
           isOutdated: false,
           ecosystem: 'cargo',
           license: 'MIT / Apache-2.0',
           approxSizeKb: this.deterministicSizeKb(name),
-          vulnerabilitiesCount: 0,
-          highestSeverity: 'none',
+          vulnerabilitiesCount: adv.count,
+          highestSeverity: adv.severity,
+          description: adv.note ? `Advisory ${adv.note}` : `Declared in ${filePath}`,
         })
       }
     }
@@ -303,28 +351,52 @@ class PackageManagerService {
       ecosystem: 'cargo',
       totalDependencies: dependencies.length,
       outdatedCount: 0,
-      vulnerabilitiesCount: 0,
+      vulnerabilitiesCount: dependencies.reduce((acc, d) => acc + (d.vulnerabilitiesCount || 0), 0),
       dependencies,
     }
   }
 
   private parseGoMod(filePath: string, content: string): ManifestScanResult {
     const dependencies: DependencyItem[] = []
-    const lines = content.split('\n')
+    const lines = content.split(/\r?\n/)
+    let inRequireBlock = false
 
-    for (const line of lines) {
-      const match = line.trim().match(/^([a-zA-Z0-9.\-_/]+)\s+v([0-9.]+)/)
+    for (const rawLine of lines) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('//')) continue
+
+      if (line === 'require (') {
+        inRequireBlock = true
+        continue
+      }
+      if (inRequireBlock && line === ')') {
+        inRequireBlock = false
+        continue
+      }
+
+      let modLine = line
+      if (line.startsWith('require ')) {
+        modLine = line.slice(8).trim()
+      } else if (!inRequireBlock) {
+        continue
+      }
+
+      // Format: github.com/user/pkg v1.2.3 // indirect
+      const match = modLine.match(/^([a-zA-Z0-9.\-_/]+)\s+v?([0-9A-Za-z.\-_+]+)/)
       if (match) {
+        const name = match[1]
+        const ver = match[2]
         dependencies.push({
-          name: match[1],
-          currentVersion: match[2],
-          latestVersion: match[2],
+          name,
+          currentVersion: ver,
+          latestVersion: ver,
           isOutdated: false,
           ecosystem: 'golang',
           license: 'BSD-3-Clause',
           approxSizeKb: 95,
           vulnerabilitiesCount: 0,
           highestSeverity: 'none',
+          description: modLine.includes('// indirect') ? 'Indirect dependency' : `Declared in ${filePath}`,
         })
       }
     }

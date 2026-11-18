@@ -33,6 +33,9 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   const [jwtInput, setJwtInput] = useState<string>('')
   const [decodedJwt, setDecodedJwt] = useState<JwtDecoded | null>(null)
   const [jwtSecret, setJwtSecret] = useState<string>('my-256-bit-secret')
+  const [jwtAlg, setJwtAlg] = useState<'HS256' | 'HS384' | 'HS512'>('HS256')
+  const [jwtPayloadDraft, setJwtPayloadDraft] = useState<string>('')
+  const [jwtPayloadError, setJwtPayloadError] = useState<string | null>(null)
   const [jwtVerifyResult, setJwtVerifyResult] = useState<{ valid: boolean; algorithm: string; reason?: string } | null>(null)
 
   // 2. Hash State
@@ -42,6 +45,7 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
 
   // 3. Encoder State
   const [encodeType, setEncodeType] = useState<string>('base64')
+  const [encodeMode, setEncodeMode] = useState<'encode' | 'decode'>('encode')
   const [encodeInput, setEncodeInput] = useState<string>('Liquid Glass Specular Engine')
   const [encodedOutput, setEncodedOutput] = useState<string>('')
 
@@ -57,8 +61,8 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   const [epochResult, setEpochResult] = useState<EpochConverted | null>(null)
 
   // 6. Format Transformer State
-  const [formatFrom, setFormatFrom] = useState<'json' | 'yaml' | 'csv'>('json')
-  const [formatTo, setFormatTo] = useState<'json' | 'yaml' | 'xml' | 'csv'>('yaml')
+  const [formatFrom, setFormatFrom] = useState<'json' | 'yaml' | 'toml' | 'csv'>('json')
+  const [formatTo, setFormatTo] = useState<'json' | 'yaml' | 'toml' | 'xml' | 'csv'>('yaml')
   const [formatInput, setFormatInput] = useState<string>(
     JSON.stringify(
       {
@@ -75,6 +79,7 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   // 7. KeyPair State
   const [keyPairType, setKeyPairType] = useState<KeyPairResult['keyType']>('RSA-2048')
   const [keyPairResult, setKeyPairResult] = useState<KeyPairResult | null>(null)
+  const [keyPairError, setKeyPairError] = useState<string | null>(null)
   const [isGeneratingKey, setIsGeneratingKey] = useState<boolean>(false)
 
   // 8. TOTP 2FA State (RFC 6238 Web Crypto HMAC-SHA1)
@@ -95,10 +100,14 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   useEffect(() => {
     const sampleToken = cryptoDevToolsService.generateSampleJwt()
     setJwtInput(sampleToken)
-    setDecodedJwt(cryptoDevToolsService.decodeJwt(sampleToken))
+    const dec = cryptoDevToolsService.decodeJwt(sampleToken)
+    setDecodedJwt(dec)
+    if (!dec.error) {
+      setJwtPayloadDraft(JSON.stringify(dec.payload, null, 2))
+    }
 
     handleComputeHashes(hashInput, hmacKey)
-    handleEncode(encodeInput, encodeType)
+    handleRunCodec(encodeInput, encodeType, 'encode')
     handleGenerateAllIdentifiers()
     handleConvertEpoch(epochInput)
     handleTransformFormat(formatInput, formatFrom, formatTo)
@@ -123,7 +132,12 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   // --- Handlers ---
   const handleJwtChange = (val: string) => {
     setJwtInput(val)
-    setDecodedJwt(cryptoDevToolsService.decodeJwt(val))
+    const dec = cryptoDevToolsService.decodeJwt(val)
+    setDecodedJwt(dec)
+    if (!dec.error) {
+      setJwtPayloadDraft(JSON.stringify(dec.payload, null, 2))
+      setJwtPayloadError(null)
+    }
   }
 
   const handleComputeHashes = async (text: string, key: string) => {
@@ -131,12 +145,8 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
     setHashes(res)
   }
 
-  const handleEncode = (text: string, type: string) => {
-    setEncodedOutput(cryptoDevToolsService.encode(type, text))
-  }
-
-  const handleDecode = (text: string, type: string) => {
-    setEncodedOutput(cryptoDevToolsService.decode(type, text))
+  const handleRunCodec = (text: string, type: string, mode: 'encode' | 'decode') => {
+    setEncodedOutput(mode === 'encode' ? cryptoDevToolsService.encode(type, text) : cryptoDevToolsService.decode(type, text))
   }
 
   const handleGenerateAllIdentifiers = () => {
@@ -151,15 +161,22 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
     setEpochResult(cryptoDevToolsService.convertEpoch(val))
   }
 
-  const handleTransformFormat = (input: string, from: 'json' | 'yaml' | 'csv', to: 'json' | 'yaml' | 'xml' | 'csv') => {
+  const handleTransformFormat = (
+    input: string,
+    from: 'json' | 'yaml' | 'toml' | 'csv',
+    to: 'json' | 'yaml' | 'toml' | 'xml' | 'csv'
+  ) => {
     setFormatOutput(cryptoDevToolsService.transformFormat(input, from, to))
   }
 
   const handleGenerateKeyPair = async (type: KeyPairResult['keyType']) => {
     setIsGeneratingKey(true)
+    setKeyPairError(null)
     try {
       const kp = await cryptoDevToolsService.generateKeyPairAsync(type)
       setKeyPairResult(kp)
+    } catch (err: any) {
+      setKeyPairError(err?.message || `Failed to generate ${type} keypair in this Web Crypto runtime.`)
     } finally {
       setIsGeneratingKey(false)
     }
@@ -293,6 +310,17 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
                 value={jwtSecret}
                 onChange={(e) => setJwtSecret(e.target.value)}
               />
+              <select
+                className="crypto-input glass-panel"
+                style={{ width: 82, padding: '4px 6px', fontSize: 11 }}
+                value={jwtAlg}
+                onChange={(e) => setJwtAlg(e.target.value as 'HS256' | 'HS384' | 'HS512')}
+                title="HMAC signing algorithm"
+              >
+                <option value="HS256">HS256</option>
+                <option value="HS384">HS384</option>
+                <option value="HS512">HS512</option>
+              </select>
               <button
                 className="section-action-btn glass-interactive"
                 onClick={async () => {
@@ -305,15 +333,24 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
               <button
                 className="section-action-btn glass-interactive"
                 onClick={async () => {
-                  const payload = decodedJwt && !decodedJwt.error && Object.keys(decodedJwt.payload).length > 0
-                    ? decodedJwt.payload
-                    : { sub: 'usr_1', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }
-                  const signed = await cryptoDevToolsService.signJwtAsync(payload, jwtSecret, 'HS256')
+                  let payload: Record<string, any>
+                  try {
+                    payload = jwtPayloadDraft.trim()
+                      ? JSON.parse(jwtPayloadDraft)
+                      : decodedJwt && !decodedJwt.error && Object.keys(decodedJwt.payload).length > 0
+                        ? decodedJwt.payload
+                        : { sub: 'usr_1', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }
+                    setJwtPayloadError(null)
+                  } catch (err: any) {
+                    setJwtPayloadError(`Invalid Payload JSON: ${err?.message || 'Syntax error'}`)
+                    return
+                  }
+                  const signed = await cryptoDevToolsService.signJwtAsync(payload, jwtSecret, jwtAlg)
                   handleJwtChange(signed)
-                  setJwtVerifyResult({ valid: true, algorithm: 'HS256' })
+                  setJwtVerifyResult({ valid: true, algorithm: jwtAlg })
                 }}
               >
-                <Lock size={11} /> Sign HS256
+                <Lock size={11} /> Sign {jwtAlg}
               </button>
               {jwtVerifyResult && (
                 <span className={`jwt-badge ${jwtVerifyResult.valid ? 'valid' : 'expired'}`}>
@@ -364,15 +401,26 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
 
                   <div className="jwt-card payload-card glass-panel">
                     <div className="jwt-card-header">
-                      <span>PAYLOAD: Data Claims</span>
+                      <span>PAYLOAD: Data Claims (Editable)</span>
                       <button
                         className="copy-chip"
-                        onClick={() => copyToClipboard(JSON.stringify(decodedJwt.payload, null, 2), 'jwt-payload')}
+                        onClick={() => copyToClipboard(jwtPayloadDraft || JSON.stringify(decodedJwt.payload, null, 2), 'jwt-payload')}
                       >
                         {copiedKey === 'jwt-payload' ? <Check size={10} /> : <Copy size={10} />}
                       </button>
                     </div>
-                    <pre className="jwt-json-pre">{JSON.stringify(decodedJwt.payload, null, 2)}</pre>
+                    <textarea
+                      className="crypto-textarea"
+                      style={{ width: '100%', minHeight: 110, fontFamily: 'monospace', fontSize: 11, background: 'transparent', border: 'none' }}
+                      value={jwtPayloadDraft}
+                      onChange={(e) => {
+                        setJwtPayloadDraft(e.target.value)
+                        setJwtPayloadError(null)
+                      }}
+                    />
+                    {jwtPayloadError && (
+                      <div style={{ color: '#FF453A', fontSize: 11, padding: '2px 8px' }}>{jwtPayloadError}</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -444,7 +492,7 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
                   className={`enc-type-pill glass-interactive ${encodeType === t ? 'active' : ''}`}
                   onClick={() => {
                     setEncodeType(t)
-                    handleEncode(encodeInput, t)
+                    handleRunCodec(encodeInput, t, encodeMode)
                   }}
                 >
                   {t.toUpperCase()}
@@ -455,17 +503,35 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
             <div className="encoder-io-grid">
               <div className="io-box">
                 <div className="io-header">
-                  <span>INPUT TEXT</span>
-                  <button className="io-action-btn" onClick={() => handleEncode(encodeInput, encodeType)}>
-                    <Lock size={11} /> Encode ➔
-                  </button>
+                  <span>{encodeMode === 'encode' ? 'PLAINTEXT INPUT' : `ENCODED INPUT (${encodeType.toUpperCase()})`}</span>
+                  <div className="io-actions-right">
+                    <button
+                      className={`io-action-btn ${encodeMode === 'encode' ? 'active' : ''}`}
+                      onClick={() => {
+                        setEncodeMode('encode')
+                        handleRunCodec(encodeInput, encodeType, 'encode')
+                      }}
+                    >
+                      <Lock size={11} /> Encode
+                    </button>
+                    <button
+                      className={`io-action-btn ${encodeMode === 'decode' ? 'active' : ''}`}
+                      onClick={() => {
+                        setEncodeMode('decode')
+                        handleRunCodec(encodeInput, encodeType, 'decode')
+                      }}
+                    >
+                      <Unlock size={11} /> Decode
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   className="crypto-textarea glass-panel"
                   value={encodeInput}
+                  placeholder={encodeMode === 'encode' ? 'Enter plaintext to encode...' : `Paste ${encodeType.toUpperCase()} payload to decode...`}
                   onChange={(e) => {
                     setEncodeInput(e.target.value)
-                    handleEncode(e.target.value, encodeType)
+                    handleRunCodec(e.target.value, encodeType, encodeMode)
                   }}
                   rows={5}
                 />
@@ -473,10 +539,20 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
 
               <div className="io-box">
                 <div className="io-header">
-                  <span>RESULT ({encodeType.toUpperCase()})</span>
+                  <span>{encodeMode === 'encode' ? `ENCODED (${encodeType.toUpperCase()})` : 'DECODED PLAINTEXT'}</span>
                   <div className="io-actions-right">
-                    <button className="io-action-btn" onClick={() => handleDecode(encodedOutput, encodeType)}>
-                      <Unlock size={11} /> Decode ➔
+                    <button
+                      className="io-action-btn"
+                      onClick={() => {
+                        const nextMode = encodeMode === 'encode' ? 'decode' : 'encode'
+                        const nextInput = encodedOutput
+                        setEncodeMode(nextMode)
+                        setEncodeInput(nextInput)
+                        handleRunCodec(nextInput, encodeType, nextMode)
+                      }}
+                      title="Move output to input and flip Encode/Decode"
+                    >
+                      ⇄ Swap
                     </button>
                     <button className="copy-chip" onClick={() => copyToClipboard(encodedOutput, 'enc-out')}>
                       {copiedKey === 'enc-out' ? <Check size={10} /> : <Copy size={10} />}
@@ -576,12 +652,28 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
                   setEpochInput(e.target.value)
                   handleConvertEpoch(e.target.value)
                 }}
-                placeholder="e.g. 1789500000"
+                placeholder="e.g. 1789500000 or 2026-05-01T12:00:00Z"
               />
             </div>
 
             {epochResult && (
               <div className="epoch-cards-grid">
+                <div className="epoch-card glass-panel">
+                  <span className="epoch-label">Seconds (s)</span>
+                  <code className="epoch-val">{epochResult.seconds}</code>
+                </div>
+                <div className="epoch-card glass-panel">
+                  <span className="epoch-label">Milliseconds (ms)</span>
+                  <code className="epoch-val">{epochResult.milliseconds}</code>
+                </div>
+                <div className="epoch-card glass-panel">
+                  <span className="epoch-label">Microseconds (µs)</span>
+                  <code className="epoch-val">{epochResult.microseconds}</code>
+                </div>
+                <div className="epoch-card glass-panel">
+                  <span className="epoch-label">Nanoseconds (ns)</span>
+                  <code className="epoch-val">{epochResult.nanoseconds}</code>
+                </div>
                 <div className="epoch-card glass-panel">
                   <span className="epoch-label">ISO 8601</span>
                   <code className="epoch-val">{epochResult.iso8601}</code>
@@ -609,7 +701,7 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
             <div className="format-controls-row">
               <div className="format-picker">
                 <span>From:</span>
-                {(['json', 'yaml', 'csv'] as const).map((f) => (
+                {(['json', 'yaml', 'toml', 'csv'] as const).map((f) => (
                   <button
                     key={f}
                     className={`format-pill ${formatFrom === f ? 'active' : ''}`}
@@ -625,7 +717,7 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
               <span className="format-arrow">➔</span>
               <div className="format-picker">
                 <span>To:</span>
-                {(['json', 'yaml', 'xml', 'csv'] as const).map((f) => (
+                {(['json', 'yaml', 'toml', 'xml', 'csv'] as const).map((f) => (
                   <button
                     key={f}
                     className={`format-pill ${formatTo === f ? 'active' : ''}`}
@@ -695,6 +787,12 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
                 <RefreshCw size={11} className={isGeneratingKey ? 'animate-spin' : ''} /> {isGeneratingKey ? 'Generating...' : 'Generate Keypair'}
               </button>
             </div>
+
+            {keyPairError && (
+              <div className="glass-panel" style={{ padding: 10, color: '#FF453A', fontSize: 11, marginBottom: 8 }}>
+                {keyPairError}
+              </div>
+            )}
 
             {keyPairResult && (
               <div className="keypair-display-grid">

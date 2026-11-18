@@ -25,6 +25,8 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
   workspaceRoot,
 }) => {
   const [scanResult, setScanResult] = useState<ManifestScanResult | null>(null)
+  const [availableManifests, setAvailableManifests] = useState<string[]>([])
+  const [selectedManifest, setSelectedManifest] = useState<string>(activeFileName)
   const [filterQuery, setFilterQuery] = useState('')
   const [onlyOutdated, setOnlyOutdated] = useState(false)
   const [onlyVulnerable, setOnlyVulnerable] = useState(false)
@@ -33,23 +35,56 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
   const [cliOutput, setCliOutput] = useState<string | null>(null)
 
   const loadWorkspaceManifest = useCallback(
-    async (opts?: { runOutdated?: boolean; runAudit?: boolean }) => {
+    async (opts?: { runOutdated?: boolean; runAudit?: boolean; targetManifest?: string }) => {
       if (workspaceRoot && window.electronAPI?.readFile) {
         setIsBusy(true)
         try {
-          const live = await packageManagerService.scanWorkspaceAsync(workspaceRoot, opts)
+          const manifests = await packageManagerService.listWorkspaceManifests(workspaceRoot)
+          setAvailableManifests(manifests)
+          let manifestName = opts?.targetManifest || selectedManifest
+          if (manifests.length > 0 && !manifests.includes(manifestName)) {
+            manifestName = manifests[0]
+            setSelectedManifest(manifestName)
+          }
+          const live = await packageManagerService.scanWorkspaceAsync(workspaceRoot, {
+            manifestFileName: manifests.length > 0 ? manifestName : undefined,
+            runOutdated: opts?.runOutdated,
+            runAudit: opts?.runAudit,
+          })
           if (live) {
-            setScanResult(live)
+            setScanResult((prev) => {
+              if (!prev || prev.filePath !== live.filePath) return live
+              const prevMap = new Map(prev.dependencies.map((d) => [d.name, d]))
+              const mergedDeps = live.dependencies.map((dep) => {
+                const old = prevMap.get(dep.name)
+                if (!old) return dep
+                return {
+                  ...dep,
+                  // Preserve outdated info when only running audit
+                  latestVersion: opts?.runOutdated ? dep.latestVersion : old.latestVersion,
+                  isOutdated: opts?.runOutdated ? dep.isOutdated : old.isOutdated,
+                  // Preserve audit info when only running outdated
+                  vulnerabilitiesCount: opts?.runAudit ? dep.vulnerabilitiesCount : old.vulnerabilitiesCount,
+                  highestSeverity: opts?.runAudit ? dep.highestSeverity : old.highestSeverity,
+                }
+              })
+              return {
+                ...live,
+                dependencies: mergedDeps,
+                outdatedCount: mergedDeps.filter((d) => d.isOutdated).length,
+                vulnerabilitiesCount: mergedDeps.reduce((acc, d) => acc + (d.vulnerabilitiesCount || 0), 0),
+              }
+            })
             return
           }
         } finally {
           setIsBusy(false)
         }
       }
-      const res = packageManagerService.parseManifest(activeFileName, activeFileContent)
+      const res = packageManagerService.parseManifest(opts?.targetManifest || activeFileName, activeFileContent)
       setScanResult(res)
     },
-    [workspaceRoot, activeFileName, activeFileContent]
+    [workspaceRoot, selectedManifest, activeFileName, activeFileContent]
   )
 
   useEffect(() => {
@@ -81,6 +116,22 @@ export const PackageManagerView: React.FC<PackageManagerViewProps> = ({
     <div className="package-manager-root">
       {/* Top Header & Search Bar */}
       <div className="pkg-search-bar glass-panel">
+        {availableManifests.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+            {availableManifests.map((m) => (
+              <button
+                key={m}
+                className={`filter-chip ${selectedManifest === m ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedManifest(m)
+                  void loadWorkspaceManifest({ targetManifest: m })
+                }}
+              >
+                <Package size={10} /> {m}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="search-input-wrapper">
           <Search size={12} className="search-icon" />
           <input

@@ -1228,6 +1228,47 @@ spec:
   }
 
   /**
+   * Generate a dynamic docker-compose.yml from active containers (or custom service definitions).
+   */
+  public generateComposeFromContainers(
+    containersList: DockerContainer[] = this.containers,
+    customService?: { name: string; image: string; port?: string }
+  ): string {
+    const services: Array<{ name: string; image: string; ports: string[] }> = containersList.map((c) => ({
+      name: c.name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/^_+/, '') || 'service',
+      image: c.image || 'alpine:latest',
+      ports: Array.isArray(c.ports) ? c.ports : typeof (c.ports as unknown) === 'string' && String(c.ports).trim() ? [String(c.ports).trim()] : [],
+    }))
+    if (customService && customService.name.trim() && customService.image.trim()) {
+      services.push({
+        name: customService.name.trim().replace(/[^a-zA-Z0-9_-]/g, '_'),
+        image: customService.image.trim(),
+        ports: customService.port?.trim() ? [customService.port.trim()] : [],
+      })
+    }
+    if (services.length === 0) {
+      return `services:\n  app:\n    image: node:22-alpine\n    ports:\n      - "3000:3000"\n    restart: unless-stopped\n`
+    }
+    const lines = ['services:']
+    for (const svc of services) {
+      lines.push(`  ${svc.name}:`)
+      lines.push(`    image: ${svc.image}`)
+      if (svc.ports.length > 0) {
+        lines.push('    ports:')
+        for (const p of svc.ports) {
+          const normalized = p.includes('->')
+            ? p.replace(/^.*:(\d+)->(\d+).*$/, '$1:$2')
+            : p
+          lines.push(`      - "${normalized}"`)
+        }
+      }
+      lines.push('    restart: unless-stopped')
+      lines.push('')
+    }
+    return lines.join('\n')
+  }
+
+  /**
    * Generate Kubernetes Ingress YAML
    */
   public generateKubernetesIngress(appName = 'indoctrinated-app', host = 'api.indoctrinated.dev', port = 80): string {

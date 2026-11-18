@@ -240,8 +240,13 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
    * Merge updated EnvVariable[] back into original raw .env content while preserving comments and blank lines.
    */
   public mergeVariablesPreservingComments(originalRaw: string, variables: EnvVariable[]): string {
-    const varMap = new Map(variables.map((v) => [v.key, v]))
-    const emitted = new Set<string>()
+    const queues = new Map<string, EnvVariable[]>()
+    for (const v of variables) {
+      const list = queues.get(v.key) || []
+      list.push(v)
+      queues.set(v.key, list)
+    }
+
     const formatLine = (v: EnvVariable) => {
       let val = v.value
       if (val.includes(' ') || val.includes('\n') || val.includes('#')) val = `"${val}"`
@@ -256,16 +261,17 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
         continue
       }
       const key = m[1]
-      const updated = varMap.get(key)
-      if (updated) {
-        outLines.push(formatLine(updated))
-        emitted.add(key)
+      const list = queues.get(key)
+      if (list && list.length > 0) {
+        const nextVar = list.shift()!
+        outLines.push(formatLine(nextVar))
       }
       // If key was deleted, omit the line
     }
 
-    for (const v of variables) {
-      if (!emitted.has(v.key)) {
+    // Append any remaining/new variables (including newly added duplicates or renamed keys)
+    for (const list of queues.values()) {
+      for (const v of list) {
         outLines.push(formatLine(v))
       }
     }
@@ -537,7 +543,14 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
           .join('\n')}\n`
       case 'k8s':
         return `# Kubernetes Secret Manifest\napiVersion: v1\nkind: Secret\nmetadata:\n  name: app-secrets\ntype: Opaque\nstringData:\n${variables
-          .map((v) => `  ${v.key}: "${v.value}"`)
+          .map((v) => {
+            const escaped = v.value
+              .replace(/\\/g, '\\\\')
+              .replace(/"/g, '\\"')
+              .replace(/\r/g, '\\r')
+              .replace(/\n/g, '\\n')
+            return `  ${v.key}: "${escaped}"`
+          })
           .join('\n')}\n`
     }
   }

@@ -30,6 +30,8 @@ export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspac
   const [chunks, setChunks] = useState<BundleChunk[]>(() => bundleAnalyzerService.getChunks())
   const [duplicateAlerts, setDuplicateAlerts] = useState<DuplicatePackageAlert[]>(() => bundleAnalyzerService.getDuplicates())
   const [isLive, setIsLive] = useState(false)
+  const [buildDir, setBuildDir] = useState<string | null>(null)
+  const [hasScannedLive, setHasScannedLive] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [importEstimate, setImportEstimate] = useState<ImportCostEstimate>(() =>
     bundleAnalyzerService.estimateImportCost('lodash')
@@ -43,6 +45,8 @@ export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspac
       setChunks(res.chunks)
       setDuplicateAlerts(res.duplicates)
       setIsLive(res.isLive)
+      setBuildDir(res.buildDir)
+      setHasScannedLive(true)
     } finally {
       setIsScanning(false)
     }
@@ -155,6 +159,21 @@ export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspac
       {/* TreeMap Tab */}
       {activeTab === 'treemap' && (
         <div className="treemap-layout">
+          {chunks.length === 0 && hasScannedLive ? (
+            <div className="cost-estimate-card glass-panel" style={{ padding: 14, fontSize: 12, opacity: 0.85 }}>
+              <strong>No build output directory detected</strong>
+              <p style={{ margin: '6px 0 0', opacity: 0.75 }}>
+                Scanned workspace for <code>dist/</code>, <code>build/</code>, <code>out/</code>, and <code>.next/static</code>.
+                Run your project build first, then click <strong>Rescan</strong> to analyze real bundle artifacts.
+              </p>
+            </div>
+          ) : (
+          <>
+          {buildDir && (
+            <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
+              Live bundle scan from <code>{buildDir}</code>
+            </div>
+          )}
           {/* Proportional Visual Bar Chart */}
           <div className="treemap-stacked-bar">
             {chunks.map((c) => (
@@ -204,6 +223,8 @@ export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspac
               )
             })}
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -227,16 +248,34 @@ export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspac
               <Package size={16} className="pkg-icon" />
               <div className="pkg-title-block">
                 <span className="pkg-name">{importEstimate.packageName}</span>
-                <span
-                  className="tree-shake-tag"
-                  style={
-                    importEstimate.treeShakeable
-                      ? undefined
-                      : { background: 'rgba(255, 69, 58, 0.18)', color: '#FF453A', borderColor: 'rgba(255, 69, 58, 0.35)' }
-                  }
-                >
-                  {importEstimate.treeShakeable ? 'Tree-shakeable' : 'Non-treeshakeable'}
-                </span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <span
+                    className="tree-shake-tag"
+                    style={
+                      importEstimate.treeShakeable
+                        ? undefined
+                        : { background: 'rgba(255, 69, 58, 0.18)', color: '#FF453A', borderColor: 'rgba(255, 69, 58, 0.35)' }
+                    }
+                  >
+                    {importEstimate.treeShakeable ? 'Tree-shakeable' : 'Non-treeshakeable'}
+                  </span>
+                  {importEstimate.source && (
+                    <span
+                      className="tree-shake-tag"
+                      style={
+                        importEstimate.source === 'bundlephobia'
+                          ? { background: 'rgba(48, 209, 88, 0.16)', color: '#30D158', borderColor: 'rgba(48, 209, 88, 0.35)' }
+                          : { background: 'rgba(255, 159, 10, 0.16)', color: '#FF9F0A', borderColor: 'rgba(255, 159, 10, 0.35)' }
+                      }
+                    >
+                      {importEstimate.source === 'bundlephobia'
+                        ? 'Bundlephobia Live'
+                        : importEstimate.source === 'catalog'
+                          ? 'Offline Catalog'
+                          : 'Offline Estimate'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -281,26 +320,32 @@ export const BundleAnalyzerView: React.FC<BundleAnalyzerViewProps> = ({ workspac
           </div>
 
           <div className="duplicates-feed">
-            {duplicateAlerts.map((dup) => (
-              <div key={dup.packageName} className="duplicate-card glass-panel">
-                <div className="dup-top">
-                  <span className="dup-pkg-name">{dup.packageName}</span>
-                  <span className="wasted-badge">~{dup.totalWastedKb} KB Wasted</span>
-                </div>
-                <div className="versions-row">
-                  <span className="ver-label">Versions:</span>
-                  {dup.versions.map((v) => (
-                    <span key={v} className="ver-pill">
-                      v{v}
-                    </span>
-                  ))}
-                </div>
-                <div className="dependents-row">
-                  <span className="dep-label">Pulled in by:</span>
-                  <span className="dep-list">{dup.dependents.join(', ')}</span>
-                </div>
+            {duplicateAlerts.length === 0 ? (
+              <div className="duplicate-card glass-panel" style={{ opacity: 0.85, fontSize: 12 }}>
+                ✔ No duplicate package versions detected in your workspace lockfile.
               </div>
-            ))}
+            ) : (
+              duplicateAlerts.map((dup) => (
+                <div key={dup.packageName} className="duplicate-card glass-panel">
+                  <div className="dup-top">
+                    <span className="dup-pkg-name">{dup.packageName}</span>
+                    <span className="wasted-badge">~{dup.totalWastedKb} KB Wasted</span>
+                  </div>
+                  <div className="versions-row">
+                    <span className="ver-label">Versions:</span>
+                    {dup.versions.map((v) => (
+                      <span key={v} className="ver-pill">
+                        v{v}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="dependents-row">
+                    <span className="dep-label">Pulled in by:</span>
+                    <span className="dep-list">{dup.dependents.join(', ')}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

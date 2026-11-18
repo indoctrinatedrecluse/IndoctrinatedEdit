@@ -39,14 +39,20 @@ interface DockerStudioViewProps {
 }
 
 export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoot }) => {
-  // Main Studio Mode: Docker or Kubernetes
-  const [engineMode, setEngineMode] = useState<'docker' | 'kubernetes'>('kubernetes')
+  // Main Studio Mode: Docker or Kubernetes (defaults to Docker Engine)
+  const [engineMode, setEngineMode] = useState<'docker' | 'kubernetes'>('docker')
   const [isSyncing, setIsSyncing] = useState(false)
   const [dockerLive, setDockerLive] = useState(false)
   const [k8sLive, setK8sLive] = useState(false)
   const [actionBanner, setActionBanner] = useState<string | null>(null)
   const [execCmd, setExecCmd] = useState('ls -la')
   const [execOutput, setExecOutput] = useState<string | null>(null)
+  const [containerExecCmd, setContainerExecCmd] = useState('uname -a')
+  const [containerExecOut, setContainerExecOut] = useState<string | null>(null)
+  const [composeMode, setComposeMode] = useState<'containers' | 'template'>('containers')
+  const [customComposeSvcName, setCustomComposeSvcName] = useState('')
+  const [customComposeSvcImage, setCustomComposeSvcImage] = useState('')
+  const [customComposeSvcPort, setCustomComposeSvcPort] = useState('')
 
   // Docker Tabs
   const [dockerTab, setDockerTab] = useState<'containers' | 'images' | 'volumes' | 'compose' | 'linter'>('containers')
@@ -129,6 +135,17 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
     setContainers(dockerService.getContainers())
   }
 
+  const handleRemoveContainer = async (id: string) => {
+    const res = await dockerService.containerActionAsync('rm', id)
+    if (!res.ok && res.error) setActionBanner(res.error)
+    const next = dockerService.getContainers()
+    setContainers(next)
+    if (selectedContainerId === id) {
+      setSelectedContainerId(next[0]?.id || null)
+      setContainerExecOut(null)
+    }
+  }
+
   const handlePruneImages = async () => {
     const res = await dockerService.pruneDanglingImagesAsync()
     setImages(dockerService.getImages())
@@ -175,6 +192,14 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
 
   const selectedContainer = containers.find((c) => c.id === selectedContainerId) || containers[0]
   const selectedPod = pods.find((p) => p.id === selectedPodId) || pods[0]
+
+  useEffect(() => {
+    setExecOutput(null)
+  }, [selectedPodId])
+
+  useEffect(() => {
+    setContainerExecOut(null)
+  }, [selectedContainerId])
 
   useEffect(() => {
     if (k8sLive && k8sTab === 'logs' && selectedPod?.id) {
@@ -886,6 +911,16 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
                             >
                               <RotateCw size={11} />
                             </button>
+                            <button
+                              className="ctrl-btn stop"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleRemoveContainer(c.id)
+                              }}
+                              title="Remove Container"
+                            >
+                              <Trash2 size={11} />
+                            </button>
                           </div>
                         </div>
 
@@ -895,13 +930,30 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
                         </div>
 
                         {c.status === 'running' && (
-                          <div className="container-telemetry-row">
-                            <div className="telemetry-bar">
-                              <Cpu size={10} />
-                              <span>{c.cpuPercent}% CPU</span>
+                          <div className="container-telemetry-row" style={{ flexDirection: 'column', gap: 4 }}>
+                            <div className="telemetry-bar" style={{ width: '100%', flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Cpu size={10} /> CPU</span>
+                                <span>{c.cpuPercent}%</span>
+                              </div>
+                              <div className="gauge-track" style={{ height: 4 }}>
+                                <div className="gauge-fill" style={{ width: `${Math.min(100, Math.max(2, c.cpuPercent))}%`, background: '#0A84FF' }} />
+                              </div>
                             </div>
-                            <div className="telemetry-bar">
-                              <span>{c.memoryUsageMb} MB / {c.memoryLimitMb} MB</span>
+                            <div className="telemetry-bar" style={{ width: '100%', flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
+                                <span>Memory</span>
+                                <span>{c.memoryUsageMb} MB / {c.memoryLimitMb} MB</span>
+                              </div>
+                              <div className="gauge-track" style={{ height: 4 }}>
+                                <div
+                                  className="gauge-fill"
+                                  style={{
+                                    width: `${Math.min(100, Math.max(2, c.memoryLimitMb > 0 ? (c.memoryUsageMb / c.memoryLimitMb) * 100 : 0))}%`,
+                                    background: '#BF5AF2',
+                                  }}
+                                />
+                              </div>
                             </div>
                           </div>
                         )}
@@ -910,12 +962,24 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
                   })}
                 </div>
 
-                {/* Container Log Inspector */}
+                {/* Container Log Inspector & Exec Console */}
                 {selectedContainer && (
                   <div className="container-logs-box glass-panel">
                     <div className="logs-header">
                       <span>LOGS: {selectedContainer.name}</span>
-                      <span className="logs-status-pill">{selectedContainer.status.toUpperCase()}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          className="log-action-btn"
+                          onClick={async () => {
+                            await dockerService.fetchContainerLogsAsync(selectedContainer.id)
+                            setContainers(dockerService.getContainers())
+                          }}
+                          title="Refresh Container Logs"
+                        >
+                          <RefreshCw size={10} /> Refresh
+                        </button>
+                        <span className="logs-status-pill">{selectedContainer.status.toUpperCase()}</span>
+                      </div>
                     </div>
                     <div className="logs-stream">
                       {selectedContainer.logs.map((log, idx) => (
@@ -924,6 +988,28 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
                         </div>
                       ))}
                     </div>
+                    <div className="log-controls-bar" style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                      <input
+                        type="text"
+                        className="log-filter-input"
+                        style={{ flex: 1 }}
+                        value={containerExecCmd}
+                        onChange={(e) => setContainerExecCmd(e.target.value)}
+                        placeholder="docker exec command (e.g. ls -la, env)..."
+                      />
+                      <button
+                        className="log-action-btn"
+                        onClick={async () => {
+                          const res = await dockerService.execInContainerAsync(selectedContainer.id, containerExecCmd)
+                          setContainerExecOut(res.output)
+                        }}
+                      >
+                        <Terminal size={11} /> Exec
+                      </button>
+                    </div>
+                    {containerExecOut && (
+                      <pre className="yaml-preview-box" style={{ maxHeight: 130, marginTop: 6 }}>{containerExecOut}</pre>
+                    )}
                   </div>
                 )}
               </div>
@@ -940,8 +1026,8 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
                 </div>
 
                 <div className="images-list">
-                  {images.map((img) => (
-                    <div key={img.id} className="image-card glass-panel">
+                  {images.map((img, idx) => (
+                    <div key={`${img.id}-${img.repository}-${img.tag}-${idx}`} className="image-card glass-panel">
                       <div className="img-title-row">
                         <span className="img-repo">{img.repository}:{img.tag}</span>
                         <span className="img-size">{img.sizeMb} MB</span>
@@ -980,49 +1066,93 @@ export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoo
             )}
 
             {/* TAB 4: COMPOSE TEMPLATE & RUNNER */}
-            {dockerTab === 'compose' && (
-              <div className="docker-section compose-section">
-                <div className="section-toolbar">
-                  <span className="section-label">DOCKER COMPOSE WORKBENCH</span>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      className="section-action-btn glass-interactive"
-                      onClick={async () => {
-                        const res = await dockerService.runComposeAsync('up', workspaceRoot)
-                        setActionBanner(res.output || (res.ok ? 'docker compose up -d succeeded' : 'docker compose up failed'))
-                        setContainers(dockerService.getContainers())
-                      }}
-                    >
-                      <Play size={11} /> Compose Up
-                    </button>
-                    <button
-                      className="section-action-btn glass-interactive"
-                      onClick={async () => {
-                        const res = await dockerService.runComposeAsync('down', workspaceRoot)
-                        setActionBanner(res.output || (res.ok ? 'docker compose down succeeded' : 'docker compose down failed'))
-                        setContainers(dockerService.getContainers())
-                      }}
-                    >
-                      <Square size={11} /> Compose Down
-                    </button>
-                    <button
-                      className="section-action-btn glass-interactive"
-                      onClick={() => {
-                        navigator.clipboard.writeText(dockerService.generateComposeTemplate())
-                        setCopied(true)
-                        setTimeout(() => setCopied(false), 1800)
-                      }}
-                    >
-                      {copied ? <Check size={11} color="#30D158" /> : <Copy size={11} />} Copy
-                    </button>
+            {dockerTab === 'compose' && (() => {
+              const composeYaml =
+                composeMode === 'containers'
+                  ? dockerService.generateComposeFromContainers(
+                      containers,
+                      customComposeSvcName && customComposeSvcImage
+                        ? { name: customComposeSvcName, image: customComposeSvcImage, port: customComposeSvcPort }
+                        : undefined
+                    )
+                  : dockerService.generateComposeTemplate()
+              return (
+                <div className="docker-section compose-section">
+                  <div className="section-toolbar" style={{ flexWrap: 'wrap', gap: 6 }}>
+                    <span className="section-label">DOCKER COMPOSE WORKBENCH</span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <select
+                        value={composeMode}
+                        onChange={(e) => setComposeMode(e.target.value as 'containers' | 'template')}
+                        className="ns-select"
+                        style={{ fontSize: 11 }}
+                      >
+                        <option value="containers">Generate from Active Containers</option>
+                        <option value="template">Full-Stack Starter Template</option>
+                      </select>
+                      <button
+                        className="section-action-btn glass-interactive"
+                        onClick={async () => {
+                          const res = await dockerService.runComposeAsync('up', workspaceRoot)
+                          setActionBanner(res.output || (res.ok ? 'docker compose up -d succeeded' : 'docker compose up failed'))
+                          setContainers(dockerService.getContainers())
+                        }}
+                      >
+                        <Play size={11} /> Compose Up
+                      </button>
+                      <button
+                        className="section-action-btn glass-interactive"
+                        onClick={async () => {
+                          const res = await dockerService.runComposeAsync('down', workspaceRoot)
+                          setActionBanner(res.output || (res.ok ? 'docker compose down succeeded' : 'docker compose down failed'))
+                          setContainers(dockerService.getContainers())
+                        }}
+                      >
+                        <Square size={11} /> Compose Down
+                      </button>
+                      <button
+                        className="section-action-btn glass-interactive"
+                        onClick={() => {
+                          navigator.clipboard.writeText(composeYaml)
+                          setCopied(true)
+                          setTimeout(() => setCopied(false), 1800)
+                        }}
+                      >
+                        {copied ? <Check size={11} color="#30D158" /> : <Copy size={11} />} Copy
+                      </button>
+                    </div>
                   </div>
-                </div>
+                  {composeMode === 'containers' && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        className="log-filter-input"
+                        placeholder="Add custom service name..."
+                        value={customComposeSvcName}
+                        onChange={(e) => setCustomComposeSvcName(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="log-filter-input"
+                        placeholder="Image (e.g. nginx:alpine)"
+                        value={customComposeSvcImage}
+                        onChange={(e) => setCustomComposeSvcImage(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="log-filter-input"
+                        style={{ width: 95 }}
+                        placeholder="Port 8080:80"
+                        value={customComposeSvcPort}
+                        onChange={(e) => setCustomComposeSvcPort(e.target.value)}
+                      />
+                    </div>
+                  )}
 
-                <pre className="compose-pre">
-                  {dockerService.generateComposeTemplate()}
-                </pre>
-              </div>
-            )}
+                  <pre className="compose-pre">{composeYaml}</pre>
+                </div>
+              )
+            })()}
 
             {/* TAB 5: DOCKERFILE LINTER */}
             {dockerTab === 'linter' && (

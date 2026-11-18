@@ -231,8 +231,8 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
         </button>
       </div>
 
-      {/* Profile Bar */}
-      {activeView === 'table' && (
+      {/* Profile Bar — visible across table, security, diff, and export tabs */}
+      {activeView !== 'matrix' && (
         <div className="profile-selector-bar">
           <div className="profile-chips">
             {profileNames.map((p) => (
@@ -267,22 +267,26 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
                 </button>
               </>
             )}
-            <button
-              className="toggle-mask-all-btn glass-interactive"
-              onClick={() => setRevealAllSecrets(!revealAllSecrets)}
-              title={revealAllSecrets ? 'Hide Secrets' : 'Reveal Secrets'}
-            >
-              {revealAllSecrets ? <EyeOff size={11} /> : <Eye size={11} />}
-              <span>{revealAllSecrets ? 'Mask All' : 'Reveal All'}</span>
-            </button>
+            {activeView === 'table' && (
+              <>
+                <button
+                  className="toggle-mask-all-btn glass-interactive"
+                  onClick={() => setRevealAllSecrets(!revealAllSecrets)}
+                  title={revealAllSecrets ? 'Hide Secrets' : 'Reveal Secrets'}
+                >
+                  {revealAllSecrets ? <EyeOff size={11} /> : <Eye size={11} />}
+                  <span>{revealAllSecrets ? 'Mask All' : 'Reveal All'}</span>
+                </button>
 
-            <button
-              className="add-var-btn glass-interactive"
-              onClick={handleAddVariable}
-              title="Add Variable"
-            >
-              <Plus size={12} />
-            </button>
+                <button
+                  className="add-var-btn glass-interactive"
+                  onClick={handleAddVariable}
+                  title="Add Variable"
+                >
+                  <Plus size={12} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -303,7 +307,7 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
               {variables.map((v, idx) => {
                 const isMasked = v.isSecret && !revealAllSecrets && !revealedKeys[v.key]
                 return (
-                  <div key={`${v.key}-${idx}`} className={`variable-card glass-panel ${v.hasError ? 'error' : ''}`}>
+                  <div key={idx} className={`variable-card glass-panel ${v.hasError ? 'error' : ''}`}>
                     <div className="card-top">
                       <div className="key-side">
                         <span className={`cat-pill ${v.category}`}>{v.category.replace('_', ' ')}</span>
@@ -473,6 +477,22 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
                   {diffReport.missingInActive.map((k) => (
                     <span key={k} className="missing-pill">
                       +{k}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {diffReport.duplicateKeys.length > 0 && (
+              <div className="missing-alert-box glass-panel" style={{ borderColor: 'rgba(255, 159, 10, 0.45)' }}>
+                <div className="alert-head">
+                  <AlertCircle size={13} className="alert-icon" style={{ color: '#FF9F0A' }} />
+                  <span>Duplicate Keys in {activeProfile} ({diffReport.duplicateKeys.length})</span>
+                </div>
+                <div className="missing-pills">
+                  {Array.from(new Set(diffReport.duplicateKeys)).map((k) => (
+                    <span key={k} className="missing-pill" style={{ background: 'rgba(255, 159, 10, 0.18)', color: '#FF9F0A' }}>
+                      {k}
                     </span>
                   ))}
                 </div>

@@ -20,6 +20,7 @@ export interface ImportCostEstimate {
   gzipKb: number
   treeShakeable: boolean
   hasSideEffects: boolean
+  source?: 'bundlephobia' | 'catalog' | 'offline-estimate'
   alternative?: { name: string; savingKb: number; reason: string }
 }
 
@@ -216,18 +217,17 @@ class BundleAnalyzerService {
       dependents: Array.isArray(d.dependents) && d.dependents.length > 0 ? d.dependents : ['package-lock.json'],
     }))
 
-    if (chunks.length > 0) {
+    // Always overwrite cached duplicate alerts with live lockfile scan (even if 0 duplicates found!)
+    this.duplicateAlerts = duplicates
+    if (scan.buildDir) {
       this.sampleChunks = chunks
-    }
-    if (duplicates.length > 0) {
-      this.duplicateAlerts = duplicates
     }
 
     return {
       isLive: Boolean(scan.buildDir),
       buildDir: scan.buildDir,
-      chunks: chunks.length > 0 ? chunks : this.getChunks(),
-      duplicates: duplicates.length > 0 ? duplicates : this.getDuplicates(),
+      chunks: scan.buildDir ? chunks : [],
+      duplicates,
     }
   }
 
@@ -267,6 +267,7 @@ class BundleAnalyzerService {
               gzipKb: Math.round((data.gzip / 1024) * 10) / 10,
               treeShakeable: Boolean(data.hasJSModule || data.hasJSNext),
               hasSideEffects: Boolean(data.hasSideEffects),
+              source: 'bundlephobia',
               alternative: known?.alternative,
             }
           }
@@ -281,9 +282,9 @@ class BundleAnalyzerService {
   public estimateImportCost(packageName: string): ImportCostEstimate {
     const clean = packageName.toLowerCase().trim()
     if (this.importEstimates[clean]) {
-      return this.importEstimates[clean]
+      return { ...this.importEstimates[clean], source: 'catalog' }
     }
-    // Dynamic fallback estimation
+    // Offline fallback heuristic when Bundlephobia API is unreachable
     const hash = clean.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
     const sizeKb = Math.round(((hash % 120) + 15) * 10) / 10
     return {
@@ -292,6 +293,7 @@ class BundleAnalyzerService {
       gzipKb: Math.round(sizeKb * 0.32 * 10) / 10,
       treeShakeable: true,
       hasSideEffects: false,
+      source: 'offline-estimate',
     }
   }
 

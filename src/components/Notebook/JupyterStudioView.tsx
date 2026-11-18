@@ -328,7 +328,15 @@ export const JupyterStudioView: React.FC<JupyterStudioViewProps> = ({ onCreateNo
                     <button
                       className="pkg-copy-btn glass-interactive"
                       onClick={() => {
-                        navigator.clipboard.writeText(`import ${pkg.name}`)
+                        const importMap: Record<string, string> = {
+                          'scikit-learn': 'sklearn',
+                          pillow: 'PIL',
+                          pyyaml: 'yaml',
+                          beautifulsoup4: 'bs4',
+                          'opencv-python': 'cv2',
+                        }
+                        const modName = importMap[pkg.name.toLowerCase()] || pkg.name.replace(/-/g, '_')
+                        navigator.clipboard.writeText(`import ${modName}`)
                         setCopiedPkg(pkg.name)
                         setTimeout(() => setCopiedPkg(null), 1500)
                       }}

@@ -132,10 +132,10 @@ class JupyterKernelService {
     },
     {
       id: 'datascience-pyodide-wasm',
-      name: 'pyodide',
-      displayName: 'DataScience & Pyodide (WASM Sandbox)',
+      name: 'python3-ds',
+      displayName: 'Python DataScience Profile (Local Python / Sandbox)',
       language: 'python',
-      version: '0.26.2',
+      version: '3.12',
       status: 'idle',
       activeExecutions: 0,
     },

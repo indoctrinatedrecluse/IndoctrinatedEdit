@@ -648,20 +648,39 @@ class CryptoDevToolsService {
   // ==========================================
 
   public convertEpoch(inputEpoch: number | string): EpochConverted {
-    let num = typeof inputEpoch === 'string' ? parseFloat(inputEpoch) : inputEpoch
-    if (!Number.isFinite(num)) num = Date.now()
-
-    // Detect if seconds vs milliseconds vs microseconds vs nanoseconds
     let date: Date
-    const absNum = Math.abs(num)
-    if (absNum < 10000000000) {
-      date = new Date(num * 1000)
-    } else if (absNum < 10000000000000) {
-      date = new Date(num)
-    } else if (absNum < 10000000000000000) {
-      date = new Date(num / 1000)
+    if (typeof inputEpoch === 'string') {
+      const trimmed = inputEpoch.trim()
+      if (!trimmed) {
+        date = new Date()
+      } else if (/^[+-]?\d+(\.\d+)?$/.test(trimmed)) {
+        const num = parseFloat(trimmed)
+        const absNum = Math.abs(num)
+        if (absNum < 10000000000) {
+          date = new Date(num * 1000)
+        } else if (absNum < 10000000000000) {
+          date = new Date(num)
+        } else if (absNum < 10000000000000000) {
+          date = new Date(num / 1000)
+        } else {
+          date = new Date(num / 1000000)
+        }
+      } else {
+        const parsedMs = Date.parse(trimmed)
+        date = Number.isFinite(parsedMs) ? new Date(parsedMs) : new Date(NaN)
+      }
     } else {
-      date = new Date(num / 1000000)
+      const num = Number.isFinite(inputEpoch) ? inputEpoch : Date.now()
+      const absNum = Math.abs(num)
+      if (absNum < 10000000000) {
+        date = new Date(num * 1000)
+      } else if (absNum < 10000000000000) {
+        date = new Date(num)
+      } else if (absNum < 10000000000000000) {
+        date = new Date(num / 1000)
+      } else {
+        date = new Date(num / 1000000)
+      }
     }
 
     const timeMs = date.getTime()
@@ -777,7 +796,11 @@ class CryptoDevToolsService {
   // 7. DATA FORMAT TRANSFORMERS
   // ==========================================
 
-  public transformFormat(input: string, from: 'json' | 'yaml' | 'xml' | 'csv', to: 'json' | 'yaml' | 'xml' | 'csv'): string {
+  public transformFormat(
+    input: string,
+    from: 'json' | 'yaml' | 'toml' | 'xml' | 'csv',
+    to: 'json' | 'yaml' | 'toml' | 'xml' | 'csv'
+  ): string {
     try {
       let parsedObject: any
 
@@ -785,6 +808,8 @@ class CryptoDevToolsService {
         parsedObject = JSON.parse(input)
       } else if (from === 'yaml') {
         parsedObject = this.simpleYamlToJson(input)
+      } else if (from === 'toml') {
+        parsedObject = this.simpleTomlToJson(input)
       } else if (from === 'csv') {
         parsedObject = this.csvToJson(input)
       } else {
@@ -795,6 +820,8 @@ class CryptoDevToolsService {
         return JSON.stringify(parsedObject, null, 2)
       } else if (to === 'yaml') {
         return this.jsonToYaml(parsedObject)
+      } else if (to === 'toml') {
+        return this.jsonToToml(parsedObject)
       } else if (to === 'csv') {
         return this.jsonToCsv(parsedObject)
       } else if (to === 'xml') {
@@ -924,11 +951,13 @@ class CryptoDevToolsService {
   // --- HASH ALGORITHMS (Deterministic JavaScript implementations) ---
 
   private sha256Hex(input: string): string {
-    // Convert UTF-8 string to raw byte sequence so non-ASCII inputs produce RFC 6234 compliant digests
-    const utf8Bytes = new TextEncoder().encode(input)
+    return this.sha256HexBytes(new TextEncoder().encode(input))
+  }
+
+  private sha256HexBytes(bytes: Uint8Array): string {
     let ascii = ''
-    for (let idx = 0; idx < utf8Bytes.length; idx++) {
-      ascii += String.fromCharCode(utf8Bytes[idx])
+    for (let idx = 0; idx < bytes.length; idx++) {
+      ascii += String.fromCharCode(bytes[idx])
     }
     const mathPow = Math.pow
     const maxWord = mathPow(2, 32)
@@ -1012,22 +1041,147 @@ class CryptoDevToolsService {
 
   // --- DATA CONVERTER HELPERS ---
 
-  private simpleYamlToJson(yaml: string): Record<string, any> {
-    const lines = yaml.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#'))
-    const result: Record<string, any> = {}
+  private parseScalarValue(raw: string): any {
+    const val = raw.trim()
+    if (val === 'true') return true
+    if (val === 'false') return false
+    if (val === 'null' || val === '~') return null
+    if (val.startsWith('[') && val.endsWith(']')) {
+      const inner = val.slice(1, -1).trim()
+      if (!inner) return []
+      return inner.split(',').map((item) => this.parseScalarValue(item))
+    }
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      return val.slice(1, -1)
+    }
+    if (val !== '' && /^[+-]?\d+(\.\d+)?$/.test(val)) return Number(val)
+    return val
+  }
 
-    for (const line of lines) {
-      const colonIdx = line.indexOf(':')
-      if (colonIdx !== -1) {
-        const key = line.substring(0, colonIdx).trim()
-        const val = line.substring(colonIdx + 1).trim()
-        if (val === 'true') result[key] = true
-        else if (val === 'false') result[key] = false
-        else if (!isNaN(Number(val)) && val !== '') result[key] = Number(val)
-        else result[key] = val.replace(/^["']|["']$/g, '')
+  private simpleYamlToJson(yaml: string): Record<string, any> {
+    const lines = yaml.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#'))
+    const root: Record<string, any> = {}
+    const stack: Array<{ indent: number; target: any; parentObj?: Record<string, any>; parentKey?: string }> = [
+      { indent: -1, target: root },
+    ]
+
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i]
+      const indent = rawLine.search(/\S/)
+      const trimmed = rawLine.trim()
+
+      while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+        stack.pop()
+      }
+
+      const current = stack[stack.length - 1]
+
+      if (trimmed.startsWith('- ')) {
+        const itemStr = trimmed.slice(2).trim()
+        if (!Array.isArray(current.target)) {
+          if (current.parentObj && current.parentKey) {
+            current.parentObj[current.parentKey] = []
+            current.target = current.parentObj[current.parentKey]
+          }
+        }
+        if (Array.isArray(current.target)) {
+          const kvIdx = itemStr.indexOf(':')
+          if (kvIdx !== -1 && !itemStr.startsWith('"') && !itemStr.startsWith("'")) {
+            const k = itemStr.slice(0, kvIdx).trim()
+            const v = itemStr.slice(kvIdx + 1).trim()
+            const obj: Record<string, any> = { [k]: this.parseScalarValue(v) }
+            current.target.push(obj)
+            stack.push({ indent, target: obj })
+          } else {
+            current.target.push(this.parseScalarValue(itemStr))
+          }
+        }
+        continue
+      }
+
+      const colonIdx = trimmed.indexOf(':')
+      if (colonIdx !== -1 && typeof current.target === 'object' && !Array.isArray(current.target)) {
+        const key = trimmed.slice(0, colonIdx).trim()
+        const val = trimmed.slice(colonIdx + 1).trim()
+        if (val === '') {
+          // Peek next line to decide array vs nested object
+          const nextLine = lines[i + 1]
+          const nextTrimmed = nextLine ? nextLine.trim() : ''
+          const container = nextTrimmed.startsWith('- ') ? [] : {}
+          current.target[key] = container
+          stack.push({ indent, target: container, parentObj: current.target, parentKey: key })
+        } else {
+          current.target[key] = this.parseScalarValue(val)
+        }
       }
     }
-    return result
+    return root
+  }
+
+  private simpleTomlToJson(toml: string): Record<string, any> {
+    const root: Record<string, any> = {}
+    let currentSection: Record<string, any> = root
+    const lines = toml.split(/\r?\n/)
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('#')) continue
+
+      const sectionMatch = line.match(/^\[([^\]]+)\]$/)
+      if (sectionMatch) {
+        const parts = sectionMatch[1].split('.').map((p) => p.trim()).filter(Boolean)
+        let cursor = root
+        for (const p of parts) {
+          if (typeof cursor[p] !== 'object' || cursor[p] === null || Array.isArray(cursor[p])) {
+            cursor[p] = {}
+          }
+          cursor = cursor[p]
+        }
+        currentSection = cursor
+        continue
+      }
+
+      const eqIdx = line.indexOf('=')
+      if (eqIdx !== -1) {
+        const key = line.slice(0, eqIdx).trim().replace(/^["']|["']$/g, '')
+        const rawVal = line.slice(eqIdx + 1).trim()
+        // Strip trailing inline comment outside quotes
+        let cleanedVal = rawVal
+        if (!rawVal.startsWith('"') && !rawVal.startsWith("'")) {
+          const hashIdx = rawVal.indexOf(' #')
+          if (hashIdx !== -1) cleanedVal = rawVal.slice(0, hashIdx).trim()
+        }
+        currentSection[key] = this.parseScalarValue(cleanedVal)
+      }
+    }
+    return root
+  }
+
+  private jsonToToml(obj: any, prefix = ''): string {
+    if (typeof obj !== 'object' || obj === null) {
+      return `value = ${JSON.stringify(obj)}\n`
+    }
+    const formatVal = (v: any): string => {
+      if (typeof v === 'string') return JSON.stringify(v)
+      if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+      if (Array.isArray(v)) return `[${v.map((item) => formatVal(item)).join(', ')}]`
+      if (v === null || v === undefined) return '""'
+      return JSON.stringify(v)
+    }
+
+    const scalars: string[] = []
+    const sections: string[] = []
+    for (const [key, val] of Object.entries(obj)) {
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key
+        sections.push(`[${fullKey}]\n${this.jsonToToml(val, fullKey)}`)
+      } else {
+        scalars.push(`${key} = ${formatVal(val)}`)
+      }
+    }
+    const head = scalars.length > 0 ? scalars.join('\n') + '\n' : ''
+    const body = sections.length > 0 ? (head ? '\n' : '') + sections.join('\n') : ''
+    return head + body
   }
 
   private jsonToYaml(obj: any, indent = 0): string {
@@ -1111,17 +1265,44 @@ class CryptoDevToolsService {
     return rows.join('\n')
   }
 
-  private jsonToXml(obj: any, rootTag = 'root'): string {
-    let xml = `<${rootTag}>\n`
-    for (const [key, val] of Object.entries(obj)) {
-      if (typeof val === 'object' && val !== null) {
-        xml += `  <${key}>\n    ${JSON.stringify(val)}\n  </${key}>\n`
-      } else {
-        xml += `  <${key}>${val}</${key}>\n`
-      }
+  private escapeXml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  }
+
+  private sanitizeXmlTag(name: string): string {
+    const cleaned = name.replace(/[^a-zA-Z0-9_.-]/g, '_')
+    return /^[a-zA-Z_]/.test(cleaned) ? cleaned : `item_${cleaned}`
+  }
+
+  private jsonToXml(obj: any, rootTag = 'root', indent = 0): string {
+    const pad = ' '.repeat(indent)
+    const safeRoot = this.sanitizeXmlTag(rootTag)
+    if (obj === null || obj === undefined) {
+      return `${pad}<${safeRoot} />`
     }
-    xml += `</${rootTag}>`
-    return xml
+    if (typeof obj !== 'object') {
+      return `${pad}<${safeRoot}>${this.escapeXml(String(obj))}</${safeRoot}>`
+    }
+    if (Array.isArray(obj)) {
+      const inner = obj.map((item) => this.jsonToXml(item, 'item', indent + 2)).join('\n')
+      return `${pad}<${safeRoot}>\n${inner}\n${pad}</${safeRoot}>`
+    }
+    const entries = Object.entries(obj)
+    if (entries.length === 0) return `${pad}<${safeRoot} />`
+    const children = entries
+      .map(([key, val]) => {
+        if (Array.isArray(val)) {
+          return val.map((item) => this.jsonToXml(item, key, indent + 2)).join('\n')
+        }
+        return this.jsonToXml(val, key, indent + 2)
+      })
+      .join('\n')
+    return `${pad}<${safeRoot}>\n${children}\n${pad}</${safeRoot}>`
   }
 
   // ==========================================
@@ -1371,9 +1552,7 @@ class CryptoDevToolsService {
             }
           }
 
-          // Compute SHA-256 over raw DER bytes
-          let derBin = ''
-          for (let i = 0; i < der.length; i++) derBin += String.fromCharCode(der[i])
+          // Compute SHA-256 directly over raw DER bytes (avoid UTF-8 re-encoding bytes >= 0x80)
           return {
             isValid: true,
             subject,
@@ -1385,7 +1564,7 @@ class CryptoDevToolsService {
             san: san.length > 0 ? san : subject.commonName ? [subject.commonName] : [],
             algorithm: ALG_NAMES[algOid] || algOid || 'Unknown',
             serialNumber: serialHex || 'N/A',
-            fingerprintSha256: this.sha256Hex(derBin),
+            fingerprintSha256: this.sha256HexBytes(der),
           }
         }
       } catch {

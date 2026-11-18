@@ -6,6 +6,7 @@ import {
   Sparkles,
   RotateCw,
   Plus,
+  Trash2,
 } from 'lucide-react'
 import { taskRunnerService, ProjectTask, CronScheduleAnalysis } from '../../services/taskRunnerService'
 import './TaskRunnerView.css'
@@ -41,9 +42,40 @@ export const TaskRunnerView: React.FC<TaskRunnerViewProps> = ({ workspaceRoot })
 
   const handleRunTask = async (taskId: string) => {
     setRunningTaskId(taskId)
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              lastRun: {
+                status: 'running',
+                durationMs: 0,
+                timestamp: new Date().toLocaleTimeString(),
+                output: `> Running "${t.command}"...\n`,
+              },
+            }
+          : t
+      )
+    )
     await taskRunnerService.runTask(taskId, workspaceRoot)
     setTasks(taskRunnerService.getTasks())
     setRunningTaskId(null)
+  }
+
+  const handleDeleteCustomTask = (taskId: string) => {
+    taskRunnerService.deleteCustomTask(taskId)
+    setTasks(taskRunnerService.getTasks())
+  }
+
+  const cronParts = (() => {
+    const p = cronExpr.trim().split(/\s+/)
+    return p.length === 5 ? p : ['*', '*', '*', '*', '*']
+  })()
+
+  const updateCronField = (idx: number, val: string) => {
+    const next = [...cronParts]
+    next[idx] = val
+    setCronExpr(next.join(' '))
   }
 
   const handleAddCustomTask = () => {
@@ -129,14 +161,26 @@ export const TaskRunnerView: React.FC<TaskRunnerViewProps> = ({ workspaceRoot })
                         <span className="task-name">{task.name}</span>
                         <span className="task-source-badge">{task.source}</span>
                       </div>
-                      <button
-                        className="task-run-btn glass-interactive"
-                        onClick={() => handleRunTask(task.id)}
-                        disabled={isRunning}
-                      >
-                        {isRunning ? <RotateCw size={11} className="spin" /> : <Play size={11} />}
-                        <span>{isRunning ? 'Running...' : 'Run Task'}</span>
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {task.source === 'Custom' && task.id.startsWith('custom_') && (
+                          <button
+                            className="task-run-btn glass-interactive"
+                            style={{ color: '#FF453A', padding: '4px 6px' }}
+                            onClick={() => handleDeleteCustomTask(task.id)}
+                            title="Delete Custom Task"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                        <button
+                          className="task-run-btn glass-interactive"
+                          onClick={() => handleRunTask(task.id)}
+                          disabled={isRunning}
+                        >
+                          {isRunning ? <RotateCw size={11} className="spin" /> : <Play size={11} />}
+                          <span>{isRunning ? 'Running...' : 'Run Task'}</span>
+                        </button>
+                      </div>
                     </div>
 
                     <code className="task-cmd">{task.command}</code>
@@ -185,6 +229,111 @@ export const TaskRunnerView: React.FC<TaskRunnerViewProps> = ({ workspaceRoot })
                 onChange={(e) => setCronExpr(e.target.value)}
                 placeholder="* * * * *"
               />
+
+              {/* Visual 5-Field Cron Builder */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6, marginTop: 8, marginBottom: 8 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
+                  <span style={{ opacity: 0.7 }}>Minute</span>
+                  <select
+                    className="cron-input"
+                    style={{ padding: '4px 6px', fontSize: 11 }}
+                    value={cronParts[0]}
+                    onChange={(e) => updateCronField(0, e.target.value)}
+                  >
+                    <option value="*">Every (*)</option>
+                    <option value="*/5">Every 5m (*/5)</option>
+                    <option value="*/15">Every 15m (*/15)</option>
+                    <option value="*/30">Every 30m (*/30)</option>
+                    <option value="0">:00</option>
+                    <option value="15">:15</option>
+                    <option value="30">:30</option>
+                    <option value="45">:45</option>
+                    {!['*', '*/5', '*/15', '*/30', '0', '15', '30', '45'].includes(cronParts[0]) && (
+                      <option value={cronParts[0]}>{cronParts[0]}</option>
+                    )}
+                  </select>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
+                  <span style={{ opacity: 0.7 }}>Hour</span>
+                  <select
+                    className="cron-input"
+                    style={{ padding: '4px 6px', fontSize: 11 }}
+                    value={cronParts[1]}
+                    onChange={(e) => updateCronField(1, e.target.value)}
+                  >
+                    <option value="*">Every (*)</option>
+                    <option value="*/2">Every 2h</option>
+                    <option value="*/6">Every 6h</option>
+                    <option value="0">00:00</option>
+                    <option value="6">06:00</option>
+                    <option value="9">09:00</option>
+                    <option value="12">12:00</option>
+                    <option value="18">18:00</option>
+                    {!['*', '*/2', '*/6', '0', '6', '9', '12', '18'].includes(cronParts[1]) && (
+                      <option value={cronParts[1]}>{cronParts[1]}</option>
+                    )}
+                  </select>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
+                  <span style={{ opacity: 0.7 }}>Day (Mo)</span>
+                  <select
+                    className="cron-input"
+                    style={{ padding: '4px 6px', fontSize: 11 }}
+                    value={cronParts[2]}
+                    onChange={(e) => updateCronField(2, e.target.value)}
+                  >
+                    <option value="*">Every (*)</option>
+                    <option value="1">1st</option>
+                    <option value="15">15th</option>
+                    <option value="1,15">1st &amp; 15th</option>
+                    {!['*', '1', '15', '1,15'].includes(cronParts[2]) && (
+                      <option value={cronParts[2]}>{cronParts[2]}</option>
+                    )}
+                  </select>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
+                  <span style={{ opacity: 0.7 }}>Month</span>
+                  <select
+                    className="cron-input"
+                    style={{ padding: '4px 6px', fontSize: 11 }}
+                    value={cronParts[3]}
+                    onChange={(e) => updateCronField(3, e.target.value)}
+                  >
+                    <option value="*">Every (*)</option>
+                    <option value="1">Jan</option>
+                    <option value="4">Apr</option>
+                    <option value="7">Jul</option>
+                    <option value="10">Oct</option>
+                    <option value="1,4,7,10">Quarterly</option>
+                    {!['*', '1', '4', '7', '10', '1,4,7,10'].includes(cronParts[3]) && (
+                      <option value={cronParts[3]}>{cronParts[3]}</option>
+                    )}
+                  </select>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
+                  <span style={{ opacity: 0.7 }}>Weekday</span>
+                  <select
+                    className="cron-input"
+                    style={{ padding: '4px 6px', fontSize: 11 }}
+                    value={cronParts[4]}
+                    onChange={(e) => updateCronField(4, e.target.value)}
+                  >
+                    <option value="*">Every (*)</option>
+                    <option value="1-5">Weekdays</option>
+                    <option value="6,0">Weekends</option>
+                    <option value="1">Mon</option>
+                    <option value="5">Fri</option>
+                    <option value="0">Sun</option>
+                    {!['*', '1-5', '6,0', '1', '5', '0'].includes(cronParts[4]) && (
+                      <option value={cronParts[4]}>{cronParts[4]}</option>
+                    )}
+                  </select>
+                </label>
+              </div>
 
               {/* Quick Presets */}
               <div
