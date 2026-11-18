@@ -90,13 +90,14 @@ class LspService {
     const lines = content.split(/\r?\n/)
     const escaped = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-    // Patterns indicating a definition
+    // Patterns indicating a genuine declaration (not a plain call expression)
     const defPatterns = [
-      new RegExp(`(?:function|class|interface|type|enum|struct|trait|const|let|var)\\s+${escaped}\\b`),
-      new RegExp(`(?:def|class)\\s+${escaped}\\b`), // Python
-      new RegExp(`func(?:\\s+\\([^)]+\\))?\\s+${escaped}\\b`), // Go
-      new RegExp(`fn\\s+${escaped}\\b`), // Rust
-      new RegExp(`(?:public|private|protected|static|final|async|export)?\\s*(?:function|class|interface)?\\s*${escaped}\\s*\\(`),
+      new RegExp(`\\b(?:function|class|interface|type|enum|struct|trait|const|let|var)\\s+${escaped}\\b`),
+      new RegExp(`\\b(?:def|class)\\s+${escaped}\\b`), // Python
+      new RegExp(`\\bfunc(?:\\s+\\([^)]+\\))?\\s+${escaped}\\b`), // Go
+      new RegExp(`\\bfn\\s+${escaped}\\b`), // Rust
+      new RegExp(`\\b(?:public|private|protected|static|final|override|async)\\s+(?:static\\s+|async\\s+)?(?:function\\s+|class\\s+|interface\\s+)?${escaped}\\s*\\(`),
+      new RegExp(`^\\s*(?:async\\s+)?${escaped}\\s*\\([^)]*\\)\\s*(?::[^{]+)?\\{`),
     ]
 
     for (let i = 0; i < lines.length; i++) {
@@ -154,7 +155,63 @@ class LspService {
   }
 
   /**
-   * Plan a Workspace Symbol Rename (F2) across all files
+   * Returns a boolean mask marking code characters (true) vs comments/strings (false)
+   * so rename/reference operations never corrupt string literals or comments.
+   */
+  private buildCodeCharMask(lines: string[]): boolean[][] {
+    let inBlockComment = false
+    return lines.map((line) => {
+      const mask = new Array<boolean>(line.length).fill(true)
+      let quote: string | null = null
+
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        const next = line[i + 1]
+
+        if (inBlockComment) {
+          mask[i] = false
+          if (ch === '*' && next === '/') {
+            if (i + 1 < line.length) mask[i + 1] = false
+            inBlockComment = false
+            i++
+          }
+          continue
+        }
+
+        if (quote) {
+          mask[i] = false
+          if (ch === '\\' && i + 1 < line.length) {
+            mask[i + 1] = false
+            i++
+            continue
+          }
+          if (ch === quote) quote = null
+          continue
+        }
+
+        if (ch === '/' && next === '/') {
+          for (let k = i; k < line.length; k++) mask[k] = false
+          break
+        }
+        if (ch === '/' && next === '*') {
+          mask[i] = false
+          if (i + 1 < line.length) mask[i + 1] = false
+          inBlockComment = true
+          i++
+          continue
+        }
+        if (ch === '"' || ch === "'" || ch === '`') {
+          mask[i] = false
+          quote = ch
+          continue
+        }
+      }
+      return mask
+    })
+  }
+
+  /**
+   * Plan a Workspace Symbol Rename (F2) across all files (skipping strings and comments)
    */
   public prepareRename(symbolName: string, newName: string): LspRenameResult {
     const cleanOld = symbolName.trim()
@@ -170,14 +227,18 @@ class LspService {
     for (const [filePath, content] of Object.entries(files)) {
       if (typeof content !== 'string') continue
       const lines = content.split(/\r?\n/)
+      const masks = this.buildCodeCharMask(lines)
       const fileChanges: LspRenameChange[] = []
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
+        const mask = masks[i]
         let match: RegExpExecArray | null
         regex.lastIndex = 0
 
         while ((match = regex.exec(line)) !== null) {
+          // Skip occurrences inside strings or comments
+          if (!mask[match.index]) continue
           totalOccurrences++
           fileChanges.push({
             filePath,
@@ -206,7 +267,7 @@ class LspService {
   }
 
   /**
-   * Apply rename changes to the files dictionary
+   * Apply planned rename changes precisely by column offset (never corrupting strings/comments)
    */
   public applyRename(
     renameResult: LspRenameResult,
@@ -214,16 +275,34 @@ class LspService {
   ): Record<string, string> {
     const updatedMap = { ...fileMap }
 
-    for (const [filePath, _changes] of renameResult.changes.entries()) {
+    for (const [filePath, changes] of renameResult.changes.entries()) {
       const content = updatedMap[filePath]
-      if (!content) continue
+      if (!content || changes.length === 0) continue
 
       const lines = content.split(/\r?\n/)
-      const escaped = renameResult.symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const regex = new RegExp(`\\b${escaped}\\b`, 'g')
+      // Group changes by line and apply right-to-left so earlier column offsets remain valid
+      const byLine = new Map<number, LspRenameChange[]>()
+      for (const ch of changes) {
+        if (!byLine.has(ch.lineNumber)) byLine.set(ch.lineNumber, [])
+        byLine.get(ch.lineNumber)!.push(ch)
+      }
 
-      const newLines = lines.map((line) => line.replace(regex, renameResult.newName))
-      updatedMap[filePath] = newLines.join('\n')
+      for (const [lineNum, lineChanges] of byLine.entries()) {
+        const idx = lineNum - 1
+        if (idx < 0 || idx >= lines.length) continue
+        let line = lines[idx]
+        const sorted = [...lineChanges].sort((a, b) => b.startColumn - a.startColumn)
+        for (const ch of sorted) {
+          const start = ch.startColumn - 1
+          const end = ch.endColumn - 1
+          if (line.slice(start, end) === ch.oldText) {
+            line = line.slice(0, start) + ch.newText + line.slice(end)
+          }
+        }
+        lines[idx] = line
+      }
+
+      updatedMap[filePath] = lines.join('\n')
     }
 
     return updatedMap

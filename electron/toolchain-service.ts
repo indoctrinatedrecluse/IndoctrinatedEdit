@@ -284,9 +284,11 @@ export async function extractVersion(
   customPattern?: string
 ): Promise<string | undefined> {
   try {
+    const isWindowsBatchShim = process.platform === 'win32' && /\.(cmd|bat)$/i.test(executablePath)
     const { stdout, stderr } = await execFileAsync(executablePath, [versionFlag], {
-      timeout: 1200,
+      timeout: 4000,
       windowsHide: true,
+      shell: isWindowsBatchShim,
     })
     const rawOutput = (stdout + ' ' + stderr).trim()
 

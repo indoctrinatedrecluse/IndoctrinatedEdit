@@ -24,12 +24,45 @@ export interface FolderOpenResult {
   files: Array<{ name: string; path: string; isDirectory: boolean }>
 }
 
+export interface ElectronGitBlameEntry {
+  lineNumber: number
+  hash: string
+  shortHash: string
+  author: string
+  authorEmail: string
+  date: string
+  summary: string
+}
+
 export interface ElectronGitAPI {
   getRepoStatus: (cwd?: string) => Promise<GitRepoStatus>
   stageFile: (filePath: string, cwd?: string) => Promise<boolean>
   unstageFile: (filePath: string, cwd?: string) => Promise<boolean>
   commit: (message: string, cwd?: string) => Promise<boolean>
   initRepo: (cwd?: string) => Promise<boolean>
+  blame: (filePath: string, cwd?: string) => Promise<ElectronGitBlameEntry[]>
+  diff: (options?: { staged?: boolean; filePath?: string; cwd?: string }) => Promise<string>
+  applyPatch: (patch: string, options?: { cached?: boolean; reverse?: boolean; cwd?: string }) => Promise<{ success: boolean; error?: string }>
+}
+
+export interface ElectronWorkspaceToolsAPI {
+  execCommand: (options: { command: string; cwd?: string; env?: Record<string, string>; timeoutMs?: number }) => Promise<{
+    exitCode: number
+    stdout: string
+    stderr: string
+    durationMs: number
+    timedOut: boolean
+  }>
+  findFiles: (options: { rootDir: string; maxDepth?: number; maxFiles?: number; includeExtensions?: string[] }) => Promise<Array<{ name: string; path: string; relativePath: string; sizeBytes: number }>>
+  searchText: (options: { rootDir: string; query: string; isRegex?: boolean; caseSensitive?: boolean; filePattern?: string; maxMatches?: number }) => Promise<Array<{ filePath: string; relativePath: string; lineNumber: number; lineText: string }>>
+  scanBundle: (rootDir: string) => Promise<{
+    buildDir: string | null
+    totalRawBytes: number
+    totalGzipBytes: number
+    files: Array<{ name: string; relativePath: string; rawSizeBytes: number; gzipSizeBytes: number; extension: string }>
+    duplicates: Array<{ name: string; versions: string[] }>
+  }>
+  readFileBinary: (filePath: string, maxBytes?: number) => Promise<Uint8Array>
 }
 
 export interface ElectronAiAPI {
@@ -247,6 +280,9 @@ export interface ElectronAPI {
   // Licensing & Activation subsystem
   license: ElectronLicenseAPI
 
+  // Workspace CLI, search, bundle scan & binary read tools
+  workspace: ElectronWorkspaceToolsAPI
+
   // Lifecycle notification
   notifyReady: () => Promise<void>
 }
@@ -281,6 +317,18 @@ const api: ElectronAPI = {
     unstageFile: (filePath: string, cwd?: string) => ipcRenderer.invoke('git:unstageFile', filePath, cwd),
     commit: (message: string, cwd?: string) => ipcRenderer.invoke('git:commit', message, cwd),
     initRepo: (cwd?: string) => ipcRenderer.invoke('git:init', cwd),
+    blame: (filePath: string, cwd?: string) => ipcRenderer.invoke('git:blame', filePath, cwd),
+    diff: (options?: { staged?: boolean; filePath?: string; cwd?: string }) => ipcRenderer.invoke('git:diff', options),
+    applyPatch: (patch: string, options?: { cached?: boolean; reverse?: boolean; cwd?: string }) =>
+      ipcRenderer.invoke('git:applyPatch', patch, options),
+  },
+
+  workspace: {
+    execCommand: (options) => ipcRenderer.invoke('workspace:execCommand', options),
+    findFiles: (options) => ipcRenderer.invoke('workspace:findFiles', options),
+    searchText: (options) => ipcRenderer.invoke('workspace:searchText', options),
+    scanBundle: (rootDir) => ipcRenderer.invoke('workspace:scanBundle', rootDir),
+    readFileBinary: (filePath, maxBytes) => ipcRenderer.invoke('workspace:readFileBinary', filePath, maxBytes),
   },
 
   ai: {

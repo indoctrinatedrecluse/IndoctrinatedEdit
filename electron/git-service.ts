@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { GitCommit, GitFileChange, GitFileStatusCode, GitRepoStatus } from '../packages/sdk/types'
 
@@ -261,4 +261,116 @@ export async function initGitRepository(cwd: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+export interface GitBlameEntry {
+  lineNumber: number
+  hash: string
+  shortHash: string
+  author: string
+  authorEmail: string
+  date: string
+  summary: string
+}
+
+/**
+ * Pure parser for `git blame --line-porcelain <file>` output.
+ */
+export function parseGitBlamePorcelain(raw: string): GitBlameEntry[] {
+  const entries: GitBlameEntry[] = []
+  if (!raw) return entries
+
+  const lines = raw.split(/\r?\n/)
+  let curHash = ''
+  let curLine = 0
+  let curAuthor = 'Unknown'
+  let curEmail = ''
+  let curTime = 0
+  let curSummary = ''
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^([0-9a-f]{40})\s+\d+\s+(\d+)(?:\s+\d+)?$/)
+    if (headerMatch) {
+      curHash = headerMatch[1]
+      curLine = Number(headerMatch[2])
+      continue
+    }
+    if (line.startsWith('author ')) {
+      curAuthor = line.slice(7).trim()
+    } else if (line.startsWith('author-mail ')) {
+      curEmail = line.slice(12).trim().replace(/^<|>$/g, '')
+    } else if (line.startsWith('author-time ')) {
+      curTime = Number(line.slice(12).trim()) || 0
+    } else if (line.startsWith('summary ')) {
+      curSummary = line.slice(8).trim()
+    } else if (line.startsWith('\t')) {
+      entries.push({
+        lineNumber: curLine,
+        hash: curHash,
+        shortHash: curHash.slice(0, 7),
+        author: curAuthor,
+        authorEmail: curEmail,
+        date: curTime ? new Date(curTime * 1000).toISOString() : '',
+        summary: curSummary,
+      })
+    }
+  }
+
+  return entries
+}
+
+export async function getGitBlame(cwd: string, filePath: string): Promise<GitBlameEntry[]> {
+  try {
+    const raw = await runGitRaw(['blame', '--line-porcelain', '--', filePath], cwd)
+    return parseGitBlamePorcelain(raw)
+  } catch {
+    return []
+  }
+}
+
+export async function getGitDiff(
+  cwd: string,
+  options?: { staged?: boolean; filePath?: string }
+): Promise<string> {
+  try {
+    const args = ['diff']
+    if (options?.staged) args.push('--cached')
+    if (options?.filePath) {
+      args.push('--', options.filePath)
+    }
+    return await runGitRaw(args, cwd)
+  } catch {
+    return ''
+  }
+}
+
+export async function applyGitPatch(
+  cwd: string,
+  patch: string,
+  options?: { cached?: boolean; reverse?: boolean }
+): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const args = ['apply']
+    if (options?.cached) args.push('--cached')
+    if (options?.reverse) args.push('--reverse')
+    args.push('-')
+
+    const child = spawn('git', args, { cwd, windowsHide: true })
+    let stderr = ''
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk)
+    })
+    child.on('error', (err) => {
+      resolve({ success: false, error: err.message })
+    })
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ success: true })
+      } else {
+        resolve({ success: false, error: stderr.trim() || `git apply exited with code ${code}` })
+      }
+    })
+    child.stdin.write(patch)
+    child.stdin.end()
+  })
 }

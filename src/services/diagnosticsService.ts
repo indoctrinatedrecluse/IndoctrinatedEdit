@@ -247,13 +247,53 @@ export class DiagnosticsService {
         }
       })
 
-      // Bracket / Paren parity check
+      // Bracket / Paren / Brace parity check (ignoring string literals and comments)
       let parenCount = 0
       let braceCount = 0
       let bracketCount = 0
+      let quote: string | null = null
+      let inLineComment = false
+      let inBlockComment = false
 
       for (let i = 0; i < content.length; i++) {
         const ch = content[i]
+        const next = content[i + 1]
+
+        if (inLineComment) {
+          if (ch === '\n') inLineComment = false
+          continue
+        }
+        if (inBlockComment) {
+          if (ch === '*' && next === '/') {
+            inBlockComment = false
+            i++
+          }
+          continue
+        }
+        if (quote) {
+          if (ch === '\\') {
+            i++
+            continue
+          }
+          if (ch === quote) quote = null
+          continue
+        }
+
+        if (ch === '/' && next === '/') {
+          inLineComment = true
+          i++
+          continue
+        }
+        if (ch === '/' && next === '*') {
+          inBlockComment = true
+          i++
+          continue
+        }
+        if (ch === '"' || ch === "'" || ch === '`') {
+          quote = ch
+          continue
+        }
+
         if (ch === '(') parenCount++
         else if (ch === ')') parenCount--
         else if (ch === '{') braceCount++
@@ -285,6 +325,19 @@ export class DiagnosticsService {
           endColumn: 5,
           source: 'parser',
           code: 'syntax(brace-mismatch)',
+        })
+      }
+
+      if (bracketCount !== 0) {
+        items.push({
+          message: bracketCount > 0 ? 'Unclosed square bracket "[" detected.' : 'Unmatched closing square bracket "]" detected.',
+          severity: 'error',
+          startLineNumber: lines.length,
+          startColumn: 1,
+          endLineNumber: lines.length,
+          endColumn: 5,
+          source: 'parser',
+          code: 'syntax(bracket-mismatch)',
         })
       }
     }

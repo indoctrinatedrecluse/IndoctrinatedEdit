@@ -387,52 +387,107 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
       {activeTab === 'graph' && (
         <div className="git-content graph-mode custom-scrollbar">
           <div className="graph-commit-list">
-            {status.commits.map((commit) => {
-              const track = commit.trackIndex ?? 0
-              const color = TRACK_COLORS[track % TRACK_COLORS.length]
-              const isSelected = selectedCommit?.hash === commit.hash
+            {(() => {
+              const trackByHash = new Map<string, number>()
+              let maxTrack = 0
+              for (const c of status.commits) {
+                const t = c.trackIndex ?? 0
+                trackByHash.set(c.hash, t)
+                if (t > maxTrack) maxTrack = t
+              }
+              const laneGap = 14
+              const svgWidth = Math.max(28, (Math.min(maxTrack, 6) + 1) * laneGap + 12)
 
-              return (
-                <div
-                  key={commit.hash}
-                  className={`graph-row glass-interactive ${isSelected ? 'selected' : ''}`}
-                  onClick={() => setSelectedCommit(commit)}
-                >
-                  <div className="subway-canvas">
-                    <svg width="24" height="42" viewBox="0 0 24 42">
-                      <line
-                        x1="12"
-                        y1="0"
-                        x2="12"
-                        y2="42"
-                        stroke={color}
-                        strokeWidth="2.5"
-                        strokeOpacity="0.5"
-                      />
-                      <circle
-                        cx="12"
-                        cy="21"
-                        r="6"
-                        fill={color}
-                        fillOpacity="0.35"
-                      />
-                      <circle cx="12" cy="21" r="3.5" fill="#FFF" stroke={color} strokeWidth="1.5" />
-                    </svg>
-                  </div>
+              return status.commits.map((commit, rowIdx) => {
+                const track = Math.min(commit.trackIndex ?? 0, 6)
+                const cx = 12 + track * laneGap
+                const color = TRACK_COLORS[track % TRACK_COLORS.length]
+                const isSelected = selectedCommit?.hash === commit.hash
+                const parentTracks = (commit.parents || []).map((p) =>
+                  Math.min(trackByHash.get(p) ?? track, 6)
+                )
 
-                  <div className="graph-commit-info">
-                    <div className="commit-top-line">
-                      <span className="commit-hash">{commit.shortHash}</span>
-                      {commit.refs.length > 0 && (
-                        <div className="refs-container">
-                          {commit.refs.map((ref) => (
-                            <span key={ref} className="ref-pill">
-                              {ref}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <span className="commit-msg">{commit.message}</span>
+                return (
+                  <div
+                    key={commit.hash}
+                    className={`graph-row glass-interactive ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setSelectedCommit(commit)}
+                  >
+                    <div className="subway-canvas" style={{ minWidth: svgWidth }}>
+                      <svg width={svgWidth} height="42" viewBox={`0 0 ${svgWidth} 42`}>
+                        {/* Incoming rail from top (unless HEAD/first row) */}
+                        {rowIdx > 0 && (
+                          <line
+                            x1={cx}
+                            y1="0"
+                            x2={cx}
+                            y2="21"
+                            stroke={color}
+                            strokeWidth="2.2"
+                            strokeOpacity="0.65"
+                          />
+                        )}
+                        {/* Outgoing rails / Bezier merge branches to each parent track */}
+                        {parentTracks.length > 0 ? (
+                          parentTracks.map((pTrack, pIdx) => {
+                            const px = 12 + pTrack * laneGap
+                            const pColor = TRACK_COLORS[pTrack % TRACK_COLORS.length]
+                            if (px === cx) {
+                              return (
+                                <line
+                                  key={pIdx}
+                                  x1={cx}
+                                  y1="21"
+                                  x2={px}
+                                  y2="42"
+                                  stroke={pColor}
+                                  strokeWidth="2.2"
+                                  strokeOpacity="0.65"
+                                />
+                              )
+                            }
+                            return (
+                              <path
+                                key={pIdx}
+                                d={`M ${cx} 21 C ${cx} 32, ${px} 30, ${px} 42`}
+                                fill="none"
+                                stroke={pColor}
+                                strokeWidth="2.2"
+                                strokeOpacity="0.75"
+                              />
+                            )
+                          })
+                        ) : (
+                          rowIdx < status.commits.length - 1 && (
+                            <line
+                              x1={cx}
+                              y1="21"
+                              x2={cx}
+                              y2="42"
+                              stroke={color}
+                              strokeWidth="2.2"
+                              strokeOpacity="0.35"
+                            />
+                          )
+                        )}
+                        <circle cx={cx} cy="21" r="6" fill={color} fillOpacity="0.35" />
+                        <circle cx={cx} cy="21" r="3.5" fill="#FFF" stroke={color} strokeWidth="1.5" />
+                      </svg>
+                    </div>
+
+                    <div className="graph-commit-info">
+                      <div className="commit-top-line">
+                        <span className="commit-hash">{commit.shortHash}</span>
+                        {commit.refs.length > 0 && (
+                          <div className="refs-container">
+                            {commit.refs.map((ref) => (
+                              <span key={ref} className="ref-pill">
+                                {ref}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <span className="commit-msg">{commit.message}</span>
                     </div>
 
                     <div className="commit-bottom-line">
@@ -442,7 +497,8 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                   </div>
                 </div>
               )
-            })}
+            })
+            })()}
           </div>
 
           {selectedCommit && (

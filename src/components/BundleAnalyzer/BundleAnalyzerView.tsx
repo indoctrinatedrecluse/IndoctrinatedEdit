@@ -174,12 +174,20 @@ export const BundleAnalyzerView: React.FC = () => {
             />
           </div>
 
+          {pkgSearchInput.trim() ? (
           <div className="cost-estimate-card glass-panel">
             <div className="pkg-header">
               <Package size={16} className="pkg-icon" />
               <div className="pkg-title-block">
                 <span className="pkg-name">{importEstimate.packageName}</span>
-                <span className="tree-shake-tag">
+                <span
+                  className="tree-shake-tag"
+                  style={
+                    importEstimate.treeShakeable
+                      ? undefined
+                      : { background: 'rgba(255, 69, 58, 0.18)', color: '#FF453A', borderColor: 'rgba(255, 69, 58, 0.35)' }
+                  }
+                >
                   {importEstimate.treeShakeable ? 'Tree-shakeable' : 'Non-treeshakeable'}
                 </span>
               </div>
@@ -210,6 +218,11 @@ export const BundleAnalyzerView: React.FC = () => {
               </div>
             )}
           </div>
+          ) : (
+            <div className="cost-estimate-card glass-panel" style={{ opacity: 0.7, fontSize: 12 }}>
+              Enter an npm package name above to estimate its minified and gzipped import cost.
+            </div>
+          )}
         </div>
       )}
 

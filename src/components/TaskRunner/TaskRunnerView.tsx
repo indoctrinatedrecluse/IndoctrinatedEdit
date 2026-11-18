@@ -85,7 +85,23 @@ export const TaskRunnerView: React.FC = () => {
                     {task.lastRun && (
                       <div className="task-output-box">
                         <div className="output-meta">
-                          <span className="out-status">✔ Success ({task.lastRun.durationMs}ms)</span>
+                          <span
+                            className="out-status"
+                            style={{
+                              color:
+                                task.lastRun.status === 'failed'
+                                  ? '#FF453A'
+                                  : task.lastRun.status === 'running'
+                                  ? '#FFD60A'
+                                  : '#30D158',
+                            }}
+                          >
+                            {task.lastRun.status === 'failed'
+                              ? `✖ Failed (${task.lastRun.durationMs}ms)`
+                              : task.lastRun.status === 'running'
+                              ? '⏳ Running...'
+                              : `✔ Success (${task.lastRun.durationMs}ms)`}
+                          </span>
                           <span className="out-time">{task.lastRun.timestamp}</span>
                         </div>
                         <pre className="output-pre">{task.lastRun.output}</pre>

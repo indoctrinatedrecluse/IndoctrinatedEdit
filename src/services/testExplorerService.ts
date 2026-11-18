@@ -142,18 +142,22 @@ class TestExplorerService {
 
   private isTestFilePath(filePath: string): boolean {
     const norm = filePath.replace(/\\/g, '/').toLowerCase()
+    const base = norm.split('/').pop() || norm
     return (
-      norm.endsWith('.test.ts') ||
-      norm.endsWith('.test.tsx') ||
-      norm.endsWith('.test.js') ||
-      norm.endsWith('.test.jsx') ||
-      norm.endsWith('.spec.ts') ||
-      norm.endsWith('.spec.js') ||
-      norm.includes('test_') ||
-      norm.endsWith('_test.go') ||
-      norm.endsWith('_test.dart') ||
-      (norm.startsWith('test/') && (norm.endsWith('.ts') || norm.endsWith('.js'))) ||
-      (norm.startsWith('tests/') && norm.endsWith('.rs'))
+      base.endsWith('.test.ts') ||
+      base.endsWith('.test.tsx') ||
+      base.endsWith('.test.js') ||
+      base.endsWith('.test.jsx') ||
+      base.endsWith('.spec.ts') ||
+      base.endsWith('.spec.tsx') ||
+      base.endsWith('.spec.js') ||
+      base.endsWith('.spec.jsx') ||
+      (base.startsWith('test_') && base.endsWith('.py')) ||
+      base.endsWith('_test.py') ||
+      base.endsWith('_test.go') ||
+      base.endsWith('_test.dart') ||
+      (norm.startsWith('test/') && /\.(ts|tsx|js|jsx)$/.test(base)) ||
+      (norm.startsWith('tests/') && base.endsWith('.rs'))
     )
   }
 
@@ -358,19 +362,91 @@ class TestExplorerService {
     targetTest.status = 'running'
     this.notify()
 
-    // Simulate fast isolated test execution
-    const testStart = performance.now()
-    await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 40) + 15))
-    targetTest.durationMs = Math.round(performance.now() - testStart)
-    targetTest.status = 'passed'
+    const res = await this.executeRealOrFallback(parentFile, targetTest.name)
+    targetTest.durationMs = res.durationMs
+    targetTest.status = res.passed ? 'passed' : 'failed'
+    targetTest.errorMessage = res.errorMessage
+    targetTest.stackTrace = res.stackTrace
 
     this.updateParentStatus(parentFile)
     this.notify()
     return targetTest
   }
 
+  private buildRealTestCommand(file: TestFileItem, testName?: string): string {
+    const escapedFile = file.filePath.replace(/"/g, '\\"')
+    const escapedTest = testName ? testName.replace(/"/g, '\\"') : ''
+    switch (file.framework) {
+      case 'pytest':
+        return testName ? `pytest "${escapedFile}" -k "${escapedTest}"` : `pytest "${escapedFile}"`
+      case 'gotest':
+        return testName ? `go test -v -run "${escapedTest}" ./...` : `go test -v ./...`
+      case 'cargotest':
+        return testName ? `cargo test "${escapedTest}"` : `cargo test`
+      case 'jest':
+        return testName ? `npx jest "${escapedFile}" -t "${escapedTest}"` : `npx jest "${escapedFile}"`
+      case 'vitest':
+      default:
+        return testName ? `npx vitest run "${escapedFile}" -t "${escapedTest}"` : `npx vitest run "${escapedFile}"`
+    }
+  }
+
+  private async executeRealOrFallback(
+    file: TestFileItem,
+    testName?: string
+  ): Promise<{ passed: boolean; durationMs: number; errorMessage?: string; stackTrace?: string }> {
+    const start = performance.now()
+    if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const cmd = this.buildRealTestCommand(file, testName)
+      const res = await window.electronAPI.workspace.execCommand({
+        command: cmd,
+        timeoutMs: 120000,
+      })
+      const passed = res.exitCode === 0
+      const combined = [res.stderr, res.stdout].filter(Boolean).join('\n').trim()
+      return {
+        passed,
+        durationMs: res.durationMs,
+        errorMessage: passed ? undefined : (combined.split(/\r?\n/).find((l) => /error|fail|assert|expected/i.test(l)) || `Test exited with code ${res.exitCode}`),
+        stackTrace: passed ? undefined : combined.slice(0, 4000),
+      }
+    }
+
+    // Browser / unit-test sandbox fallback
+    await new Promise((r) => setTimeout(r, 15))
+    return {
+      passed: true,
+      durationMs: Math.max(1, Math.round(performance.now() - start)),
+    }
+  }
+
   private async runFileInternal(file: TestFileItem, onlyFailed: boolean = false): Promise<void> {
     const fileStart = performance.now()
+
+    // In Electron desktop mode, run the real test runner once per file for accurate results
+    if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const allTests = [...file.directTests, ...file.suites.flatMap((s) => s.testCases)]
+      for (const t of allTests) {
+        if (!onlyFailed || t.status === 'running') t.status = 'running'
+      }
+      this.notify()
+
+      const res = await this.executeRealOrFallback(file)
+      const perTestMs = allTests.length > 0 ? Math.max(1, Math.round(res.durationMs / allTests.length)) : res.durationMs
+      for (const t of allTests) {
+        if (onlyFailed && t.status !== 'running') continue
+        t.durationMs = perTestMs
+        t.status = res.passed ? 'passed' : 'failed'
+        t.errorMessage = res.errorMessage
+        t.stackTrace = res.stackTrace
+      }
+      for (const suite of file.suites) {
+        suite.status = suite.testCases.every((t) => t.status === 'passed') ? 'passed' : 'failed'
+      }
+      file.durationMs = res.durationMs
+      this.updateParentStatus(file)
+      return
+    }
 
     const executeTests = async (tests: TestCaseItem[]) => {
       for (const test of tests) {
@@ -380,7 +456,7 @@ class TestExplorerService {
         this.notify()
 
         const tStart = performance.now()
-        await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 25) + 10))
+        await new Promise((r) => setTimeout(r, 10))
         test.durationMs = Math.round(performance.now() - tStart)
         test.status = 'passed'
       }

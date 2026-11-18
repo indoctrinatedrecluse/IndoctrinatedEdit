@@ -112,7 +112,13 @@ export const MergeStudioModal: React.FC<MergeStudioModalProps> = ({
 
             <button
               onClick={handleComplete}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-lg shadow-purple-600/30 transition-all cursor-pointer ml-2"
+              disabled={conflicts.length > 0}
+              title={conflicts.length > 0 ? `Resolve ${conflicts.length} remaining conflict(s) first` : 'Apply resolved merge'}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white rounded-lg shadow-lg transition-all ml-2 ${
+                conflicts.length > 0
+                  ? 'bg-purple-600/40 cursor-not-allowed opacity-60'
+                  : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/30 cursor-pointer'
+              }`}
             >
               <Check className="w-4 h-4" />
               Complete Merge

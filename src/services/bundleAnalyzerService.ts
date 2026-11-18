@@ -175,6 +175,62 @@ class BundleAnalyzerService {
     },
   ]
 
+  /**
+   * Scan real workspace build artifacts (`dist/`, `build/`, `out/`, `.next/static`)
+   * and `package-lock.json` duplicates via Electron IPC.
+   */
+  public async analyzeWorkspace(workspaceRoot: string): Promise<{
+    isLive: boolean
+    buildDir: string | null
+    chunks: BundleChunk[]
+    duplicates: DuplicatePackageAlert[]
+  }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.workspace?.scanBundle || !workspaceRoot) {
+      return {
+        isLive: false,
+        buildDir: null,
+        chunks: this.getChunks(),
+        duplicates: this.getDuplicates(),
+      }
+    }
+
+    const scan = await window.electronAPI.workspace.scanBundle(workspaceRoot)
+    const totalRaw = Math.max(1, scan.totalRawBytes)
+    const colors = ['#0A84FF', '#BF5AF2', '#30D158', '#FF9F0A', '#64D2FF', '#FF453A']
+
+    const chunks: BundleChunk[] = scan.files.map((f, idx) => ({
+      id: `live_chunk_${idx}`,
+      name: f.relativePath,
+      sizeKb: Math.round((f.rawSizeBytes / 1024) * 10) / 10,
+      gzipSizeKb: Math.round((f.gzipSizeBytes / 1024) * 10) / 10,
+      percentage: Math.round((f.rawSizeBytes / totalRaw) * 1000) / 10,
+      isVendor: /vendor|node_modules/i.test(f.relativePath),
+      modules: [],
+      color: colors[idx % colors.length],
+    }))
+
+    const duplicates: DuplicatePackageAlert[] = scan.duplicates.map((d) => ({
+      packageName: d.name,
+      versions: d.versions,
+      totalWastedKb: Math.round((d.versions.length - 1) * 24 * 10) / 10,
+      dependents: ['package-lock.json'],
+    }))
+
+    if (chunks.length > 0) {
+      this.sampleChunks = chunks
+    }
+    if (duplicates.length > 0) {
+      this.duplicateAlerts = duplicates
+    }
+
+    return {
+      isLive: Boolean(scan.buildDir),
+      buildDir: scan.buildDir,
+      chunks: chunks.length > 0 ? chunks : this.getChunks(),
+      duplicates: duplicates.length > 0 ? duplicates : this.getDuplicates(),
+    }
+  }
+
   public getChunks(): BundleChunk[] {
     return [...this.sampleChunks]
   }

@@ -42,6 +42,40 @@ class PackageManagerService {
     return this.parseNpmPackageJson('package.json', content || '{}')
   }
 
+  private deterministicSizeKb(name: string): number {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) {
+      hash = (hash * 31 + name.charCodeAt(i)) % 760
+    }
+    return Math.abs(hash) + 40
+  }
+
+  /**
+   * Run live `npm outdated --json` / `npm audit --json` / install / uninstall in Electron desktop mode.
+   */
+  public async runNpmAction(
+    action: 'install' | 'uninstall' | 'update' | 'audit' | 'outdated',
+    cwd: string,
+    packageName?: string
+  ): Promise<{ success: boolean; output: string; exitCode: number }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.workspace?.execCommand) {
+      return { success: false, output: 'Live package CLI actions require the Electron desktop app.', exitCode: 1 }
+    }
+    const safePkg = packageName ? packageName.replace(/[^a-zA-Z0-9@/_.-]/g, '') : ''
+    let cmd = 'npm outdated --json'
+    if (action === 'audit') cmd = 'npm audit --json'
+    else if (action === 'install' && safePkg) cmd = `npm install ${safePkg}`
+    else if (action === 'uninstall' && safePkg) cmd = `npm uninstall ${safePkg}`
+    else if (action === 'update') cmd = safePkg ? `npm update ${safePkg}` : 'npm update'
+
+    const res = await window.electronAPI.workspace.execCommand({ command: cmd, cwd, timeoutMs: 180000 })
+    return {
+      success: res.exitCode === 0,
+      output: [res.stdout, res.stderr].filter(Boolean).join('\n').trim(),
+      exitCode: res.exitCode,
+    }
+  }
+
   private parseNpmPackageJson(filePath: string, content: string): ManifestScanResult {
     const dependencies: DependencyItem[] = []
     try {
@@ -52,7 +86,7 @@ class PackageManagerService {
       }
 
       for (const [name, rawVersion] of Object.entries(allDeps)) {
-        const cleanVer = String(rawVersion).replace(/[\^~>=<]/g, '')
+        const cleanVer = String(rawVersion).trim().replace(/^[\^~>=<]+\s*/, '')
         const mockLatest = this.calculateMockLatest(cleanVer)
         const isOutdated = cleanVer !== mockLatest
         const vuln = this.checkMockVulnerability(name)
@@ -64,7 +98,7 @@ class PackageManagerService {
           isOutdated,
           ecosystem: 'npm',
           license: this.getMockLicense(name),
-          approxSizeKb: Math.floor(Math.random() * 800 + 40),
+          approxSizeKb: this.deterministicSizeKb(name),
           vulnerabilitiesCount: vuln.count,
           highestSeverity: vuln.severity,
           description: `Core package module for ${name}`,
@@ -134,25 +168,35 @@ class PackageManagerService {
 
     for (const line of lines) {
       const t = line.trim()
-      if (t.startsWith('[dependencies]')) {
+      if (!t || t.startsWith('#')) continue
+      if (/^\[(dev-|build-)?dependencies\]$/i.test(t)) {
         inDeps = true
         continue
       }
       if (t.startsWith('[')) {
         inDeps = false
+        continue
       }
       if (inDeps && t.includes('=')) {
-        const [k, v] = t.split('=')
-        const name = k.trim()
-        const ver = v.trim().replace(/"/g, '')
+        const eqIdx = t.indexOf('=')
+        const name = t.slice(0, eqIdx).trim()
+        const rawVal = t.slice(eqIdx + 1).trim()
+        let ver = ''
+        if (rawVal.startsWith('{')) {
+          const verMatch = rawVal.match(/version\s*=\s*["']([^"']+)["']/)
+          ver = verMatch ? verMatch[1] : 'workspace'
+        } else {
+          ver = rawVal.replace(/^["']|["']$/g, '').split('#')[0].trim().replace(/^["']|["']$/g, '')
+        }
+        if (!name) continue
         dependencies.push({
           name,
-          currentVersion: ver,
-          latestVersion: ver,
+          currentVersion: ver || 'latest',
+          latestVersion: ver || 'latest',
           isOutdated: false,
           ecosystem: 'cargo',
           license: 'MIT / Apache-2.0',
-          approxSizeKb: 120,
+          approxSizeKb: this.deterministicSizeKb(name),
           vulnerabilitiesCount: 0,
           highestSeverity: 'none',
         })

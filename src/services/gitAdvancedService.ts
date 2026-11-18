@@ -173,11 +173,14 @@ class GitAdvancedService {
   ): string {
     let updated = content
     let conflicts = this.parseConflicts(filePath, updated)
+    let iterations = 0
 
-    while (conflicts.length > 0) {
-      // Always resolve from top to bottom
+    while (conflicts.length > 0 && iterations < 500) {
+      iterations++
+      const prev = updated
       const target = conflicts[0]
       updated = this.resolveConflictInContent(updated, target, choice)
+      if (updated === prev) break
       conflicts = this.parseConflicts(filePath, updated)
     }
 
@@ -185,7 +188,35 @@ class GitAdvancedService {
   }
 
   /**
-   * Compute per-line Git Blame lens metadata
+   * Fetch genuine per-line Git Blame via Electron `git blame --line-porcelain` when available.
+   */
+  public async getBlameForFileAsync(filePath: string, content: string, cwd?: string): Promise<GitBlameLine[]> {
+    if (typeof window !== 'undefined' && window.electronAPI?.git?.blame) {
+      try {
+        const entries = await window.electronAPI.git.blame(filePath, cwd)
+        if (entries && entries.length > 0) {
+          const blameList: GitBlameLine[] = entries.map((e) => ({
+            line: e.lineNumber,
+            commitHash: e.hash,
+            shortHash: e.shortHash,
+            author: e.author,
+            email: e.authorEmail,
+            timestamp: e.date,
+            relativeDate: e.date ? new Date(e.date).toLocaleDateString() : 'Unknown',
+            commitMessage: e.summary,
+          }))
+          this.blameCache.set(filePath, blameList)
+          return blameList
+        }
+      } catch {
+        // Fallback below
+      }
+    }
+    return this.getBlameForFile(filePath, content)
+  }
+
+  /**
+   * Compute per-line Git Blame lens metadata (synchronous cached or fallback)
    */
   public getBlameForFile(filePath: string, content: string): GitBlameLine[] {
     const cached = this.blameCache.get(filePath)
@@ -197,24 +228,10 @@ class GitAdvancedService {
     const commits = [
       {
         hash: 'e8f7a912b40d123456789abcdef0123456789abc',
-        author: 'Abhishek Mitra (indoctrinatedrecluse)',
-        email: 'abmitra1999@gmail.com',
-        relativeDate: '2 days ago',
-        message: 'feat: add full-fledged IDE subsystems & Liquid Glass styling',
-      },
-      {
-        hash: 'b3c2d109a8f7e6d5c4b3a2918273645501928374',
-        author: 'Abhishek Mitra (indoctrinatedrecluse)',
-        email: 'abmitra1999@gmail.com',
-        relativeDate: '1 week ago',
-        message: 'refactor: isolate extension panes and Monaco layout engines',
-      },
-      {
-        hash: '4a5b6c7d8e9f0123456789abcdef0123456789ab',
-        author: 'indoctrinatedrecluse',
-        email: 'abmitra1999@gmail.com',
-        relativeDate: '3 weeks ago',
-        message: 'chore: initial project baseline architecture',
+        author: 'Workspace Maintainer',
+        email: 'maintainer@example.local',
+        relativeDate: 'Uncommitted',
+        message: 'Working tree (run in Git repo for live git blame)',
       },
     ]
 
@@ -226,7 +243,7 @@ class GitAdvancedService {
         shortHash: commit.hash.substring(0, 7),
         author: commit.author,
         email: commit.email,
-        timestamp: new Date(Date.now() - (idx + 1) * 86400000).toISOString(),
+        timestamp: new Date().toISOString(),
         relativeDate: commit.relativeDate,
         commitMessage: commit.message,
       }

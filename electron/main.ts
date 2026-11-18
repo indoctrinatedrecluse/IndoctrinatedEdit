@@ -9,7 +9,11 @@ import {
   unstageFile,
   commitChanges,
   initGitRepository,
+  getGitBlame,
+  getGitDiff,
+  applyGitPatch,
 } from './git-service'
+import { setupWorkspaceToolsIPC } from './workspace-tools-service'
 import {
   setupIPC as setupAiIPC,
 } from './ai-service'
@@ -422,6 +426,26 @@ ipcMain.handle('git:init', async (_, cwd?: string) => {
   const targetDir = cwd || process.env.APP_ROOT || process.cwd()
   return await initGitRepository(targetDir)
 })
+
+ipcMain.handle('git:blame', async (_, filePath: string, cwd?: string) => {
+  const targetDir = cwd || process.env.APP_ROOT || process.cwd()
+  return await getGitBlame(targetDir, filePath)
+})
+
+ipcMain.handle('git:diff', async (_, options?: { staged?: boolean; filePath?: string; cwd?: string }) => {
+  const targetDir = options?.cwd || process.env.APP_ROOT || process.cwd()
+  return await getGitDiff(targetDir, options)
+})
+
+ipcMain.handle('git:applyPatch', async (_, patch: string, options?: { cached?: boolean; reverse?: boolean; cwd?: string }) => {
+  const targetDir = options?.cwd || process.env.APP_ROOT || process.cwd()
+  return await applyGitPatch(targetDir, patch, options)
+})
+
+// ==========================================
+// Workspace CLI, Bundle, Search & Binary IPC
+// ==========================================
+setupWorkspaceToolsIPC(ipcMain)
 
 // ==========================================
 // AI Multi-Model Service IPC Handlers

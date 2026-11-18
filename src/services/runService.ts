@@ -481,12 +481,15 @@ export class RunService {
   public resolveRunCommand(profile: RunProfile, context: RunContext): ResolvedRunCommand {
     let rawCommand = profile.commandTemplate || ''
 
-    // If custom interpreter path is set and template begins with generic binary name
-    if (profile.interpreterPath) {
-      const parts = rawCommand.split(' ')
-      if (parts.length > 0) {
-        // e.g. replacing 'python' with 'C:/venv/bin/python.exe' if specified
-        rawCommand = rawCommand.replace(parts[0], `"${profile.interpreterPath}"`)
+    // If a custom interpreter path is set (and differs from the template's leading token), substitute cleanly
+    if (profile.interpreterPath && profile.interpreterPath.trim()) {
+      const interp = profile.interpreterPath.trim()
+      if (!rawCommand.startsWith(interp + ' ') && rawCommand !== interp) {
+        const parts = rawCommand.split(' ')
+        if (parts.length > 0 && parts[0]) {
+          const formattedInterp = /[\\/]/.test(interp) && /\s/.test(interp) ? `"${interp}"` : interp
+          rawCommand = formattedInterp + rawCommand.slice(parts[0].length)
+        }
       }
     }
 
@@ -551,7 +554,25 @@ export class RunService {
         })
         targetTab.title = runTabTitle
       } else {
+        targetTab.title = runTabTitle
         terminalService.setActiveTab(targetTab.id)
+        if (resolved.cwd && resolved.cwd !== '.') {
+          await terminalService.write(targetTab.id, `cd "${resolved.cwd}"\r\n`)
+        }
+      }
+
+      const isWin =
+        (typeof window !== 'undefined' && window.electronAPI?.platform === 'win32') ||
+        (typeof process !== 'undefined' && process.platform === 'win32')
+
+      // Apply environment variables before execution
+      const envEntries = Object.entries(resolved.env || {}).filter(([k]) => Boolean(k.trim()))
+      if (envEntries.length > 0) {
+        const envCommands = envEntries.map(([k, v]) => {
+          const safeVal = String(v).replace(/"/g, '\\"')
+          return isWin ? `$env:${k}="${safeVal}"` : `export ${k}="${safeVal}"`
+        })
+        await terminalService.write(targetTab.id, `${envCommands.join('; ')}\r\n`)
       }
 
       const timestamp = new Date().toLocaleTimeString()
@@ -572,16 +593,31 @@ export class RunService {
           `\x1b[33m> Pre-Launch: ${resolved.preLaunchCommand}\x1b[0m\r\n`
         )
         await terminalService.write(targetTab.id, `${resolved.preLaunchCommand}\r\n`)
-        // brief pause before main execution
         await new Promise((r) => setTimeout(r, 400))
       }
 
-      // 2. Run Main Command
+      // 2. Translate POSIX "cmd1 && cmd2" safely on Windows PowerShell 5.1
+      let finalCommand = resolved.command
+      if (isWin && finalCommand.includes(' && ')) {
+        const [firstCmd, ...restCmds] = finalCommand.split(' && ')
+        const chain = restCmds.map((c) => `if ($LASTEXITCODE -eq 0) { ${c} }`).join('; ')
+        finalCommand = `${firstCmd}; ${chain}`
+      }
+
       terminalService.appendOutput(
         targetTab.id,
-        `\x1b[32m> Executing: ${resolved.command}\x1b[0m\r\n`
+        `\x1b[32m> Executing: ${finalCommand}\x1b[0m\r\n`
       )
-      await terminalService.write(targetTab.id, `${resolved.command}\r\n`)
+      await terminalService.write(targetTab.id, `${finalCommand}\r\n`)
+
+      // 3. Run Post-launch step if configured
+      if (resolved.postLaunchCommand) {
+        terminalService.appendOutput(
+          targetTab.id,
+          `\x1b[36m> Post-Launch: ${resolved.postLaunchCommand}\x1b[0m\r\n`
+        )
+        await terminalService.write(targetTab.id, `${resolved.postLaunchCommand}\r\n`)
+      }
 
       return true
     } catch (err) {
