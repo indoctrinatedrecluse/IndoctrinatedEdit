@@ -9,6 +9,7 @@ import {
   AiToolResult,
 } from '@sdk/types'
 import { AiService } from './aiService'
+import { AiTokenizer } from './aiTokenizer'
 import { DiagnosticsService } from './diagnosticsService'
 import { terminalService } from './terminalService'
 import { RunService } from './runService'
@@ -45,6 +46,18 @@ export class AiGuardrailService {
     /\/etc\/(passwd|shadow|sudoers)/i,
   ]
 
+  // Sensitive credential, secret, and repository internals that AI agents cannot inspect or alter
+  private static readonly PROTECTED_SECRET_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+    { pattern: /(^|[\\/])\.env(\.[a-zA-Z0-9_-]+)?$/i, reason: 'Environment variables and API secrets (.env*) are protected' },
+    { pattern: /(^|[\\/])\.git[\\/](config|credentials|HEAD|hooks|objects)/i, reason: 'Internal Git repository metadata and credentials are protected' },
+    { pattern: /(^|[\\/])\.ssh[\\/]/i, reason: 'SSH private keys and configuration are protected' },
+    { pattern: /(^|[\\/])\.(npmrc|pypirc|netrc|dockercfg)/i, reason: 'Package manager and registry authentication tokens are protected' },
+    { pattern: /\.(pem|key|pkcs12|pfx|p12|kdbx)$/i, reason: 'Cryptographic private keys and certificates are protected' },
+    { pattern: /(^|[\\/])(id_rsa|id_ed25519|id_ecdsa)($|\.)/i, reason: 'Private key files are protected' },
+    { pattern: /(^|[\\/])\.aws[\\/](credentials|config)/i, reason: 'AWS cloud credentials are protected' },
+    { pattern: /(^|[\\/])\.gnupg[\\/]/i, reason: 'GPG keys and keyring are protected' },
+  ]
+
   // Destructive / Malicious command patterns
   private static readonly BLOCKED_COMMAND_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /rm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+|\s+-r[a-zA-Z]*\s+)?(\/|\\\*|\/\*|\*|\~)/i, reason: 'Recursive root/wildcard deletion is prohibited' },
@@ -58,7 +71,43 @@ export class AiGuardrailService {
     { pattern: /taskkill\s+(\/f\s+)?\/im\s+(csrss|explorer|winlogon|smss)\.exe/i, reason: 'Terminating core OS system processes is prohibited' },
     { pattern: /curl\s+.*\s*\|\s*(bash|sh|powershell|cmd)/i, reason: 'Direct pipe-to-shell remote execution is prohibited' },
     { pattern: /wget\s+.*\s*\|\s*(bash|sh|powershell|cmd)/i, reason: 'Direct pipe-to-shell remote execution is prohibited' },
+    { pattern: /chmod\s+(-[a-zA-Z]*R[a-zA-Z]*\s+)?777\s+(\/|\*)/i, reason: 'Granting unrestricted root permissions is prohibited' },
+    { pattern: /chown\s+(-[a-zA-Z]*R[a-zA-Z]*\s+)?.*\s+(\/|\*)/i, reason: 'Recursive root ownership modification is prohibited' },
+    { pattern: /git\s+push\s+.*--force/i, reason: 'Forced remote Git push is prohibited via AI automation' },
+    { pattern: /git\s+clean\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)*-f/i, reason: 'Forced untracked file deletion (git clean -f) is prohibited' },
+    { pattern: /rd\s+(\/[sq]\s+)*[a-z]:\\/i, reason: 'Root drive directory removal is prohibited' },
+    { pattern: /reg\s+(delete|add)\s+hklm/i, reason: 'Windows HKEY_LOCAL_MACHINE registry modification is prohibited' },
   ]
+
+  // Sliding call ring-buffer for autonomous repetitive tool loop detection
+  private static recentCalls: Array<{ signature: string; timestamp: number }> = []
+
+  /**
+   * Resets the loop detector history (called upon new user turn or session clear).
+   */
+  static resetLoopTracker(): void {
+    this.recentCalls = []
+  }
+
+  /**
+   * Detects repetitive tool loops (same tool with identical arguments called consecutively).
+   */
+  static checkLoop(toolName: string, args: Record<string, any> = {}, threshold = 3): { isLoop: boolean; count: number; signature: string } {
+    const sig = `${toolName}:${JSON.stringify(args || {})}`
+    this.recentCalls.push({ signature: sig, timestamp: Date.now() })
+    if (this.recentCalls.length > 20) {
+      this.recentCalls.shift()
+    }
+    let consecutive = 0
+    for (let i = this.recentCalls.length - 1; i >= 0; i--) {
+      if (this.recentCalls[i].signature === sig) {
+        consecutive++
+      } else {
+        break
+      }
+    }
+    return { isLoop: consecutive >= threshold, count: consecutive, signature: sig }
+  }
 
   /**
    * Validates and sanitizes a target file/folder path against directory traversal and sensitive OS roots.
@@ -88,6 +137,17 @@ export class AiGuardrailService {
           valid: false,
           resolvedPath: trimmed,
           error: `Security Guardrail: Access to sensitive OS directory "${trimmed}" is blocked.`,
+        }
+      }
+    }
+
+    // Check against protected sensitive secrets and credentials (.env, .git/config, .ssh, private keys)
+    for (const check of this.PROTECTED_SECRET_PATTERNS) {
+      if (check.pattern.test(trimmed) || check.pattern.test(normalized)) {
+        return {
+          valid: false,
+          resolvedPath: trimmed,
+          error: `Security Guardrail: Access to sensitive credential / secret file "${trimmed}" is blocked. (${check.reason})`,
         }
       }
     }
@@ -235,7 +295,20 @@ export class AiToolsRegistry {
       },
     })
 
-    // 8. execute_terminal_command
+    // 8. write_file
+    this.register({
+      name: 'write_file',
+      description: 'Creates a new file or completely overwrites an existing file in the workspace with new content.',
+      category: 'write',
+      requiredParams: ['filePath', 'content'],
+      requiresApprovalByDefault: true,
+      parameters: {
+        filePath: { type: 'string', description: 'Relative or absolute path to the file to create or overwrite' },
+        content: { type: 'string', description: 'The complete file contents to write' },
+      },
+    })
+
+    // 9. execute_terminal_command
     this.register({
       name: 'execute_terminal_command',
       description: 'Executes a command in the integrated terminal with timeout protection and returns the output.',
@@ -279,6 +352,31 @@ export class AiToolsRegistry {
     this.tools.set(tool.name, tool)
   }
 
+  private static mapMcpToolToDefinition(mcp: {
+    name: string
+    serverName: string
+    description?: string
+    inputSchema?: { properties?: Record<string, any>; required?: string[] }
+  }): AiToolDefinition {
+    const params: Record<string, any> = {}
+    if (mcp.inputSchema?.properties) {
+      for (const [k, v] of Object.entries(mcp.inputSchema.properties)) {
+        params[k] = {
+          type: v.type || 'string',
+          description: v.description || '',
+          enum: v.enum,
+        }
+      }
+    }
+    return {
+      name: mcp.name,
+      description: `[MCP: ${mcp.serverName}] ${mcp.description || ''}`,
+      category: 'browser',
+      requiredParams: mcp.inputSchema?.required || [],
+      parameters: params,
+    }
+  }
+
   static getTool(name: string): AiToolDefinition | undefined {
     const builtin = this.tools.get(name)
     if (builtin) return builtin
@@ -289,23 +387,7 @@ export class AiToolsRegistry {
       const cleanName = name.startsWith('mcp_') ? name.slice(4) : name
       const foundMcp = mcpTools.find((t) => t.name === name || t.name === cleanName)
       if (foundMcp) {
-        const params: Record<string, any> = {}
-        if (foundMcp.inputSchema?.properties) {
-          for (const [k, v] of Object.entries(foundMcp.inputSchema.properties)) {
-            params[k] = {
-              type: v.type || 'string',
-              description: v.description || '',
-              enum: v.enum,
-            }
-          }
-        }
-        return {
-          name: foundMcp.name,
-          description: `[MCP: ${foundMcp.serverName}] ${foundMcp.description || ''}`,
-          category: 'browser',
-          requiredParams: foundMcp.inputSchema?.required || [],
-          parameters: params,
-        }
+        return this.mapMcpToolToDefinition(foundMcp)
       }
     } catch {
       // Fallback
@@ -320,23 +402,7 @@ export class AiToolsRegistry {
       const mcpTools = McpService.listTools()
       for (const mcp of mcpTools) {
         if (!this.tools.has(mcp.name)) {
-          const params: Record<string, any> = {}
-          if (mcp.inputSchema?.properties) {
-            for (const [k, v] of Object.entries(mcp.inputSchema.properties)) {
-              params[k] = {
-                type: v.type || 'string',
-                description: v.description || '',
-                enum: v.enum,
-              }
-            }
-          }
-          list.push({
-            name: mcp.name,
-            description: `[MCP: ${mcp.serverName}] ${mcp.description || ''}`,
-            category: 'browser',
-            requiredParams: mcp.inputSchema?.required || [],
-            parameters: params,
-          })
+          list.push(this.mapMcpToolToDefinition(mcp))
         }
       }
     } catch {
@@ -347,53 +413,21 @@ export class AiToolsRegistry {
 
   /**
    * Generates a compact tools system prompt (one line per tool) to minimise token consumption.
-   * Full parameter docs are omitted intentionally — they bloated the prompt by 2,000+ tokens.
+   * Full JSON schemas are already provided natively via Vercel AI SDK `tools` — duplicating them
+   * in prose wastes 1,500+ tokens per turn and conflicts with native function calling.
    */
   static getToolsSystemPrompt(): string {
     const list = this.getAllTools()
+    const toolLines = list.map((t) => `  <tool name="${t.name}">${t.description}</tool>`).join('\n')
 
-    let schemaStr = '<tools>\n'
-    for (const t of list) {
-      schemaStr += `  <tool name="${t.name}">\n`
-      schemaStr += `    <description>${t.description}</description>\n`
-      if (t.requiredParams && t.requiredParams.length > 0) {
-        schemaStr += `    <required_params>${t.requiredParams.join(', ')}</required_params>\n`
-      }
-      if (t.parameters && Object.keys(t.parameters).length > 0) {
-        schemaStr += `    <parameters>\n`
-        for (const [pName, pDef] of Object.entries(t.parameters)) {
-          schemaStr += `      <parameter name="${pName}" type="${pDef.type}">\n`
-          schemaStr += `        <description>${pDef.description}</description>\n`
-          if (pDef.enum) {
-            schemaStr += `        <enum_values>${pDef.enum.join(', ')}</enum_values>\n`
-          }
-          schemaStr += `      </parameter>\n`
-        }
-        schemaStr += `    </parameters>\n`
-      }
-      schemaStr += `  </tool>\n`
-    }
-    schemaStr += '</tools>'
+    return `## Workspace Tools
+Prefer native function/tool calling whenever supported by the model. Only if native tool calling is unavailable, invoke tools using <tool_call name="tool_name">{"param": "value"}</tool_call>.
 
-    return `## Available Workspace Tools
-  You have access to a set of powerful workspace tools. You MUST use the following XML format to invoke a tool. Do NOT use markdown code blocks or raw JSON for tool calls.
+<tools>
+${toolLines}
+</tools>
 
-  XML Tool Call Format:
-  <tool_call name="tool_name">
-  {
-  "param1": "value",
-  "param2": 123
-  }
-  </tool_call>
-
-  Here are the available tools:
-  ${schemaStr}
-
-  Rules for Tools:
-  1. Provide the exact JSON arguments inside the <tool_call>...</tool_call> tags.
-  2. Read files before proposing edits.
-  3. Keep tool usage minimal and targeted.
-  4. Only use tools that are defined in the <tools> list.`
+Rules: Read files before editing, keep tool calls minimal and targeted, and only call listed tools.`
   }
 }
 
@@ -429,8 +463,23 @@ export interface ToolExecutionContext {
 export class AiToolExecutor {
   /**
    * Executes an AI tool call with complete security validation, guardrails, and error handling.
+   * Automatically applies smart head/tail token compaction on large outputs to conserve context tokens.
    */
   static async execute(
+    call: AiToolCall,
+    context: ToolExecutionContext = {}
+  ): Promise<AiToolResult> {
+    const res = await this.executeInternal(call, context)
+    if (res.output && (res.output.length > 5000 || res.output.split(/\r?\n/).length > 70)) {
+      const compacted = AiTokenizer.compactToolOutput(res.output, { maxLines: 70, maxChars: 8000 })
+      if (compacted.truncated) {
+        res.output = compacted.content
+      }
+    }
+    return res
+  }
+
+  private static async executeInternal(
     call: AiToolCall,
     context: ToolExecutionContext = {}
   ): Promise<AiToolResult> {
@@ -638,6 +687,35 @@ export class AiToolExecutor {
           return { toolCallId: call.id, toolName: call.toolName, success: true, output: 'No diff available.' }
         }
 
+        case 'write_file': {
+          const filePath = String(call.arguments.filePath || '')
+          const content = String(call.arguments.content ?? call.arguments.fullContent ?? '')
+          const pathCheck = AiGuardrailService.validatePath(filePath, context.workspaceRoot)
+          if (!pathCheck.valid) {
+            return {
+              toolCallId: call.id,
+              toolName: call.toolName,
+              success: false,
+              output: '',
+              error: pathCheck.error,
+            }
+          }
+
+          const resolvedPath = pathCheck.resolvedPath
+          return {
+            toolCallId: call.id,
+            toolName: call.toolName,
+            success: true,
+            output: `Prepared write for "${filePath}" (${content.length} characters).`,
+            diff: {
+              filePath: resolvedPath,
+              newSnippet: content,
+              fullContent: content,
+              applied: false,
+            },
+          }
+        }
+
         case 'propose_file_edit': {
           const filePath = String(call.arguments.filePath || '')
           const pathCheck = AiGuardrailService.validatePath(filePath, context.workspaceRoot)
@@ -655,10 +733,63 @@ export class AiToolExecutor {
           const newSnippet = call.arguments.newSnippet
           const fullContent = call.arguments.fullContent
           const description = call.arguments.description || 'Proposed code modifications'
+          const resolvedPath = pathCheck.resolvedPath
+
+          // Retrieve existing content for the target file
+          let existingContent: string | null = null
+          if (context.openFiles) {
+            const found = context.openFiles.find(
+              (f) => f.path === resolvedPath || f.path === filePath || f.path.endsWith(filePath) || f.name === filePath
+            )
+            if (found && found.content !== undefined) {
+              existingContent = found.content
+            }
+          }
+          if (
+            existingContent === null &&
+            context.activeFileName &&
+            (filePath.endsWith(context.activeFileName) || context.activeFileName.endsWith(filePath))
+          ) {
+            existingContent = context.activeFileContent || ''
+          }
+          if (existingContent === null && typeof window !== 'undefined' && window.electronAPI?.readFile) {
+            try {
+              existingContent = await window.electronAPI.readFile(resolvedPath)
+            } catch {
+              // file might not exist yet
+            }
+          }
 
           let computedFullContent = fullContent
-          if (!computedFullContent && originalSnippet && newSnippet && context.activeFileContent) {
-            computedFullContent = context.activeFileContent.replace(originalSnippet, newSnippet)
+          if (!computedFullContent && originalSnippet && newSnippet) {
+            if (existingContent !== null) {
+              if (existingContent.includes(originalSnippet)) {
+                // Function replacer avoids $1, $2 token corruption
+                computedFullContent = existingContent.replace(originalSnippet, () => newSnippet)
+              } else {
+                // Normalize line endings to test for CRLF / LF mismatches
+                const normExisting = existingContent.replace(/\r\n/g, '\n')
+                const normOriginal = originalSnippet.replace(/\r\n/g, '\n')
+                const normNew = newSnippet.replace(/\r\n/g, '\n')
+                if (normExisting.includes(normOriginal)) {
+                  computedFullContent = normExisting.replace(normOriginal, () => normNew)
+                } else {
+                  return {
+                    toolCallId: call.id,
+                    toolName: call.toolName,
+                    success: false,
+                    output: '',
+                    error: `Could not locate originalSnippet in "${filePath}". Please re-read the file with read_file and provide the exact existing text, or provide fullContent.`,
+                  }
+                }
+              }
+            } else {
+              computedFullContent = newSnippet
+            }
+          }
+
+          if (!computedFullContent && newSnippet) {
+            computedFullContent = newSnippet
           }
 
           return {
@@ -667,7 +798,7 @@ export class AiToolExecutor {
             success: true,
             output: `Proposed edit for "${filePath}": ${description}`,
             diff: {
-              filePath,
+              filePath: resolvedPath,
               originalSnippet,
               newSnippet,
               fullContent: computedFullContent,
@@ -779,6 +910,21 @@ export class AiToolExecutor {
  * ========================================================================= */
 
 export class AiToolParser {
+  private static buildParsedCall(toolName: string, args: Record<string, any>): AiToolCall {
+    const toolDef = AiToolsRegistry.getTool(toolName)
+    const category = toolDef?.category || 'read'
+    const autoApproved = AiService.canAutoApprove(category)
+    return {
+      id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      toolName,
+      arguments: args,
+      category,
+      status: autoApproved ? 'approved' : 'pending_approval',
+      requestedAt: Date.now(),
+      autoApproved,
+    }
+  }
+
   /**
    * Parses markdown tool blocks or JSON function calls from assistant response text.
    * Matches both ```tool_call ... ``` and <tool_call> ... </tool_call> formats.
@@ -798,18 +944,7 @@ export class AiToolParser {
         const toolName = parsed.tool || parsed.name || parsed.toolName
         const args = parsed.arguments || parsed.args || parsed.params || {}
         if (toolName) {
-          const toolDef = AiToolsRegistry.getTool(toolName)
-          const category = toolDef?.category || 'read'
-          const autoApproved = AiService.canAutoApprove(category)
-          calls.push({
-            id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            toolName,
-            arguments: args,
-            category,
-            status: autoApproved ? 'approved' : 'pending_approval',
-            requestedAt: Date.now(),
-            autoApproved,
-          })
+          calls.push(this.buildParsedCall(toolName, args))
         }
       } catch (err) {
         console.warn('Failed to parse tool call JSON from markdown block', err)
@@ -820,25 +955,14 @@ export class AiToolParser {
     const xmlRegex = /<tool_call\s+name=["']([^"']+)["']>([\s\S]*?)<\/tool_call>/gi
     while ((match = xmlRegex.exec(text)) !== null) {
       const toolName = match[1].trim()
-      let rawJson = match[2].trim()
-      
-      // Remove any ```json ... ``` wrapper the model might have hallucinated inside the XML tags
-      rawJson = rawJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
-      
+      const rawJson = match[2]
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+
       try {
         const args = rawJson ? JSON.parse(rawJson) : {}
-        const toolDef = AiToolsRegistry.getTool(toolName)
-        const category = toolDef?.category || 'read'
-        const autoApproved = AiService.canAutoApprove(category)
-        calls.push({
-          id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          toolName,
-          arguments: args,
-          category,
-          status: autoApproved ? 'approved' : 'pending_approval',
-          requestedAt: Date.now(),
-          autoApproved,
-        })
+        calls.push(this.buildParsedCall(toolName, args))
       } catch (err) {
         console.warn('Failed to parse XML tool call JSON', err)
       }

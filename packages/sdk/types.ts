@@ -179,8 +179,15 @@ export interface ViewContribution {
  * AI Multi-Model & Chat Contracts
  * ========================================================================= */
 
-export type AiProvider = 'openai' | 'deepseek' | 'gemini' | 'claude' | 'ollama' | 'antigravity'
+export type AiProvider = 'openai' | 'deepseek' | 'gemini' | 'claude' | 'ollama' | 'openrouter' | 'custom' | 'antigravity'
 export type AiChatMode = 'plan' | 'act'
+
+export interface AiTokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  cachedInputTokens?: number
+}
 
 export interface AiModelOption {
   id: string
@@ -261,6 +268,8 @@ export interface AiChatMessage {
   toolCalls?: AiToolCall[]
   toolResults?: AiToolResult[]
   isAgentTurn?: boolean
+  isInternalToolResult?: boolean
+  usage?: AiTokenUsage
 }
 
 export interface AiProviderConfig {
@@ -276,6 +285,8 @@ export interface AiStreamChunk {
   done?: boolean
   error?: string
   toolCalls?: AiToolCall[]
+  preparingTool?: string
+  usage?: AiTokenUsage
 }
 
 export interface AiAutoApproveSettings {
@@ -334,3 +345,147 @@ export interface AntigravitySidecarStatus {
   authStatus: 'authenticated' | 'unauthenticated' | 'authenticating' | 'error'
   activeSession?: AntigravitySession | null
 }
+
+/* =========================================================================
+ * Agent Client Protocol (ACP v1) Contracts — Official `agy acp` Integration
+ * ========================================================================= */
+
+export type AcpAgentPresetId = 'antigravity' | 'gemini-cli' | 'custom'
+
+export interface AcpAgentProfile {
+  id: AcpAgentPresetId
+  name: string
+  command: string
+  args: string[]
+  description?: string
+}
+
+export type AcpConnectionState =
+  | 'disconnected'
+  | 'detecting'
+  | 'connecting'
+  | 'authenticating'
+  | 'ready'
+  | 'error'
+
+export interface AcpBinaryDetection {
+  installed: boolean
+  command: string
+  resolvedPath?: string
+  version?: string
+  installUrl: string
+  error?: string
+}
+
+export interface AcpAuthMethod {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface AcpModeOption {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface AcpModelOption {
+  modelId: string
+  name: string
+  description?: string
+}
+
+export interface AcpPlanEntry {
+  content: string
+  priority?: 'high' | 'medium' | 'low'
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+export interface AcpSlashCommand {
+  name: string
+  description?: string
+  input?: { hint?: string }
+}
+
+export interface AcpMcpServerSpec {
+  name: string
+  type?: 'stdio' | 'sse' | 'http'
+  command?: string
+  args?: string[]
+  env?: Array<{ name: string; value: string }>
+  url?: string
+  headers?: Array<{ name: string; value: string }>
+}
+
+export interface AcpInstallResult {
+  success: boolean
+  binary?: AcpBinaryDetection
+  error?: string
+  logs: string[]
+}
+
+export interface AcpToolCallContentBlock {
+  type: 'content' | 'diff' | 'terminal' | string
+  text?: string
+  path?: string
+  oldText?: string | null
+  newText?: string
+  content?: { type: string; text?: string }
+}
+
+export interface AcpToolCallUpdate {
+  toolCallId: string
+  title: string
+  kind?: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  rawInput?: Record<string, any>
+  rawOutput?: any
+  locations?: Array<{ path: string; line?: number }>
+  content?: AcpToolCallContentBlock[]
+}
+
+export interface AcpPermissionOption {
+  optionId: string
+  name: string
+  kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always' | string
+}
+
+export interface AcpPermissionRequest {
+  requestId: string | number
+  sessionId: string
+  toolCall: AcpToolCallUpdate
+  options: AcpPermissionOption[]
+}
+
+export interface AcpStatusInfo {
+  state: AcpConnectionState
+  binary: AcpBinaryDetection
+  agentInfo?: { name: string; version?: string; title?: string }
+  protocolVersion?: number
+  sessionId?: string | null
+  cwd?: string
+  authMethods?: AcpAuthMethod[]
+  modes?: AcpModeOption[]
+  currentModeId?: string
+  models?: AcpModelOption[]
+  currentModelId?: string
+  commands?: AcpSlashCommand[]
+  pid?: number
+  lastError?: string
+}
+
+export type AcpStreamEvent =
+  | { type: 'status'; status: AcpStatusInfo }
+  | { type: 'message_chunk'; sessionId: string; text: string }
+  | { type: 'thought_chunk'; sessionId: string; text: string }
+  | { type: 'tool_call'; sessionId: string; toolCall: AcpToolCallUpdate }
+  | { type: 'tool_call_update'; sessionId: string; toolCall: Partial<AcpToolCallUpdate> & { toolCallId: string } }
+  | { type: 'plan'; sessionId: string; entries: AcpPlanEntry[] }
+  | { type: 'commands_updated'; sessionId: string; commands: AcpSlashCommand[] }
+  | { type: 'mode_changed'; sessionId: string; modeId: string }
+  | { type: 'permission_request'; request: AcpPermissionRequest }
+  | { type: 'file_written'; path: string; beforeContent: string; afterContent: string; isNewFile: boolean }
+  | { type: 'prompt_done'; sessionId: string; stopReason?: string }
+  | { type: 'install_log'; line: string }
+  | { type: 'error'; message: string }
+  | { type: 'log'; line: string }

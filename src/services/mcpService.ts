@@ -1,8 +1,11 @@
 /**
  * IndoctrinatedEdit - Model Context Protocol (MCP) Subsystem Service
  * Manages stdio, SSE, and builtin MCP servers, tool discovery, resource inspection,
- * and dynamic execution dispatch for autonomous AI agents.
+ * Vercel AI SDK v7 `dynamicTool` bridging, and dynamic execution dispatch for AI agents.
  */
+
+import { dynamicTool, jsonSchema } from 'ai'
+import { z } from 'zod'
 
 export type McpTransportType = 'stdio' | 'sse' | 'builtin'
 
@@ -80,6 +83,13 @@ export interface McpToolCallResult {
 }
 
 const MCP_STORAGE_KEY = 'indoctrinated_mcp_servers'
+const MCP_MEMORY_GRAPH_KEY = 'indoctrinated_mcp_memory_graph'
+
+export interface McpMemoryEntity {
+  name: string
+  entityType: string
+  observations: string[]
+}
 
 export const DEFAULT_MCP_PRESETS: McpServerConfig[] = [
   {
@@ -351,6 +361,7 @@ const BUILTIN_SERVER_TOOLS: Record<string, McpToolDefinition[]> = {
 
 export class McpService {
   private static servers: Map<string, McpServerConfig> = new Map()
+  private static memoryGraph: Map<string, McpMemoryEntity> = new Map()
   private static serverListeners: Set<(servers: McpServerConfig[]) => void> = new Set()
   private static toolListeners: Set<(tools: McpToolDefinition[]) => void> = new Set()
   private static initialized = false
@@ -359,6 +370,36 @@ export class McpService {
     if (this.initialized) return
     this.initialized = true
     this.loadFromStorage()
+    this.loadMemoryGraph()
+  }
+
+  private static loadMemoryGraph(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(MCP_MEMORY_GRAPH_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as McpMemoryEntity[]
+          if (Array.isArray(parsed)) {
+            this.memoryGraph.clear()
+            for (const ent of parsed) {
+              if (ent?.name) this.memoryGraph.set(ent.name, ent)
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore corrupted graph storage
+    }
+  }
+
+  private static persistMemoryGraph(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(MCP_MEMORY_GRAPH_KEY, JSON.stringify(Array.from(this.memoryGraph.values())))
+      }
+    } catch {
+      // ignore storage quota errors
+    }
   }
 
   private static loadFromStorage(): void {
@@ -540,6 +581,70 @@ export class McpService {
   }
 
   /**
+   * Produces normalized, typed `extraTools` definitions for `AiRequestOptions` (IPC & aiCore.ts).
+   * Single source of truth connecting enabled MCP servers into our Vercel AI SDK v7 pipeline.
+   */
+  static toAiSdkExtraTools(serverId?: string): Array<{
+    name: string
+    description?: string
+    parameters?: Record<string, any>
+    requiredParams?: string[]
+  }> {
+    return this.listTools(serverId).map((t) => ({
+      name: t.name,
+      description: `[MCP: ${t.serverName}] ${t.description || ''}`,
+      parameters: t.inputSchema?.properties,
+      requiredParams: t.inputSchema?.required,
+    }))
+  }
+
+  /**
+   * Builds a Vercel AI SDK v7 `Record<string, DynamicTool>` using `dynamicTool` + `jsonSchema`.
+   * Pass `withExecute: true` for autonomous direct execution, or omit for approval-gated UI flows.
+   */
+  static toVercelAiSdkTools(options?: {
+    serverId?: string
+    withExecute?: boolean
+  }): Record<string, ReturnType<typeof dynamicTool>> {
+    const sdkTools: Record<string, ReturnType<typeof dynamicTool>> = {}
+    const discovered = this.listTools(options?.serverId)
+
+    for (const t of discovered) {
+      const hasTypedParams = t.inputSchema?.properties && Object.keys(t.inputSchema.properties).length > 0
+      const inputSchema = hasTypedParams
+        ? jsonSchema({
+            type: 'object',
+            properties: t.inputSchema.properties as Record<string, any>,
+            required: t.inputSchema.required || [],
+            additionalProperties: true,
+          })
+        : z.record(z.string(), z.any())
+
+      sdkTools[t.name] = dynamicTool({
+        description: `[MCP: ${t.serverName}] ${t.description || t.name}`,
+        inputSchema,
+        ...(options?.withExecute
+          ? {
+              execute: async (input: unknown) => {
+                const res = await this.callTool(
+                  t.serverId,
+                  t.name,
+                  (input && typeof input === 'object' ? input : {}) as Record<string, any>
+                )
+                if (!res.success) {
+                  throw new Error(res.content?.[0]?.text || `MCP tool "${t.name}" failed`)
+                }
+                return res.output
+              },
+            }
+          : {}),
+      })
+    }
+
+    return sdkTools
+  }
+
+  /**
    * Lists exposed resources across enabled servers.
    */
   static listResources(serverId?: string): McpResource[] {
@@ -654,17 +759,50 @@ export class McpService {
     }
 
     try {
-      // Execute built-in simulations or stdio dispatch
       let responseText = ''
 
-      if (actualToolName === 'fetch_markdown') {
+      // Real JSON-RPC 2.0 `tools/call` dispatch for remote SSE / HTTP MCP servers
+      if (server.transport === 'sse' && server.url) {
+        try {
+          const rpcRes = await fetch(server.url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(server.headers || {}),
+            },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: `mcp-${Date.now()}`,
+              method: 'tools/call',
+              params: {
+                name: actualToolName,
+                arguments: args,
+              },
+            }),
+            signal: AbortSignal.timeout(server.timeoutMs || 15000),
+          })
+          if (!rpcRes.ok) {
+            throw new Error(`HTTP ${rpcRes.status}: ${rpcRes.statusText}`)
+          }
+          const rpcJson = (await rpcRes.json()) as any
+          if (rpcJson.error) {
+            throw new Error(rpcJson.error.message || JSON.stringify(rpcJson.error))
+          }
+          const contentBlocks = rpcJson.result?.content
+          responseText = Array.isArray(contentBlocks)
+            ? contentBlocks.map((c: any) => c.text || JSON.stringify(c)).join('\n')
+            : JSON.stringify(rpcJson.result ?? rpcJson, null, 2)
+        } catch (sseErr: any) {
+          throw new Error(`SSE MCP server "${server.name}" call failed: ${sseErr?.message || String(sseErr)}`)
+        }
+      } else if (actualToolName === 'fetch_markdown') {
         const url = String(args.url || '')
         if (!url) throw new Error('Parameter "url" is required')
         try {
           const res = await fetch(url, { signal: AbortSignal.timeout(server.timeoutMs || 15000) })
           const body = await res.text()
           responseText = `Successfully fetched URL [${url}] (${body.length} bytes):\n\n${body.slice(0, 4000)}`
-        } catch (fetchErr: any) {
+        } catch {
           responseText = `Simulated Markdown content for "${url}":\n# Documentation Overview\n- Endpoint: ${url}\n- Status: 200 OK\n- Protocol: MCP Web Fetcher v1.0`
         }
       } else if (actualToolName === 'search_gemini_docs') {
@@ -682,18 +820,92 @@ export class McpService {
           `Configure your API key using the \`GEMINI_API_KEY\` environment variable.`
       } else if (actualToolName === 'git_log_history') {
         const max = Number(args.maxCount) || 5
-        responseText = `Git Log (last ${max} commits):\n` +
-          `* ab16652 - (HEAD -> master, origin/master) v4.5.0 Auto-Updater & CI Workflow\n` +
-          `* 8e411b9 - feat(extensions): add scrollable extension activity bar\n` +
-          `* d34181a - feat(theme): specular border sheen & Dark Velvet styling`
+        let branchHint = 'master'
+        if (typeof window !== 'undefined' && window.electronAPI?.git?.getRepoStatus) {
+          try {
+            const st = await window.electronAPI.git.getRepoStatus()
+            if (st?.branch) branchHint = st.branch
+          } catch { /* fallback */ }
+        }
+        responseText = `Git Log (last ${max} commits on ${branchHint}):\n` +
+          `* HEAD (${branchHint}) - Active working tree\n` +
+          `* Use get_git_status / get_git_diff for live unstaged and staged file changes.`
       } else if (actualToolName === 'git_show_commit') {
-        responseText = `Commit details for ${args.commitHash || 'HEAD'}:\nAuthor: indoctrinatedrecluse <abmitra1999@gmail.com>\nStatus: verified clean commit tree.`
+        responseText = `Commit details for ${args.commitHash || 'HEAD'}:\nStatus: verified commit reference.`
       } else if (actualToolName === 'git_branch_list') {
-        responseText = `Branches:\n* master\n  remotes/origin/master\n  remotes/origin/beta`
-      } else if (actualToolName === 'read_file_content' || actualToolName === 'list_directory_tree' || actualToolName === 'find_files_by_pattern') {
+        let activeBranch = 'master'
+        if (typeof window !== 'undefined' && window.electronAPI?.git?.getRepoStatus) {
+          try {
+            const st = await window.electronAPI.git.getRepoStatus()
+            if (st?.branch) activeBranch = st.branch
+          } catch { /* fallback */ }
+        }
+        responseText = `Branches:\n* ${activeBranch}\n  remotes/origin/${activeBranch}`
+      } else if (actualToolName === 'read_file_content') {
+        const filePath = String(args.path || '')
+        if (filePath && typeof window !== 'undefined' && window.electronAPI?.readFile) {
+          try {
+            const fileContent = await window.electronAPI.readFile(filePath)
+            responseText = `// MCP Filesystem Read: ${filePath}\n${fileContent.slice(0, 12000)}`
+          } catch (readErr: any) {
+            throw new Error(`Failed to read "${filePath}": ${readErr?.message || String(readErr)}`)
+          }
+        } else {
+          responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
+        }
+      } else if (actualToolName === 'list_directory_tree') {
+        const dirPath = String(args.directory || '')
+        if (dirPath && typeof window !== 'undefined' && window.electronAPI?.readFolder) {
+          const res = await window.electronAPI.readFolder(dirPath)
+          if (res?.files) {
+            responseText = res.files.map((f) => `${f.isDirectory ? '📁' : '📄'} ${f.name}`).join('\n')
+          } else {
+            responseText = `Directory "${dirPath}" is empty or unavailable.`
+          }
+        } else {
+          responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
+        }
+      } else if (actualToolName === 'find_files_by_pattern') {
         responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
-      } else if (actualToolName === 'create_entities' || actualToolName === 'search_nodes' || actualToolName === 'read_graph') {
-        responseText = `Memory MCP graph result: Stored & queried knowledge node for query: "${args.query || 'workspace'}"`
+      } else if (actualToolName === 'create_entities') {
+        let items: McpMemoryEntity[] = []
+        if (Array.isArray(args.entities)) {
+          items = args.entities
+        } else if (typeof args.entities === 'string') {
+          try {
+            const parsed = JSON.parse(args.entities)
+            items = Array.isArray(parsed) ? parsed : [parsed]
+          } catch {
+            items = [{ name: args.entities, entityType: 'note', observations: [args.entities] }]
+          }
+        }
+        for (const item of items) {
+          if (!item?.name) continue
+          const existing = this.memoryGraph.get(item.name)
+          const mergedObs = Array.from(new Set([...(existing?.observations || []), ...(item.observations || [])]))
+          this.memoryGraph.set(item.name, {
+            name: item.name,
+            entityType: item.entityType || existing?.entityType || 'concept',
+            observations: mergedObs,
+          })
+        }
+        this.persistMemoryGraph()
+        responseText = `Memory MCP: Stored ${items.length} entity node(s). Total entities in graph: ${this.memoryGraph.size}.`
+      } else if (actualToolName === 'search_nodes') {
+        const q = String(args.query || '').toLowerCase()
+        const matches = Array.from(this.memoryGraph.values()).filter(
+          (ent) =>
+            ent.name.toLowerCase().includes(q) ||
+            ent.entityType.toLowerCase().includes(q) ||
+            ent.observations.some((o) => o.toLowerCase().includes(q))
+        )
+        responseText =
+          matches.length > 0
+            ? `Memory MCP search matches for "${args.query || ''}":\n${JSON.stringify(matches, null, 2)}`
+            : `Memory MCP: No matching entities found for query "${args.query || ''}" (graph has ${this.memoryGraph.size} nodes).`
+      } else if (actualToolName === 'read_graph') {
+        const allNodes = Array.from(this.memoryGraph.values())
+        responseText = `Memory MCP Graph (${allNodes.length} entities):\n${JSON.stringify(allNodes, null, 2)}`
       } else if (actualToolName === 'sqlite_query' || actualToolName === 'sqlite_describe_tables') {
         responseText = `SQLite MCP query result:\n[ { "id": 1, "table_name": "projects", "status": "active", "rows": 42 } ]`
       } else {

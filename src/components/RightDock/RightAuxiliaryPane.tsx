@@ -97,6 +97,10 @@ interface RightAuxiliaryPaneProps {
   currentSelection: SelectionInfo | null
   onInsertAtCursor?: (code: string) => void
   onReplaceSelection?: (code: string) => void
+  workspaceRoot?: string
+  openFiles?: Array<{ path: string; name: string; content?: string }>
+  onOpenFile?: (filePath: string, line?: number, column?: number) => void
+  onApplyFileEdit?: (filePath: string, newContent: string) => Promise<boolean>
 }
 
 export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
@@ -111,6 +115,10 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   currentSelection,
   onInsertAtCursor,
   onReplaceSelection,
+  workspaceRoot,
+  openFiles,
+  onOpenFile,
+  onApplyFileEdit,
 }) => {
   const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null)
 
@@ -405,11 +413,14 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
         {activeTab === 'antigravity' && (
           isUnlocked ? (
             <AntigravityStudioView
+              workspaceRoot={workspaceRoot}
               activeFileName={activeFileName}
               activeFileContent={activeFileContent}
               currentSelection={currentSelection}
               onInsertAtCursor={onInsertAtCursor}
               onReplaceSelection={onReplaceSelection}
+              onOpenFile={onOpenFile}
+              onApplyFileEdit={onApplyFileEdit}
               onClose={onClose}
             />
           ) : (
@@ -545,6 +556,10 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
               activeFileName={activeFileName}
               activeFileContent={activeFileContent}
               currentSelection={currentSelection}
+              workspaceRoot={workspaceRoot}
+              openFiles={openFiles}
+              onOpenFile={onOpenFile}
+              onApplyFileEdit={onApplyFileEdit}
               onInsertAtCursor={onInsertAtCursor}
               onReplaceSelection={onReplaceSelection}
             />

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { McpService, McpServerConfig, DEFAULT_MCP_PRESETS } from '../src/services/mcpService'
+import { McpService, McpServerConfig } from '../src/services/mcpService'
 import { AiToolsRegistry, AiToolExecutor } from '../src/services/aiToolsService'
-import { AiService } from '../src/services/aiService'
 
 describe('MCP (Model Context Protocol) Subsystem & Agent Integration', () => {
   beforeEach(() => {
@@ -131,5 +130,44 @@ describe('MCP (Model Context Protocol) Subsystem & Agent Integration', () => {
     const execResult = await AiToolExecutor.execute(toolCall, {})
     expect(execResult.success).toBe(true)
     expect(execResult.output).toContain('Gemini Docs Search Results')
+  })
+
+  it('should bridge enabled MCP tools into Vercel AI SDK v7 dynamicTools and extraTools', async () => {
+    const extraTools = McpService.toAiSdkExtraTools()
+    expect(extraTools.length).toBeGreaterThanOrEqual(10)
+    const fetchExtra = extraTools.find((t) => t.name === 'fetch_markdown')
+    expect(fetchExtra).toBeDefined()
+    expect(fetchExtra?.parameters?.url).toBeDefined()
+    expect(fetchExtra?.requiredParams).toContain('url')
+
+    const sdkTools = McpService.toVercelAiSdkTools({ withExecute: true })
+    expect(sdkTools.search_gemini_docs).toBeDefined()
+    expect((sdkTools.search_gemini_docs as any).type).toBe('dynamic')
+    expect(typeof (sdkTools.search_gemini_docs as any).execute).toBe('function')
+
+    const execOut = await (sdkTools.search_gemini_docs as any).execute({ query: 'streamText', language: 'typescript' })
+    expect(execOut).toContain('Gemini Docs Search Results')
+  })
+
+  it('should persist and search entities in the Knowledge Graph Memory MCP', async () => {
+    const createRes = await McpService.callTool('mcp-memory', 'create_entities', {
+      entities: JSON.stringify([
+        {
+          name: 'VercelAiSdkBridge',
+          entityType: 'architecture',
+          observations: ['Uses dynamicTool and jsonSchema for MCP tools'],
+        },
+      ]),
+    })
+    expect(createRes.success).toBe(true)
+    expect(createRes.output).toContain('Stored 1 entity')
+
+    const searchRes = await McpService.callTool('mcp-memory', 'search_nodes', { query: 'dynamicTool' })
+    expect(searchRes.success).toBe(true)
+    expect(searchRes.output).toContain('VercelAiSdkBridge')
+
+    const graphRes = await McpService.callTool('mcp-memory', 'read_graph', {})
+    expect(graphRes.success).toBe(true)
+    expect(graphRes.output).toContain('VercelAiSdkBridge')
   })
 })

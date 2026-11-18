@@ -20,7 +20,7 @@ import {
 } from './toolchain-service'
 import { terminalService } from './terminal-service'
 import { updateService } from './update-service'
-import { antigravityBackendService } from './antigravity-backend-service'
+import { antigravityAcpClient, setupAntigravityAcpIPC } from './antigravity-acp-service'
 import { licenseService } from './license-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -375,6 +375,8 @@ ipcMain.handle('fs:readFileBase64', async (_, filePath: string) => {
 })
 
 ipcMain.handle('fs:saveFile', async (_, filePath: string, content: string) => {
+  const dir = path.dirname(filePath)
+  await fs.mkdir(dir, { recursive: true })
   await fs.writeFile(filePath, content, 'utf-8')
   return true
 })
@@ -387,6 +389,8 @@ ipcMain.handle('dialog:saveFileAs', async (_, defaultName: string, content: stri
   })
 
   if (result.canceled || !result.filePath) return null
+  const dir = path.dirname(result.filePath)
+  await fs.mkdir(dir, { recursive: true })
   await fs.writeFile(result.filePath, content, 'utf-8')
   return { path: result.filePath, name: path.basename(result.filePath) }
 })
@@ -425,43 +429,9 @@ ipcMain.handle('git:init', async (_, cwd?: string) => {
 setupAiIPC(ipcMain)
 
 // ==========================================
-// Antigravity Python SDK & Personal Account IPC
+// Antigravity Official ACP (`agy acp`) Client IPC
 // ==========================================
-ipcMain.handle('antigravity:login', async () => {
-  return await antigravityBackendService.login()
-})
-
-ipcMain.handle('antigravity:logout', async () => {
-  return await antigravityBackendService.logout()
-})
-
-ipcMain.handle('antigravity:getSession', async () => {
-  return await antigravityBackendService.getSession()
-})
-
-ipcMain.handle('antigravity:getQuota', async () => {
-  return await antigravityBackendService.getQuota()
-})
-
-ipcMain.handle('antigravity:getStatus', async () => {
-  return await antigravityBackendService.getStatus()
-})
-
-ipcMain.handle('antigravity:getLogs', async () => {
-  return await antigravityBackendService.getLogs()
-})
-
-ipcMain.handle('antigravity:tokenize', async (_, text: string, messages?: Array<{ role: string; content: string }>) => {
-  return await antigravityBackendService.tokenize(text, messages)
-})
-
-ipcMain.handle('antigravity:setApiKey', async (_, apiKey: string) => {
-  return await antigravityBackendService.setApiKey(apiKey)
-})
-
-ipcMain.handle('antigravity:removeApiKey', async () => {
-  return await antigravityBackendService.removeApiKey()
-})
+setupAntigravityAcpIPC(ipcMain, () => win)
 
 // ==========================================
 // Compiler & SDK Auto-Detection IPC Handlers
@@ -509,12 +479,14 @@ app.on('second-instance', () => {
 app.on('before-quit', () => {
   try {
     terminalService.killAll()
+    void antigravityAcpClient.disconnect()
   } catch {}
 })
 
 app.on('will-quit', () => {
   try {
     terminalService.killAll()
+    void antigravityAcpClient.disconnect()
   } catch {}
 })
 

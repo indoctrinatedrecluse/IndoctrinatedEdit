@@ -40,8 +40,16 @@ import {
   CornerDownLeft,
   Server,
   Compass,
+  Loader2,
+  MessageSquare,
+  Maximize2,
+  ExternalLink,
+  Scissors,
+  RotateCcw,
+  History,
 } from 'lucide-react'
 import { McpService } from '../../services/mcpService'
+import { AiCheckpointService, AiCheckpoint } from '../../services/aiCheckpointService'
 import {
   AiChatMessage,
   AiModelOption,
@@ -63,6 +71,7 @@ import { AiTokenizer, TokenBreakdown } from '../../services/aiTokenizer'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { terminalService } from '../../services/terminalService'
 import {
+  AiGuardrailService,
   AiToolExecutor,
   AiToolParser,
   AiToolsRegistry,
@@ -81,6 +90,177 @@ interface AiChatPanelProps {
   onInsertAtCursor?: (code: string) => void
   onReplaceSelection?: (code: string) => void
   onOpenFile?: (filePath: string, line?: number, column?: number) => void
+  onApplyFileEdit?: (filePath: string, newContent: string) => Promise<boolean>
+}
+
+const getBaseName = (pathStr?: string): string => {
+  if (!pathStr) return ''
+  return pathStr.split(/[/\\]/).pop() || pathStr
+}
+
+interface ToolDisplayMeta {
+  headline: string
+  subtext?: string
+  isBackground: boolean
+  isCompact: boolean
+  isCommand: boolean
+  filePath?: string
+}
+
+const getToolDisplayMeta = (call: AiToolCall): ToolDisplayMeta => {
+  const args = call.arguments || {}
+  switch (call.toolName) {
+    case 'propose_file_edit': {
+      const fp = String(args.filePath || '')
+      return {
+        headline: `Edit ${getBaseName(fp) || fp || 'file'}`,
+        subtext: fp !== getBaseName(fp) ? fp : (args.explanation ? String(args.explanation) : undefined),
+        isBackground: false,
+        isCompact: false,
+        isCommand: false,
+        filePath: fp,
+      }
+    }
+    case 'write_file': {
+      const fp = String(args.filePath || '')
+      return {
+        headline: `Write ${getBaseName(fp) || fp || 'file'}`,
+        subtext: fp !== getBaseName(fp) ? fp : (args.explanation ? String(args.explanation) : undefined),
+        isBackground: false,
+        isCompact: false,
+        isCommand: false,
+        filePath: fp,
+      }
+    }
+    case 'execute_terminal_command': {
+      const cmd = String(args.command || '').trim()
+      return {
+        headline: `$ ${cmd}`,
+        subtext: args.cwd ? `in ${args.cwd}` : undefined,
+        isBackground: false,
+        isCompact: false,
+        isCommand: true,
+      }
+    }
+    case 'trigger_project_run':
+      return {
+        headline: `Run project${args.targetLanguageOrId ? ` (${args.targetLanguageOrId})` : ''}`,
+        isBackground: false,
+        isCompact: false,
+        isCommand: true,
+      }
+    case 'get_git_status':
+      return {
+        headline: '$ git status',
+        isBackground: false,
+        isCompact: true,
+        isCommand: true,
+      }
+    case 'get_git_diff':
+      return {
+        headline: args.stagedOnly ? '$ git diff --staged' : '$ git diff',
+        isBackground: false,
+        isCompact: false,
+        isCommand: true,
+      }
+    case 'read_file': {
+      const fp = String(args.filePath || '')
+      const range = args.startLine ? `:${args.startLine}${args.endLine ? `-${args.endLine}` : ''}` : ''
+      return {
+        headline: `Read ${getBaseName(fp) || fp || 'file'}${range}`,
+        subtext: fp !== getBaseName(fp) ? fp : undefined,
+        isBackground: false,
+        isCompact: true,
+        isCommand: false,
+        filePath: fp,
+      }
+    }
+    case 'search_code':
+      return {
+        headline: `Search "${String(args.query || '')}"${args.filePattern ? ` in ${args.filePattern}` : ''}`,
+        isBackground: false,
+        isCompact: true,
+        isCommand: false,
+      }
+    case 'list_workspace_files':
+      return {
+        headline: `List files${args.directory ? ` in ${args.directory}` : ''}`,
+        isBackground: true,
+        isCompact: true,
+        isCommand: false,
+      }
+    case 'get_editor_diagnostics':
+      return {
+        headline: `Check diagnostics${args.filePath ? ` (${getBaseName(String(args.filePath))})` : ''}`,
+        isBackground: true,
+        isCompact: true,
+        isCommand: false,
+      }
+    case 'open_editor_file': {
+      const fp = String(args.filePath || '')
+      return {
+        headline: `Open ${getBaseName(fp) || 'file'}${args.line ? `:${args.line}` : ''}`,
+        isBackground: true,
+        isCompact: true,
+        isCommand: false,
+        filePath: fp,
+      }
+    }
+    default:
+      return {
+        headline: call.toolName.replace(/_/g, ' '),
+        subtext: Object.keys(args).length > 0
+          ? Object.entries(args)
+              .map(([k, v]) => `${k}: ${typeof v === 'string' ? v.slice(0, 40) : JSON.stringify(v)}`)
+              .join(' · ')
+          : undefined,
+        isBackground: false,
+        isCompact: false,
+        isCommand: false,
+      }
+  }
+}
+
+const buildDropdownSummary = (calls: AiToolCall[]): string => {
+  const edits = calls.filter((c) => c.toolName === 'propose_file_edit' || c.toolName === 'write_file')
+  const cmds = calls.filter((c) => c.toolName === 'execute_terminal_command' || c.toolName === 'trigger_project_run')
+  const gits = calls.filter((c) => c.category === 'git')
+  const reads = calls.filter((c) => c.toolName === 'read_file')
+  const searches = calls.filter((c) => c.toolName === 'search_code')
+
+  const parts: string[] = []
+  if (edits.length === 1) {
+    parts.push(`Edited ${getBaseName(String(edits[0].arguments?.filePath || '')) || 'file'}`)
+  } else if (edits.length > 1) {
+    parts.push(`Edited ${edits.length} files`)
+  }
+
+  if (cmds.length === 1 && cmds[0].arguments?.command) {
+    const cmdStr = String(cmds[0].arguments.command).trim()
+    parts.push(`Ran ${cmdStr.length > 26 ? cmdStr.slice(0, 25) + '…' : cmdStr}`)
+  } else if (cmds.length > 0) {
+    parts.push(`Ran ${cmds.length} command${cmds.length === 1 ? '' : 's'}`)
+  }
+
+  if (gits.length > 0) {
+    parts.push(gits.length === 1 && gits[0].toolName === 'get_git_status' ? 'Git status' : 'Git diff')
+  }
+
+  if (reads.length === 1) {
+    parts.push(`Read ${getBaseName(String(reads[0].arguments?.filePath || '')) || 'file'}`)
+  } else if (reads.length > 1) {
+    parts.push(`Read ${reads.length} files`)
+  }
+
+  if (searches.length > 0 && parts.length < 3) {
+    parts.push(`Searched ${searches.length}x`)
+  }
+
+  if (parts.length === 0) {
+    return `Inspected workspace (${calls.length} step${calls.length === 1 ? '' : 's'})`
+  }
+
+  return parts.join(' · ')
 }
 
 export const AiChatPanel: React.FC<AiChatPanelProps> = ({
@@ -94,6 +274,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   onInsertAtCursor,
   onReplaceSelection,
   onOpenFile,
+  onApplyFileEdit,
 }) => {
   // Mode State (Plan Mode vs Act Mode)
   const [chatMode, setChatMode] = useState<AiChatMode>(AiService.getActiveMode())
@@ -126,6 +307,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [inputText, setInputText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [cancelFn, setCancelFn] = useState<(() => void) | null>(null)
+  const [sessionCost, setSessionCost] = useState<number>(0)
+  const [workspaceRules, setWorkspaceRules] = useState<{ fileName: string; content: string } | null>(null)
   const [attachedContext, setAttachedContext] = useState<{
     type: 'selection' | 'file' | 'problems' | 'terminal' | 'git' | 'workspace'
     fileName?: string
@@ -140,6 +323,21 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [mentionFilter, setMentionFilter] = useState('')
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashFilter, setSlashFilter] = useState('')
+
+  // Load project-specific rules (.indoctrinatedrules, .cursorrules, .clinerules, AGENTS.md)
+  useEffect(() => {
+    let active = true
+    if (workspaceRoot) {
+      AiService.loadWorkspaceRules(workspaceRoot).then((rules) => {
+        if (active) setWorkspaceRules(rules)
+      })
+    } else {
+      setWorkspaceRules(null)
+    }
+    return () => {
+      active = false
+    }
+  }, [workspaceRoot])
 
   // Load chat history when project or model changes
   useEffect(() => {
@@ -163,11 +361,20 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   }, [messages, messagesWorkspace, messagesModelId])
 
   const handleClearChat = () => {
+    AiGuardrailService.resetLoopTracker()
+    cancelFn?.()
+    setIsStreaming(false)
+    setPreparingToolName(null)
+    setCancelFn(null)
+    setSessionCost(0)
     if (workspaceRoot && selectedModelId) {
       AiService.clearChatHistory(workspaceRoot, selectedModelId)
       setMessages([DEFAULT_WELCOME_MSG])
       setMessagesModelId(selectedModelId)
       setMessagesWorkspace(workspaceRoot)
+      setAttachedContext(null)
+    } else {
+      setMessages([DEFAULT_WELCOME_MSG])
       setAttachedContext(null)
     }
   }
@@ -175,10 +382,34 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
   // Interactive Tools & Diff States
   const [executingToolId, setExecutingToolId] = useState<string | null>(null)
+  const [preparingToolName, setPreparingToolName] = useState<string | null>(null)
   const [appliedDiffs, setAppliedDiffs] = useState<Record<string, boolean>>({})
+  const [steeringToolId, setSteeringToolId] = useState<string | null>(null)
+  const [steeringFeedback, setSteeringFeedback] = useState<string>('')
+  const [diffViewModes, setDiffViewModes] = useState<Record<string, 'unified' | 'split'>>({})
+  const [expandedDiff, setExpandedDiff] = useState<NonNullable<AiToolResult['diff']> | null>(null)
+  const [checkpoints, setCheckpoints] = useState<AiCheckpoint[]>([])
+  const [isCheckpointsOpen, setIsCheckpointsOpen] = useState(false)
 
-  // Expand reasoning cards
+  // Always keep a live ref to messages so async autonomous follow-ups never overwrite state with stale closures
+  const messagesRef = useRef<AiChatMessage[]>(messages)
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  // Subscribe to shadow checkpoint history
+  useEffect(() => {
+    const unsub = AiCheckpointService.subscribe((cps) => {
+      setCheckpoints(cps)
+    })
+    return () => unsub()
+  }, [])
+
+  // Expand reasoning cards & tool dropdowns
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({})
+  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({})
+  const [showBackgroundTools, setShowBackgroundTools] = useState<Record<string, boolean>>({})
+  const [expandedCompactTools, setExpandedCompactTools] = useState<Record<string, boolean>>({})
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
 
   const modelSelectorRef = useRef<HTMLDivElement | null>(null)
@@ -263,7 +494,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     models[0]
 
   // Live Token Breakdown
-  const systemPromptForMode = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
+  const systemPromptForMode = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}${
+    workspaceRules ? `\n\n### Project-Specific Instructions & Guidelines (${workspaceRules.fileName}):\n${workspaceRules.content}` : ''
+  }`
   const tokenBreakdown: TokenBreakdown = AiTokenizer.estimateConversation(
     systemPromptForMode,
     messages,
@@ -429,7 +662,99 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
    * 🛠️ Tool Execution & Multi-Turn Autonomous Loop
    * ========================================================================= */
 
-  const executeToolCall = async (msgId: string, toolCall: AiToolCall, currentHistory: AiChatMessage[], iteration: number = 0) => {
+  const handleApplyDiff = async (diff: NonNullable<AiToolResult['diff']>): Promise<boolean> => {
+    const contentToWrite = diff.fullContent ?? diff.newSnippet
+    if (!contentToWrite) return false
+
+    // Ensure path is resolved against workspaceRoot if relative
+    let targetPath = diff.filePath
+    const isAbsolute = /^[a-zA-Z]:[/\\]/.test(targetPath) || targetPath.startsWith('/') || targetPath.startsWith('\\\\')
+    if (workspaceRoot && !isAbsolute) {
+      targetPath = `${workspaceRoot.replace(/[/\\]+$/, '')}/${targetPath.replace(/^[/\\]+/, '')}`
+    }
+
+    // Capture shadow checkpoint before writing file to disk
+    try {
+      await AiCheckpointService.recordSnapshot({
+        toolCallId: diff.filePath,
+        filePath: targetPath,
+        newContent: contentToWrite,
+        description: `Edit ${targetPath.split(/[/\\]/).pop()}`,
+        currentContentResolver: async (path) => {
+          if (typeof window !== 'undefined' && window.electronAPI?.readFile) {
+            return await window.electronAPI.readFile(path)
+          }
+          return null
+        },
+      })
+    } catch (err) {
+      console.warn('Failed to record AI checkpoint snapshot', err)
+    }
+
+    let success = false
+    if (onApplyFileEdit) {
+      success = await onApplyFileEdit(targetPath, contentToWrite)
+    } else if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
+      try {
+        success = await window.electronAPI.saveFile(targetPath, contentToWrite)
+      } catch (err) {
+        console.error('Failed to save file diff:', err)
+      }
+    }
+
+    if (success) {
+      setAppliedDiffs((prev) => ({ ...prev, [diff.filePath]: true, [targetPath]: true }))
+      // Update result in message state so applied shows true
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (!m.toolResults) return m
+          return {
+            ...m,
+            toolResults: m.toolResults.map((tr) => {
+              if (tr.diff && (tr.diff.filePath === diff.filePath || tr.diff.filePath === targetPath)) {
+                return { ...tr, diff: { ...tr.diff, applied: true } }
+              }
+              return tr
+            }),
+          }
+        })
+      )
+    }
+    return success
+  }
+
+  const handleRollbackCheckpoint = async (checkpointId: string) => {
+    const success = await AiCheckpointService.rollbackCheckpoint(checkpointId, async (path, content) => {
+      if (onApplyFileEdit) {
+        return await onApplyFileEdit(path, content)
+      }
+      if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
+        return await window.electronAPI.saveFile(path, content)
+      }
+      return false
+    })
+
+    if (success) {
+      const cp = AiCheckpointService.getCheckpoints().find((c) => c.id === checkpointId)
+      if (cp) {
+        setAppliedDiffs((prev) => {
+          const next = { ...prev }
+          for (const f of cp.files) {
+            delete next[f.filePath]
+          }
+          return next
+        })
+      }
+    }
+  }
+
+  const executeToolCall = async (
+    msgId: string,
+    toolCall: AiToolCall,
+    currentHistory: AiChatMessage[],
+    iteration: number = 0,
+    shouldFollowup: boolean = true
+  ) => {
     setExecutingToolId(toolCall.id)
 
     // Mark tool call as executing in state
@@ -453,9 +778,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       openFiles,
       onOpenFile,
       onApplyFileEdit: async (filePath: string, newContent: string) => {
-        if (onReplaceSelection && currentSelection?.text) {
-          onReplaceSelection(newContent)
-          return true
+        if (onApplyFileEdit) {
+          return await onApplyFileEdit(filePath, newContent)
         }
         if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
           return await window.electronAPI.saveFile(filePath, newContent)
@@ -464,7 +788,35 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       },
     }
 
-    const result: AiToolResult = await AiToolExecutor.execute(toolCall, context)
+    // Loop Detection Guardrail: Prevent infinite autonomous token burn
+    const loopCheck = AiGuardrailService.checkLoop(toolCall.toolName, toolCall.arguments)
+    let loopBlocked = false
+    if (loopCheck.isLoop) {
+      loopBlocked = true
+      shouldFollowup = false
+    }
+
+    const result: AiToolResult = loopBlocked
+      ? {
+          toolCallId: toolCall.id,
+          toolName: toolCall.toolName,
+          success: false,
+          output: '',
+          error: `Security Guardrail: Repetitive tool loop detected (${toolCall.toolName} invoked ${loopCheck.count} times consecutively with identical arguments). Autonomous execution paused to protect token budget. Please steer the agent or reject this action.`,
+        }
+      : await AiToolExecutor.execute(toolCall, context)
+
+    // Write Tool Auto-Apply or Approved Apply:
+    const isWriteTool = toolCall.toolName === 'propose_file_edit' || toolCall.toolName === 'write_file'
+    if (isWriteTool && result.diff && (result.diff.fullContent || result.diff.newSnippet)) {
+      const shouldApply = autoApprove.autoApproveWrite || toolCall.status === 'approved'
+      if (shouldApply) {
+        const applied = await handleApplyDiff(result.diff)
+        if (applied) {
+          result.diff.applied = true
+        }
+      }
+    }
 
     // Update message state with execution result
     setMessages((prev) =>
@@ -493,65 +845,101 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
     setExecutingToolId(null)
 
-    // If autoApprove is enabled for write and tool was propose_file_edit, auto-apply diff if preset allows
-    if (toolCall.toolName === 'propose_file_edit' && autoApprove.autoApproveWrite && result.diff?.fullContent) {
-      handleApplyDiff(result.diff)
-    }
-
-    // Always trigger followup after a tool is executed to feed the result back to the AI
+    // Feed result back to the AI model if follow-up is enabled and we haven't reached max iterations
     const maxIters = autoApprove.maxAutoIterations || 10
-    if (iteration < maxIters) {
+    if (shouldFollowup && iteration < maxIters) {
       setTimeout(() => {
         triggerAutonomousFollowup(result, currentHistory, iteration + 1)
       }, 400)
     }
   }
 
-  const triggerAutonomousFollowup = (result: AiToolResult, history: AiChatMessage[], iteration: number) => {
-    const assistantMsgId = `assistant-agent-${Date.now()}`
-    const assistantMsg: AiChatMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      reasoning: '',
-      isAgentTurn: true,
-      timestamp: Date.now(),
-    }
-
-    // Build updated history that includes the tool result so the model can see it
-    const toolResultMsg: AiChatMessage = {
-      id: `tool-result-${Date.now()}`,
-      role: 'user',
-      content: `Tool \`${result.toolName}\` result:\n\`\`\`\n${result.output || result.error || 'No output'}\n\`\`\``,
-      timestamp: Date.now(),
-    }
-
-    const updatedHistory: AiChatMessage[] = [...history, toolResultMsg, assistantMsg]
-    setMessages(updatedHistory)
+  /**
+   * Shared streaming lifecycle used by both initial user prompts and autonomous tool follow-ups.
+   */
+  const startAssistantStream = (
+    assistantMsg: AiChatMessage,
+    historyForApi: AiChatMessage[],
+    iteration: number
+  ) => {
+    const assistantMsgId = assistantMsg.id
     setIsStreaming(true)
+    setPreparingToolName(null)
     setExpandedReasoning((prev) => ({ ...prev, [assistantMsgId]: true }))
 
-    const systemPrompt = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
-    const trimmedHistory = AiService.trimConversationHistory([...history, toolResultMsg], systemPrompt, selectedModel.id)
+    let systemPrompt = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
+    if (workspaceRules) {
+      systemPrompt += `\n\n### Project-Specific Instructions & Guidelines (${workspaceRules.fileName}):\n${workspaceRules.content}`
+    }
+    const trimmedHistory = AiService.trimConversationHistory(historyForApi, systemPrompt, selectedModel.id)
     const systemMsg: AiChatMessage = {
-      id: `sys-agent-${Date.now()}`,
+      id: `sys-${Date.now()}`,
       role: 'system',
       content: systemPrompt,
       timestamp: Date.now(),
     }
 
     let accumulatedText = ''
+    const accumulatedNativeTools: AiToolCall[] = []
+
     const cancel = AiService.streamChat(selectedModel, [systemMsg, ...trimmedHistory], async (chunk) => {
+      // Capture live tool-input-start progress (e.g., streaming large write_file / propose_file_edit JSON)
+      if (chunk.preparingTool) {
+        setPreparingToolName(chunk.preparingTool)
+      }
+
+      // Capture live token usage & calculate turn cost
+      if (chunk.usage) {
+        const turnCost = AiTokenizer.estimateCost(selectedModel.id, chunk.usage.promptTokens, chunk.usage.completionTokens)
+        setSessionCost((prev) => Number((prev + turnCost).toFixed(5)))
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId ? { ...msg, usage: chunk.usage } : msg
+          )
+        )
+      }
+
+      // Capture native tool calls streamed from Vercel AI SDK
+      if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+        setPreparingToolName(null)
+        for (const tc of chunk.toolCalls) {
+          const toolDef = AiToolsRegistry.getTool(tc.toolName)
+          const category = toolDef?.category || tc.category || 'read'
+          const autoApproved = AiService.canAutoApprove(category)
+          const preparedCall: AiToolCall = {
+            ...tc,
+            category,
+            autoApproved,
+            status: autoApproved ? 'approved' : 'pending_approval',
+          }
+          const existingIdx = accumulatedNativeTools.findIndex((c) => c.id === tc.id)
+          if (existingIdx >= 0) {
+            accumulatedNativeTools[existingIdx] = preparedCall
+          } else {
+            accumulatedNativeTools.push(preparedCall)
+          }
+        }
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId ? { ...msg, toolCalls: [...accumulatedNativeTools] } : msg
+          )
+        )
+      }
+
       if (chunk.text) {
+        setPreparingToolName(null)
         accumulatedText += chunk.text
         const displayText = stripToolCallBlocks(accumulatedText)
         setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.id === assistantMsgId) {
-              return { ...msg, content: displayText }
-            }
-            return msg
-          })
+          prev.map((msg) =>
+            msg.id === assistantMsgId
+              ? {
+                  ...msg,
+                  content: displayText,
+                  reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
+                }
+              : msg
+          )
         )
       } else if (chunk.reasoning) {
         setMessages((prev) =>
@@ -565,90 +953,130 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
       if (chunk.done || chunk.error) {
         setIsStreaming(false)
+        setPreparingToolName(null)
         setCancelFn(null)
 
         if (chunk.error) {
-          setMessages((prevMessages) => {
-            return prevMessages.map((msg) => {
-              if (msg.id === assistantMsgId) {
-                return {
-                  ...msg,
-                  content: msg.content
-                    ? `${msg.content}\n\n*(Error during generation: ${chunk.error})*`
-                    : `⚠️ **Error**: ${chunk.error}\n\nPlease verify your API key or endpoint in AI Settings.`,
-                }
-              }
-              return msg
-            })
-          })
+          setMessages((prevMessages) =>
+            prevMessages.map((msg) =>
+              msg.id === assistantMsgId
+                ? {
+                    ...msg,
+                    content: msg.content
+                      ? `${msg.content}\n\n*(Error during generation: ${chunk.error})*`
+                      : `⚠️ **Error**: ${chunk.error}\n\nPlease verify your API key or endpoint in AI Settings.`,
+                  }
+                : msg
+            )
+          )
         } else {
-          // Parse any tool calls emitted by the model from the RAW (unstripped) accumulated text
-          const parsedCalls = AiToolParser.parseToolCalls(accumulatedText)
-          if (parsedCalls.length > 0) {
+          // Prioritize native tool calls streamed from Vercel AI SDK, falling back to markdown/XML parser
+          const finalCalls = accumulatedNativeTools.length > 0
+            ? accumulatedNativeTools
+            : AiToolParser.parseToolCalls(accumulatedText)
+
+          if (finalCalls.length > 0) {
             setMessages((prev) =>
-              prev.map((msg) => {
-                if (msg.id === assistantMsgId) {
-                  return { ...msg, toolCalls: parsedCalls }
-                }
-                return msg
-              })
+              prev.map((msg) =>
+                msg.id === assistantMsgId ? { ...msg, toolCalls: finalCalls } : msg
+              )
             )
 
-            // Execute any auto-approved calls
-            for (const call of parsedCalls) {
-              if (call.status === 'approved' || call.autoApproved) {
-                await executeToolCall(assistantMsgId, call, [...updatedHistory.slice(0, -1), assistantMsg], iteration)
-              }
+            // Sequentially execute any auto-approved calls
+            const autoCalls = finalCalls.filter((c) => c.status === 'approved' || c.autoApproved)
+            for (let i = 0; i < autoCalls.length; i++) {
+              const call = autoCalls[i]
+              const isLast = i === autoCalls.length - 1
+              await executeToolCall(assistantMsgId, call, [...historyForApi, assistantMsg], iteration, isLast)
             }
           }
         }
       }
-    })
+    }, chatMode)
 
     setCancelFn(() => cancel)
+  }
+
+  const triggerAutonomousFollowup = (result: AiToolResult, history: AiChatMessage[], iteration: number) => {
+    const assistantMsg: AiChatMessage = {
+      id: `assistant-agent-${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      isAgentTurn: true,
+      timestamp: Date.now(),
+    }
+
+    // Build updated history that includes the tool result so the model can see it
+    // Marked isInternalToolResult so it is not rendered as a duplicate fake "You" bubble
+    const toolResultMsg: AiChatMessage = {
+      id: `tool-result-${Date.now()}`,
+      role: 'user',
+      content: `Tool \`${result.toolName}\` result:\n\`\`\`\n${result.output || result.error || 'No output'}\n\`\`\``,
+      isInternalToolResult: true,
+      timestamp: Date.now(),
+    }
+
+    // Use live messagesRef.current (never stale closure snapshots) so prior streamed text,
+    // reasoning, toolCalls, toolResults, and usage badges remain intact across autonomous loops.
+    const liveHistory = messagesRef.current.length > 0 ? messagesRef.current : history
+    setMessages((prev) => [...prev, toolResultMsg, assistantMsg])
+    startAssistantStream(assistantMsg, [...liveHistory, toolResultMsg], iteration)
   }
 
   const handleApproveTool = (msgId: string, toolCall: AiToolCall) => {
     const msgIndex = messages.findIndex((m) => m.id === msgId)
     const currentHistory = msgIndex >= 0 ? messages.slice(0, msgIndex + 1) : messages
-    executeToolCall(msgId, toolCall, currentHistory, 0)
+    const approvedCall: AiToolCall = { ...toolCall, status: 'approved' }
+    executeToolCall(msgId, approvedCall, currentHistory, 0)
   }
 
-  const handleRejectTool = (msgId: string, toolCall: AiToolCall) => {
+  const handleRejectTool = (msgId: string, toolCall: AiToolCall, feedback?: string) => {
+    const feedbackTrimmed = feedback?.trim()
+    const msgIndex = messages.findIndex((m) => m.id === msgId)
+    const currentHistory = msgIndex >= 0 ? messages.slice(0, msgIndex + 1) : messages
+
+    const rejectResult: AiToolResult = {
+      toolCallId: toolCall.id,
+      toolName: toolCall.toolName,
+      success: false,
+      output: '',
+      error: feedbackTrimmed
+        ? `Action was rejected by user with steering guidance: "${feedbackTrimmed}". Please adjust your plan according to these instructions.`
+        : 'Action was rejected by user. Please propose an alternative approach or pause for user instructions.',
+    }
+
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id === msgId && m.toolCalls) {
+          const updatedCalls = m.toolCalls.map((tc) =>
+            tc.id === toolCall.id
+              ? {
+                  ...tc,
+                  status: 'rejected' as const,
+                  guardrailNote: feedbackTrimmed ? `Rejection Guidance: ${feedbackTrimmed}` : undefined,
+                  executedAt: Date.now(),
+                }
+              : tc
+          )
+          const updatedResults = [...(m.toolResults || []), rejectResult]
           return {
             ...m,
-            toolCalls: m.toolCalls.map((tc) =>
-              tc.id === toolCall.id ? { ...tc, status: 'rejected' as const } : tc
-            ),
+            toolCalls: updatedCalls,
+            toolResults: updatedResults,
           }
         }
         return m
       })
     )
-  }
 
-  const handleApplyDiff = async (diff: NonNullable<AiToolResult['diff']>) => {
-    if (!diff.fullContent && !diff.newSnippet) return
+    setSteeringToolId(null)
+    setSteeringFeedback('')
 
-    let success = false
-    if (diff.fullContent) {
-      if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
-        success = await window.electronAPI.saveFile(diff.filePath, diff.fullContent)
-      } else if (onReplaceSelection && currentSelection?.text) {
-        onReplaceSelection(diff.fullContent)
-        success = true
-      }
-    } else if (diff.newSnippet && onReplaceSelection) {
-      onReplaceSelection(diff.newSnippet)
-      success = true
-    }
-
-    if (success) {
-      setAppliedDiffs((prev) => ({ ...prev, [diff.filePath]: true }))
-    }
+    // Automatically trigger autonomous follow-up with steering result
+    setTimeout(() => {
+      triggerAutonomousFollowup(rejectResult, currentHistory, 1)
+    }, 350)
   }
 
   /* =========================================================================
@@ -657,6 +1085,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
   const handleSendMessage = () => {
     if ((!inputText.trim() && !attachedContext) || isStreaming) return
+    AiGuardrailService.resetLoopTracker()
 
     // Smart context optimization for attached files/buffers
     let optimizedAttachment = attachedContext ? { ...attachedContext } : undefined
@@ -673,9 +1102,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
       timestamp: Date.now(),
     }
 
-    const assistantMsgId = `assistant-${Date.now()}`
     const assistantMsg: AiChatMessage = {
-      id: assistantMsgId,
+      id: `assistant-${Date.now()}`,
       role: 'assistant',
       content: '',
       reasoning: '',
@@ -688,108 +1116,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     setAttachedContext(null)
     setMentionOpen(false)
     setSlashOpen(false)
-    setIsStreaming(true)
 
-    setExpandedReasoning((prev) => ({ ...prev, [assistantMsgId]: true }))
-
-    let accumulatedText = ''
-
-    // Compute system prompt once per send (not every render)
-    const systemPrompt = `${AiService.getModeSystemPrompt(chatMode)}\n\n${AiToolsRegistry.getToolsSystemPrompt()}`
-
-    // Auto-trim history to avoid max_tokens errors
-    const trimmedHistory = AiService.trimConversationHistory(newHistory, systemPrompt, selectedModel.id)
-
-    const systemMsg: AiChatMessage = {
-      id: `sys-${Date.now()}`,
-      role: 'system',
-      content: systemPrompt,
-      timestamp: Date.now(),
-    }
-
-    const streamHistory = [systemMsg, ...trimmedHistory]
-
-    const cancel = AiService.streamChat(selectedModel, streamHistory, async (chunk) => {
-      if (chunk.text) {
-        accumulatedText += chunk.text
-        // Strip tool_call fences from displayed content so bubbles never show as empty
-        const displayText = stripToolCallBlocks(accumulatedText)
-        setMessages((prevMessages) => {
-          return prevMessages.map((msg) => {
-            if (msg.id === assistantMsgId) {
-              return {
-                ...msg,
-                content: displayText,
-                reasoning: chunk.reasoning ? (msg.reasoning || '') + chunk.reasoning : msg.reasoning,
-              }
-            }
-            return msg
-          })
-        })
-      } else if (chunk.reasoning) {
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === assistantMsgId
-              ? { ...msg, reasoning: (msg.reasoning || '') + chunk.reasoning }
-              : msg
-          )
-        )
-      }
-
-      if (chunk.done || chunk.error) {
-        setIsStreaming(false)
-        setCancelFn(null)
-
-        if (chunk.error) {
-          setMessages((prevMessages) => {
-            return prevMessages.map((msg) => {
-              if (msg.id === assistantMsgId) {
-                return {
-                  ...msg,
-                  content: msg.content
-                    ? `${msg.content}\n\n*(Error during generation: ${chunk.error})*`
-                    : `⚠️ **Error**: ${chunk.error}\n\nPlease verify your API key or endpoint in AI Settings.`,
-                }
-              }
-              return msg
-            })
-          })
-        } else {
-          // Parse any tool calls emitted by the model from the RAW (unstripped) accumulated text
-          const parsedCalls = AiToolParser.parseToolCalls(accumulatedText)
-          if (parsedCalls.length > 0) {
-            setMessages((prev) =>
-              prev.map((msg) => {
-                if (msg.id === assistantMsgId) {
-                  return { ...msg, toolCalls: parsedCalls }
-                }
-                return msg
-              })
-            )
-
-            // Execute any auto-approved calls
-            for (const call of parsedCalls) {
-              if (call.status === 'approved' || call.autoApproved) {
-                await executeToolCall(assistantMsgId, call, [...newHistory, assistantMsg], 0)
-              }
-            }
-          }
-        }
-      }
-    })
-
-    setCancelFn(() => cancel)
+    startAssistantStream(assistantMsg, newHistory, 0)
   }
 
   const handleStopStream = () => {
     cancelFn?.()
     setIsStreaming(false)
+    setPreparingToolName(null)
     setCancelFn(null)
-  }
-
-  const handleClearHistory = () => {
-    setMessages([])
-    setAttachedContext(null)
   }
 
   const handleSaveSettings = (provider: AiProvider, field: 'apiKey' | 'endpoint', value: string) => {
@@ -839,6 +1174,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         return '#0A84FF'
       case 'claude':
         return '#FF9F0A'
+      case 'openrouter':
+        return '#64D2FF'
+      case 'custom':
+        return '#FF375F'
       case 'ollama':
         return '#FFD60A'
       default:
@@ -1193,13 +1532,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             <Key size={13} />
           </button>
           <button
-            className="icon-btn glass-interactive"
-            onClick={handleClearHistory}
-            title="Clear Chat History"
-          >
-            <Trash2 size={13} />
-          </button>
-          <button
             className="icon-btn close-btn glass-interactive"
             onClick={onClose}
             title="Close AI Panel (Ctrl+Alt+A)"
@@ -1509,11 +1841,60 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           {settingsTab === 'keys' && (
             <div className="settings-scroll-list">
               {([
-                { id: 'deepseek', name: 'DeepSeek API', defaultUrl: 'https://api.deepseek.com', keyPlaceholder: 'sk-...' },
-                { id: 'gemini', name: 'Google Gemini API', defaultUrl: 'https://generativelanguage.googleapis.com', keyPlaceholder: 'AIza...' },
-                { id: 'claude', name: 'Anthropic Claude API', defaultUrl: 'https://api.anthropic.com', keyPlaceholder: 'sk-ant-...' },
-                { id: 'openai', name: 'OpenAI API', defaultUrl: 'https://api.openai.com/v1', keyPlaceholder: 'sk-...' },
-                { id: 'ollama', name: 'Ollama (Local Models)', defaultUrl: 'http://localhost:11434', keyPlaceholder: '' },
+                {
+                  id: 'openrouter',
+                  name: 'OpenRouter (300+ Models Gateway)',
+                  defaultUrl: 'https://openrouter.ai/api/v1',
+                  keyPlaceholder: 'sk-or-v1-...',
+                  helper: 'Unified BYOK gateway for Claude 3.7, DeepSeek R1, GPT-4o, Gemini 2.0 & Qwen.',
+                  dashboardUrl: 'https://openrouter.ai/keys',
+                },
+                {
+                  id: 'gemini',
+                  name: 'Google Gemini (Google AI Studio)',
+                  defaultUrl: 'https://generativelanguage.googleapis.com',
+                  keyPlaceholder: 'AIza...',
+                  helper: 'Direct AI Studio API: 1M context window & native CoT thinking.',
+                  dashboardUrl: 'https://aistudio.google.com/app/apikey',
+                },
+                {
+                  id: 'deepseek',
+                  name: 'DeepSeek API',
+                  defaultUrl: 'https://api.deepseek.com',
+                  keyPlaceholder: 'sk-...',
+                  helper: 'Direct DeepSeek API: V3 Chat & R1 Deep Reasoning at state-of-the-art cost efficiency.',
+                  dashboardUrl: 'https://platform.deepseek.com/api_keys',
+                },
+                {
+                  id: 'claude',
+                  name: 'Anthropic Claude API',
+                  defaultUrl: 'https://api.anthropic.com',
+                  keyPlaceholder: 'sk-ant-...',
+                  helper: 'Direct Anthropic API: Claude 3.7 Sonnet, 3.5 Sonnet, and Opus frontier models.',
+                  dashboardUrl: 'https://console.anthropic.com/settings/keys',
+                },
+                {
+                  id: 'openai',
+                  name: 'OpenAI API',
+                  defaultUrl: 'https://api.openai.com/v1',
+                  keyPlaceholder: 'sk-...',
+                  helper: 'Direct OpenAI API: GPT-4o, o3-mini, and GPT-4o-mini.',
+                  dashboardUrl: 'https://platform.openai.com/api-keys',
+                },
+                {
+                  id: 'custom',
+                  name: 'Custom OpenAI-Compatible',
+                  defaultUrl: 'http://localhost:1234/v1',
+                  keyPlaceholder: 'Optional for local',
+                  helper: 'Connect to LM Studio, vLLM, Groq, Together AI, Cerebras, or self-hosted proxy.',
+                },
+                {
+                  id: 'ollama',
+                  name: 'Ollama (Local Models)',
+                  defaultUrl: 'http://localhost:11434',
+                  keyPlaceholder: '',
+                  helper: 'Local offline models running on your machine via Ollama.',
+                },
               ] as const).map((provInfo) => {
                 const prov = provInfo.id as AiProvider
                 const cfg = settings[prov] || { apiKey: '', endpoint: '' }
@@ -1530,17 +1911,32 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                         />
                         <span className="prov-name">{provInfo.name.toUpperCase()}</span>
                       </div>
-                      {isOllama && (
-                        <button
-                          className="refresh-btn glass-interactive"
-                          onClick={handleRefreshOllama}
-                          title="Scan for local Ollama models"
-                        >
-                          <RefreshCw size={11} />
-                          <span>Detect Models</span>
-                        </button>
-                      )}
+                      <div className="prov-header-actions">
+                        {(provInfo as any).dashboardUrl && (
+                          <a
+                            href={(provInfo as any).dashboardUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="prov-link"
+                            title={`Get API Key from ${provInfo.name}`}
+                          >
+                            Get Key ↗
+                          </a>
+                        )}
+                        {isOllama && (
+                          <button
+                            className="refresh-btn glass-interactive"
+                            onClick={handleRefreshOllama}
+                            title="Scan for local Ollama models"
+                          >
+                            <RefreshCw size={11} />
+                            <span>Detect Models</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    <div className="prov-helper-text">{provInfo.helper}</div>
 
                     {!isOllama && (
                       <div className="prov-input-row">
@@ -1581,8 +1977,14 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
       {/* Messages Scroll Area */}
       <div className="ai-messages-container custom-scrollbar" ref={messagesContainerRef}>
-        {messages.map((msg) => {
+        {messages.map((msg, msgIdx) => {
+          // Hide internal tool result payload messages from chat feed (already shown inside the Cline/Kilo tool dropdown)
+          if (msg.isInternalToolResult || msg.id.startsWith('tool-result-')) {
+            return null
+          }
+
           const isUser = msg.role === 'user'
+          const isLatestAssistant = !isUser && msgIdx === messages.length - 1
 
           return (
             <div key={msg.id} className={`ai-message-row ${isUser ? 'user' : 'assistant'}`}>
@@ -1637,10 +2039,92 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   </div>
                 )}
 
-                {/* Tool Calls Execution Cards */}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="tool-calls-container">
-                    {msg.toolCalls.map((call) => {
+                {/* Tool Calls Execution Dropdown & Cards (Cline / Kilo style) */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (() => {
+                  const anyPending = msg.toolCalls.some((c) => c.status === 'pending_approval')
+                  const anyExecuting = msg.toolCalls.some((c) => c.status === 'executing' || executingToolId === c.id)
+                  const anyFailed = msg.toolCalls.some((c) => c.status === 'failed' || c.status === 'blocked_by_guardrail')
+
+                  // Separate high-signal user actions from silent completed background inspections
+                  const primaryCalls = msg.toolCalls.filter((c) => {
+                    const meta = getToolDisplayMeta(c)
+                    return !meta.isBackground || c.status !== 'completed'
+                  })
+                  const backgroundCalls = msg.toolCalls.filter((c) => {
+                    const meta = getToolDisplayMeta(c)
+                    return meta.isBackground && c.status === 'completed'
+                  })
+
+                  const hasImportantActions = primaryCalls.some(
+                    (c) =>
+                      c.toolName === 'propose_file_edit' ||
+                      c.toolName === 'write_file' ||
+                      c.toolName === 'execute_terminal_command' ||
+                      c.toolName === 'trigger_project_run' ||
+                      c.toolName === 'get_git_diff' ||
+                      c.status !== 'completed'
+                  )
+
+                  // Default open if there are edits, commands, pending approvals, or active runs;
+                  // default collapsed if only quiet background/read checks completed
+                  const isExpanded =
+                    expandedTools[msg.id] !== undefined
+                      ? expandedTools[msg.id]
+                      : (anyPending || anyExecuting || anyFailed || hasImportantActions)
+
+                  const writes = msg.toolCalls.filter((c) => c.toolName === 'propose_file_edit' || c.toolName === 'write_file').length
+                  const runs = msg.toolCalls.filter((c) => c.toolName === 'execute_terminal_command' || c.toolName === 'trigger_project_run').length
+                  const reads = msg.toolCalls.filter((c) => c.toolName === 'read_file').length
+                  const gits = msg.toolCalls.filter((c) => c.category === 'git').length
+
+                  const isBgShown = !!showBackgroundTools[msg.id]
+                  const callsToRender = isBgShown || primaryCalls.length === 0 ? msg.toolCalls : primaryCalls
+
+                  return (
+                    <div className="tool-dropdown-container">
+                      <button
+                        className={`tool-dropdown-header glass-card ${
+                          anyPending ? 'pending' : anyExecuting ? 'executing' : anyFailed ? 'failed' : 'completed'
+                        }`}
+                        onClick={() =>
+                          setExpandedTools((prev) => ({
+                            ...prev,
+                            [msg.id]: !isExpanded,
+                          }))
+                        }
+                        title="Toggle action log details"
+                      >
+                        <div className="tool-dropdown-header-left">
+                          {anyExecuting ? (
+                            <Loader2 size={12} className="spin-icon text-cyan" />
+                          ) : anyPending ? (
+                            <AlertTriangle size={12} className="text-warning" />
+                          ) : anyFailed ? (
+                            <AlertTriangle size={12} className="text-danger" />
+                          ) : (
+                            <CheckCircle2 size={12} className="text-success" />
+                          )}
+                          <span className="tool-dropdown-title">
+                            {buildDropdownSummary(msg.toolCalls)}
+                          </span>
+                          <div className="tool-category-chips">
+                            {writes > 0 && <span className="cat-chip write">{writes} edit{writes === 1 ? '' : 's'}</span>}
+                            {runs > 0 && <span className="cat-chip run">{runs} cmd</span>}
+                            {gits > 0 && <span className="cat-chip git">{gits} git</span>}
+                            {reads > 0 && <span className="cat-chip read">{reads} read</span>}
+                          </div>
+                        </div>
+
+                        <div className="tool-dropdown-header-right">
+                          {anyPending && <span className="dropdown-status-badge pending">Approval Required</span>}
+                          {anyExecuting && <span className="dropdown-status-badge executing">Running...</span>}
+                          {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="tool-calls-container">
+                          {callsToRender.map((call) => {
                       const isPending = call.status === 'pending_approval'
                       const isExecuting = call.status === 'executing' || executingToolId === call.id
                       const isCompleted = call.status === 'completed'
@@ -1649,93 +2133,357 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                       const isFailed = call.status === 'failed'
 
                       const result = (msg.toolResults || []).find((tr) => tr.toolCallId === call.id)
+                      const meta = getToolDisplayMeta(call)
+
+                      const renderCategoryIcon = () => {
+                        switch (call.category) {
+                          case 'read': return <FileText size={11} className="tool-cat-icon" />
+                          case 'write': return <FileCode size={11} className="tool-cat-icon" />
+                          case 'run': return <Terminal size={11} className="tool-cat-icon" />
+                          case 'git': return <GitBranch size={11} className="tool-cat-icon" />
+                          case 'browser': return <Globe size={11} className="tool-cat-icon" />
+                          default: return <Cpu size={11} className="tool-cat-icon" />
+                        }
+                      }
+
+                      // Ultra-clean 1-line Cline/Kilo compact row for completed reads, searches, git status, and background steps
+                      if (meta.isCompact && isCompleted && !result?.diff && !call.guardrailNote) {
+                        const isPeekOpen = !!expandedCompactTools[call.id]
+                        const outputLines = result?.output ? result.output.split('\n').length : 0
+
+                        return (
+                          <div key={call.id} className={`tool-compact-wrapper ${meta.isBackground ? 'is-background' : ''}`}>
+                            <div className="tool-compact-row glass-subcard">
+                              <div className="compact-row-left">
+                                <span className={`compact-icon cat-${call.category}`}>{renderCategoryIcon()}</span>
+                                <span className={`compact-headline ${meta.isCommand ? 'mono-command' : ''}`}>
+                                  {meta.headline}
+                                </span>
+                                {meta.subtext && (
+                                  <span className="compact-subtext" title={meta.subtext}>
+                                    {meta.subtext}
+                                  </span>
+                                )}
+                                {outputLines > 0 && call.toolName === 'read_file' && (
+                                  <span className="compact-metric">{outputLines} lines</span>
+                                )}
+                              </div>
+                              <div className="compact-row-right">
+                                {meta.filePath && onOpenFile && (
+                                  <button
+                                    className="compact-action-icon"
+                                    onClick={() => onOpenFile(meta.filePath!)}
+                                    title={`Open ${meta.filePath} in editor`}
+                                  >
+                                    <ExternalLink size={11} />
+                                  </button>
+                                )}
+                                {result?.output && (
+                                  <button
+                                    className="compact-action-icon"
+                                    onClick={() =>
+                                      setExpandedCompactTools((prev) => ({
+                                        ...prev,
+                                        [call.id]: !prev[call.id],
+                                      }))
+                                    }
+                                    title="Peek output"
+                                  >
+                                    {isPeekOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                                  </button>
+                                )}
+                                <CheckCircle2 size={11} className="text-success" />
+                              </div>
+                            </div>
+                            {isPeekOpen && result?.output && (
+                              <div className="tool-output-content compact-peek custom-scrollbar">
+                                <pre>{result.output}</pre>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      const isBuiltInFormatted = [
+                        'propose_file_edit',
+                        'write_file',
+                        'execute_terminal_command',
+                        'trigger_project_run',
+                        'get_git_status',
+                        'get_git_diff',
+                        'read_file',
+                        'search_code',
+                        'list_workspace_files',
+                        'get_editor_diagnostics',
+                        'open_editor_file',
+                      ].includes(call.toolName)
 
                       return (
                         <div
                           key={call.id}
                           className={`tool-call-card glass-card ${
-                            isPending ? 'pending' : isExecuting ? 'executing' : isCompleted ? 'completed' : isBlocked ? 'blocked' : 'failed'
+                            isPending ? 'pending' : isExecuting ? 'executing' : isCompleted ? 'completed' : isBlocked ? 'blocked' : isRejected ? 'rejected' : 'failed'
                           }`}
                         >
                           <div className="tool-card-header">
                             <div className="tool-card-title">
-                              <Cpu size={12} className="tool-icon" />
-                              <span className="tool-name">{call.toolName}</span>
                               <span className={`tool-category-badge cat-${call.category}`}>
-                                {call.category.toUpperCase()}
+                                {renderCategoryIcon()}
+                                <span className="cat-label">
+                                  {call.toolName === 'execute_terminal_command'
+                                    ? 'SHELL'
+                                    : call.toolName === 'propose_file_edit' || call.toolName === 'write_file'
+                                      ? 'EDIT'
+                                      : call.category.toUpperCase()}
+                                </span>
                               </span>
+                              <div className="tool-header-text">
+                                <span className={`tool-headline ${meta.isCommand ? 'mono-command' : ''}`}>
+                                  {meta.headline}
+                                </span>
+                                {meta.subtext && (
+                                  <span className="tool-subtext" title={meta.subtext}>
+                                    {meta.subtext}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             <div className="tool-card-status">
-                              {isPending && <span className="status-badge pending">⚠️ Needs Approval</span>}
-                              {isExecuting && <span className="status-badge executing">⚡ Executing...</span>}
-                              {isCompleted && <span className="status-badge completed">✅ Done</span>}
-                              {isBlocked && <span className="status-badge blocked">🛡️ Guardrail Blocked</span>}
-                              {isRejected && <span className="status-badge rejected">❌ Rejected</span>}
-                              {isFailed && <span className="status-badge failed">⚠️ Failed</span>}
+                              {isPending && (
+                                <span className="status-badge pending">
+                                  <span className="pulse-indicator" />
+                                  <span>Approval Required</span>
+                                </span>
+                              )}
+                              {isExecuting && (
+                                <span className="status-badge executing">
+                                  <Loader2 size={11} className="spin-icon" />
+                                  <span>Executing...</span>
+                                </span>
+                              )}
+                              {isCompleted && (
+                                <span className="status-badge completed">
+                                  <CheckCircle2 size={11} />
+                                  <span>Completed</span>
+                                </span>
+                              )}
+                              {isBlocked && (
+                                <span className="status-badge blocked">
+                                  <ShieldAlert size={11} />
+                                  <span>Blocked by Guardrail</span>
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="status-badge rejected">
+                                  <XCircle size={11} />
+                                  <span>Rejected</span>
+                                </span>
+                              )}
+                              {isFailed && (
+                                <span className="status-badge failed">
+                                  <AlertTriangle size={11} />
+                                  <span>Failed</span>
+                                </span>
+                              )}
                             </div>
                           </div>
 
-                          {/* Arguments Summary */}
-                          <div className="tool-args-preview">
-                            {Object.entries(call.arguments).map(([k, v]) => (
-                              <div key={k} className="tool-arg-item">
-                                <span className="arg-key">{k}:</span>
-                                <span className="arg-val">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
-                              </div>
-                            ))}
-                          </div>
+                          {/* Raw Arguments Summary — only shown for custom / MCP tools where headline doesn't cover params */}
+                          {!isBuiltInFormatted && Object.keys(call.arguments).length > 0 && (
+                            <div className="tool-args-preview">
+                              {Object.entries(call.arguments).map(([k, v]) => {
+                                let displayVal = ''
+                                if (typeof v === 'string') {
+                                  if (v.length > 120 || v.includes('\n')) {
+                                    const lineCount = v.split('\n').length
+                                    displayVal = `(${lineCount} line${lineCount === 1 ? '' : 's'}, ${v.length} chars)`
+                                  } else {
+                                    displayVal = v
+                                  }
+                                } else {
+                                  displayVal = typeof v === 'object' ? JSON.stringify(v) : String(v)
+                                }
+
+                                return (
+                                  <div key={k} className="tool-arg-item">
+                                    <span className="arg-key">{k}:</span>
+                                    <span className="arg-val" title={typeof v === 'string' ? v.slice(0, 300) : undefined}>
+                                      {displayVal}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
 
                           {/* Guardrail Note */}
                           {call.guardrailNote && (
                             <div className="tool-guardrail-banner">
-                              <AlertTriangle size={11} className="text-warning" />
+                              <ShieldAlert size={12} className="text-warning" />
                               <span>{call.guardrailNote}</span>
                             </div>
                           )}
 
-                          {/* Actions for Pending Tools */}
+                          {/* Overhauled Liquid Glass Action Buttons for Pending Tools */}
                           {isPending && (
-                            <div className="tool-card-actions">
-                              <button
-                                className="tool-action-btn approve glass-interactive"
-                                onClick={() => handleApproveTool(msg.id, call)}
-                                title="Approve and execute this local action"
-                              >
-                                <CheckCircle2 size={12} />
-                                <span>Approve & Execute</span>
-                              </button>
-                              <button
-                                className="tool-action-btn reject glass-interactive"
-                                onClick={() => handleRejectTool(msg.id, call)}
-                                title="Reject this tool call"
-                              >
-                                <XCircle size={12} />
-                                <span>Reject</span>
-                              </button>
+                            <div className="tool-card-actions-wrapper">
+                              <div className="tool-card-actions">
+                                <button
+                                  className="tool-action-btn approve glass-interactive"
+                                  onClick={() => handleApproveTool(msg.id, call)}
+                                  title="Approve and execute this local action"
+                                >
+                                  <CheckCircle2 size={13} className="btn-icon" />
+                                  <span>Approve &amp; Execute</span>
+                                </button>
+                                <button
+                                  className={`tool-action-btn steer glass-interactive ${steeringToolId === call.id ? 'active' : ''}`}
+                                  onClick={() => {
+                                    if (steeringToolId === call.id) {
+                                      setSteeringToolId(null)
+                                    } else {
+                                      setSteeringToolId(call.id)
+                                      setSteeringFeedback('')
+                                    }
+                                  }}
+                                  title="Reject with custom steering guidance to redirect the agent"
+                                >
+                                  <MessageSquare size={13} className="btn-icon" />
+                                  <span>Steer</span>
+                                </button>
+                                <button
+                                  className="tool-action-btn reject glass-interactive"
+                                  onClick={() => handleRejectTool(msg.id, call)}
+                                  title="Reject this tool call immediately"
+                                >
+                                  <XCircle size={13} className="btn-icon" />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+
+                              {steeringToolId === call.id && (
+                                <div className="steering-drawer glass-subcard">
+                                  <div className="steering-drawer-title">
+                                    <MessageSquare size={11} className="text-cyan" />
+                                    <span>Steer Agent: Provide instructions for alternative action</span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    className="steering-input"
+                                    placeholder="e.g., Don't edit this file, modify src/config.ts instead..."
+                                    value={steeringFeedback}
+                                    onChange={(e) => setSteeringFeedback(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && steeringFeedback.trim()) {
+                                        handleRejectTool(msg.id, call, steeringFeedback)
+                                      }
+                                    }}
+                                    autoFocus
+                                  />
+                                  <div className="steering-actions">
+                                    <button
+                                      className="steering-btn cancel"
+                                      onClick={() => setSteeringToolId(null)}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      className="steering-btn submit"
+                                      disabled={!steeringFeedback.trim()}
+                                      onClick={() => handleRejectTool(msg.id, call, steeringFeedback)}
+                                    >
+                                      Reject with Guidance
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
                           {/* Output or Diff View */}
                           {result && (
                             <div className="tool-result-box">
-                              {/* Diff Viewer if proposed edit */}
+                              {/* Diff Viewer for file write / edit */}
                               {result.diff && (result.diff.fullContent || result.diff.newSnippet) && (
                                 <div className="tool-diff-card glass-subcard">
                                   <div className="tool-diff-header">
                                     <div className="diff-header-left">
                                       <FileCheck size={12} className="text-cyan" />
                                       <span className="diff-file-name">{result.diff.filePath}</span>
+                                      {result.diff.originalSnippet && result.diff.newSnippet ? (
+                                        <span className="diff-stats-pill">
+                                          <span className="diff-stat-sub">-{result.diff.originalSnippet.split('\n').length}</span>
+                                          <span className="diff-stat-add">+{result.diff.newSnippet.split('\n').length}</span>
+                                        </span>
+                                      ) : result.diff.fullContent ? (
+                                        <span className="diff-stats-pill">
+                                          <span className="diff-stat-add">+{result.diff.fullContent.split('\n').length} lines</span>
+                                        </span>
+                                      ) : null}
                                     </div>
                                     <div className="diff-header-right">
-                                      {appliedDiffs[result.diff.filePath] ? (
-                                        <span className="diff-applied-badge">
-                                          <Check size={11} /> Applied to Editor
-                                        </span>
+                                      {result.diff.originalSnippet && result.diff.newSnippet && (
+                                        <div className="diff-view-toggle">
+                                          <button
+                                            className={`diff-toggle-btn ${(diffViewModes[result.diff.filePath] || 'unified') === 'unified' ? 'active' : ''}`}
+                                            onClick={() => setDiffViewModes(prev => ({ ...prev, [result.diff!.filePath]: 'unified' }))}
+                                            title="Unified Diff View"
+                                          >
+                                            Unified
+                                          </button>
+                                          <button
+                                            className={`diff-toggle-btn ${(diffViewModes[result.diff.filePath] || 'unified') === 'split' ? 'active' : ''}`}
+                                            onClick={() => setDiffViewModes(prev => ({ ...prev, [result.diff!.filePath]: 'split' }))}
+                                            title="Side-by-Side Split Diff View"
+                                          >
+                                            Split
+                                          </button>
+                                        </div>
+                                      )}
+                                      <button
+                                        className="diff-expand-btn glass-interactive"
+                                        onClick={() => setExpandedDiff(result.diff!)}
+                                        title="Expand Full Screen Diff Modal"
+                                      >
+                                        <Maximize2 size={11} />
+                                      </button>
+                                      {appliedDiffs[result.diff.filePath] || result.diff.applied ? (
+                                        <div className="diff-applied-group">
+                                          <span className="diff-applied-badge">
+                                            <Check size={11} /> Applied
+                                          </span>
+                                          {(() => {
+                                            const cp = checkpoints.find((c) =>
+                                              c.files.some((f) => f.filePath === result.diff!.filePath || result.diff!.filePath.endsWith(f.fileName))
+                                            )
+                                            if (cp && !cp.restored) {
+                                              return (
+                                                <button
+                                                  className="diff-rollback-btn glass-interactive"
+                                                  onClick={() => handleRollbackCheckpoint(cp.id)}
+                                                  title="Rollback this file edit to pre-edit state"
+                                                >
+                                                  <RotateCcw size={10} />
+                                                  <span>Rollback</span>
+                                                </button>
+                                              )
+                                            }
+                                            if (cp && cp.restored) {
+                                              return (
+                                                <span className="diff-restored-badge" title="File edit was rolled back">
+                                                  <RotateCcw size={10} /> Restored
+                                                </span>
+                                              )
+                                            }
+                                            return null
+                                          })()}
+                                        </div>
                                       ) : (
                                         <button
                                           className="apply-diff-btn glass-interactive"
                                           onClick={() => handleApplyDiff(result.diff!)}
+                                          title="Apply this file modification to the editor"
                                         >
                                           <CheckCircle2 size={11} />
                                           <span>Accept Diff</span>
@@ -1744,37 +2492,141 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                                     </div>
                                   </div>
 
-                                  {result.diff.originalSnippet && result.diff.newSnippet && (
-                                    <div className="snippet-diff-body">
-                                      <div className="diff-chunk removal">
-                                        <span className="diff-prefix">-</span>
-                                        <pre>{result.diff.originalSnippet}</pre>
+                                  {/* Split View */}
+                                  {(diffViewModes[result.diff.filePath] === 'split' && result.diff.originalSnippet && result.diff.newSnippet) ? (
+                                    <div className="snippet-diff-split custom-scrollbar">
+                                      <div className="split-diff-col original">
+                                        <div className="split-col-header">Original (Current)</div>
+                                        <div className="split-col-content">
+                                          {result.diff.originalSnippet.split('\n').map((line, idx) => (
+                                            <div key={idx} className="split-line removal">
+                                              <span className="line-num">{idx + 1}</span>
+                                              <span className="line-prefix">-</span>
+                                              <span className="line-text">{line}</span>
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
-                                      <div className="diff-chunk addition">
-                                        <span className="diff-prefix">+</span>
-                                        <pre>{result.diff.newSnippet}</pre>
+                                      <div className="split-diff-col modified">
+                                        <div className="split-col-header">Proposed Edit</div>
+                                        <div className="split-col-content">
+                                          {result.diff.newSnippet.split('\n').map((line, idx) => (
+                                            <div key={idx} className="split-line addition">
+                                              <span className="line-num">{idx + 1}</span>
+                                              <span className="line-prefix">+</span>
+                                              <span className="line-text">{line}</span>
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
                                     </div>
+                                  ) : (
+                                    /* Unified View */
+                                    <>
+                                      {result.diff.originalSnippet && result.diff.newSnippet && (
+                                        <div className="snippet-diff-body custom-scrollbar">
+                                          <div className="diff-chunk removal">
+                                            <span className="diff-prefix">-</span>
+                                            <pre>{result.diff.originalSnippet}</pre>
+                                          </div>
+                                          <div className="diff-chunk addition">
+                                            <span className="diff-prefix">+</span>
+                                            <pre>{result.diff.newSnippet}</pre>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {!result.diff.originalSnippet && result.diff.fullContent && (
+                                        <div className="snippet-diff-body custom-scrollbar">
+                                          <div className="diff-chunk addition full-write">
+                                            <span className="diff-prefix">+</span>
+                                            <pre>{result.diff.fullContent}</pre>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               )}
 
-                              {/* General Output */}
-                              <div className="tool-output-content custom-scrollbar">
-                                <pre>{result.output || result.error || '(No output returned)'}</pre>
-                              </div>
+                              {/* General Output / Terminal Logs */}
+                              {(result.output || result.error) && !result.diff?.fullContent && (
+                                <div className="tool-output-content custom-scrollbar">
+                                  {result.output?.includes('[✂️ Output truncated') && (
+                                    <div className="output-compacted-banner">
+                                      <Scissors size={11} className="text-cyan" />
+                                      <span>Token Compactor: Large output pruned to preserve context space</span>
+                                    </div>
+                                  )}
+                                  <pre>{result.output || result.error}</pre>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       )
                     })}
+
+                    {backgroundCalls.length > 0 && primaryCalls.length > 0 && (
+                      <button
+                        className="toggle-bg-tools-btn glass-interactive"
+                        onClick={() =>
+                          setShowBackgroundTools((prev) => ({
+                            ...prev,
+                            [msg.id]: !isBgShown,
+                          }))
+                        }
+                      >
+                        {isBgShown ? (
+                          <>
+                            <ChevronDown size={11} />
+                            <span>Hide {backgroundCalls.length} background check{backgroundCalls.length === 1 ? '' : 's'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronRight size={11} />
+                            <span>+{backgroundCalls.length} background check{backgroundCalls.length === 1 ? '' : 's'} (diagnostics / file listing)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+                    </div>
+                  )
+                })()}
+
+                {/* Live tool-input-start progress pill while large tool arguments stream */}
+                {isLatestAssistant && isStreaming && preparingToolName && (
+                  <div className="preparing-tool-pill glass-card">
+                    <Loader2 size={11} className="spin-icon text-cyan" />
+                    <span>
+                      Preparing <strong>{preparingToolName.replace(/_/g, ' ')}</strong>…
+                    </span>
                   </div>
                 )}
 
                 {/* Message text / code blocks */}
-                <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
-                  {renderMessageContent(msg)}
-                </div>
+                {(isUser || stripToolCallBlocks(msg.content).trim().length > 0) && (
+                  <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
+                    {renderMessageContent(msg)}
+                    {!isUser && msg.usage && (
+                      <div className="message-usage-footer">
+                        <Cpu size={9} className="usage-icon" />
+                        <span className="usage-item">
+                          {msg.usage.promptTokens.toLocaleString()} in / {msg.usage.completionTokens.toLocaleString()} out ({msg.usage.totalTokens.toLocaleString()} tokens)
+                        </span>
+                        {msg.usage.cachedInputTokens && msg.usage.cachedInputTokens > 0 && (
+                          <span className="usage-item cached" title="Prompt cache hit tokens">
+                            ⚡ {msg.usage.cachedInputTokens.toLocaleString()} cached
+                          </span>
+                        )}
+                        <span className="usage-item cost">
+                          ${AiTokenizer.estimateCost(selectedModel.id, msg.usage.promptTokens, msg.usage.completionTokens).toFixed(4)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )
@@ -1929,12 +2781,15 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         {/* Live Tokenizer Meter Bar */}
         <div
           className="ai-token-meter-bar"
-          title={`Token Breakdown:\n• System Prompt: ${tokenBreakdown.systemTokens.toLocaleString()} tokens\n• Chat History: ${tokenBreakdown.historyTokens.toLocaleString()} tokens\n• Attached Context: ${tokenBreakdown.attachmentTokens.toLocaleString()} tokens\n• Current Input: ${tokenBreakdown.inputTokens.toLocaleString()} tokens\n• Total: ${tokenBreakdown.totalTokens.toLocaleString()} / ${tokenBreakdown.contextLimit.toLocaleString()} tokens (${tokenBreakdown.percentUsed}%)`}
+          title={`Token Breakdown:\n• System Prompt: ${tokenBreakdown.systemTokens.toLocaleString()} tokens\n• Chat History: ${tokenBreakdown.historyTokens.toLocaleString()} tokens\n• Attached Context: ${tokenBreakdown.attachmentTokens.toLocaleString()} tokens\n• Current Input: ${tokenBreakdown.inputTokens.toLocaleString()} tokens\n• Total: ${tokenBreakdown.totalTokens.toLocaleString()} / ${tokenBreakdown.contextLimit.toLocaleString()} tokens (${tokenBreakdown.percentUsed}%)\n• Est. Session Spend: $${sessionCost.toFixed(4)}`}
         >
           <div className="token-meter-left">
             <Cpu size={10} className="meter-icon" />
             <span className="token-count-label">
               {tokenBreakdown.totalTokens.toLocaleString()} / {(tokenBreakdown.contextLimit / 1000).toFixed(0)}k tokens ({tokenBreakdown.percentUsed}%)
+            </span>
+            <span className="token-cost-badge" title="Estimated session spend calculated from active model pricing">
+              ${sessionCost.toFixed(3)}
             </span>
           </div>
           <div className="token-meter-bar-track">
@@ -1944,11 +2799,70 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             />
           </div>
           <div className="token-meter-right">
+            {checkpoints.length > 0 && (
+              <span
+                className="checkpoints-active-pill"
+                onClick={() => setIsCheckpointsOpen(!isCheckpointsOpen)}
+                title="View active file snapshots & rollbacks"
+              >
+                <History size={9} />
+                <span>{checkpoints.length} Snapshots</span>
+              </span>
+            )}
+            {workspaceRules && (
+              <span className="rules-active-pill" title={`Active workspace rules loaded from ${workspaceRules.fileName}`}>
+                <FileText size={9} />
+                <span>{workspaceRules.fileName}</span>
+              </span>
+            )}
             <span className={`active-mode-tag ${chatMode}`}>
               {chatMode === 'plan' ? '📘 Plan Mode' : '⚡ Act Mode'}
             </span>
           </div>
         </div>
+
+        {/* Checkpoints & Shadow Snapshots Popover */}
+        {isCheckpointsOpen && checkpoints.length > 0 && (
+          <div className="checkpoints-popover glass-subcard">
+            <div className="checkpoints-popover-header">
+              <div className="checkpoints-title">
+                <History size={12} className="text-cyan" />
+                <span>Session File Checkpoints ({checkpoints.length})</span>
+              </div>
+              <button
+                className="checkpoints-close-btn"
+                onClick={() => setIsCheckpointsOpen(false)}
+                title="Close"
+              >
+                <X size={11} />
+              </button>
+            </div>
+            <div className="checkpoints-list custom-scrollbar">
+              {checkpoints.map((cp) => (
+                <div key={cp.id} className={`checkpoint-item ${cp.restored ? 'restored' : ''}`}>
+                  <div className="cp-item-details">
+                    <span className="cp-desc">{cp.description}</span>
+                    <span className="cp-meta">
+                      {new Date(cp.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} · {cp.files.length} file(s)
+                    </span>
+                  </div>
+                  {cp.restored ? (
+                    <span className="cp-restored-tag">Rolled back</span>
+                  ) : (
+                    <button
+                      className="cp-rollback-btn glass-interactive"
+                      onClick={() => handleRollbackCheckpoint(cp.id)}
+                      title="Rollback this checkpoint to pre-edit state"
+                    >
+                      <RotateCcw size={10} />
+                      <span>Rollback</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Prompt Input Box */}
         <div className="input-box-container glass-card">
@@ -2043,6 +2957,99 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Full-Screen / Modal Diff Preview */}
+      {expandedDiff && (
+        <div className="expanded-diff-overlay" onClick={() => setExpandedDiff(null)}>
+          <div className="expanded-diff-modal glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="expanded-diff-header">
+              <div className="expanded-diff-title">
+                <FileCheck size={14} className="text-cyan" />
+                <span className="expanded-diff-path">{expandedDiff.filePath}</span>
+                {expandedDiff.originalSnippet && expandedDiff.newSnippet && (
+                  <span className="diff-stats-pill">
+                    <span className="diff-stat-sub">-{expandedDiff.originalSnippet.split('\n').length}</span>
+                    <span className="diff-stat-add">+{expandedDiff.newSnippet.split('\n').length}</span>
+                  </span>
+                )}
+              </div>
+              <div className="expanded-diff-actions">
+                {onOpenFile && (
+                  <button
+                    className="modal-action-btn secondary"
+                    onClick={() => {
+                      onOpenFile(expandedDiff.filePath)
+                      setExpandedDiff(null)
+                    }}
+                    title="Open in Monaco Editor"
+                  >
+                    <ExternalLink size={12} />
+                    <span>Open in Editor</span>
+                  </button>
+                )}
+                {appliedDiffs[expandedDiff.filePath] || expandedDiff.applied ? (
+                  <span className="diff-applied-badge">
+                    <Check size={12} /> Applied
+                  </span>
+                ) : (
+                  <button
+                    className="modal-action-btn primary"
+                    onClick={async () => {
+                      await handleApplyDiff(expandedDiff)
+                      setExpandedDiff(null)
+                    }}
+                  >
+                    <CheckCircle2 size={12} />
+                    <span>Accept &amp; Apply Diff</span>
+                  </button>
+                )}
+                <button
+                  className="modal-close-btn"
+                  onClick={() => setExpandedDiff(null)}
+                  title="Close Diff Preview"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="expanded-diff-content custom-scrollbar">
+              {expandedDiff.originalSnippet && expandedDiff.newSnippet ? (
+                <div className="expanded-split-container">
+                  <div className="expanded-split-pane left">
+                    <div className="expanded-pane-header">Original (Current)</div>
+                    <div className="expanded-pane-lines">
+                      {expandedDiff.originalSnippet.split('\n').map((line, idx) => (
+                        <div key={idx} className="expanded-line removal">
+                          <span className="expanded-line-no">{idx + 1}</span>
+                          <span className="expanded-line-marker">-</span>
+                          <span className="expanded-line-code">{line}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="expanded-split-pane right">
+                    <div className="expanded-pane-header">Proposed Edit (AI Assistant)</div>
+                    <div className="expanded-pane-lines">
+                      {expandedDiff.newSnippet.split('\n').map((line, idx) => (
+                        <div key={idx} className="expanded-line addition">
+                          <span className="expanded-line-no">{idx + 1}</span>
+                          <span className="expanded-line-marker">+</span>
+                          <span className="expanded-line-code">{line}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="expanded-full-view">
+                  <pre>{expandedDiff.fullContent || expandedDiff.newSnippet}</pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .ai-chat-panel {
@@ -2187,16 +3194,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           color: rgba(235, 235, 245, 0.45);
           padding: 4px 8px;
           margin-bottom: 2px;
-        }
-
-        .ag-sub-badge {
-          font-size: 8.5px;
-          font-weight: 700;
-          padding: 1px 5px;
-          background: rgba(10, 132, 255, 0.25);
-          border: 1px solid rgba(10, 132, 255, 0.45);
-          color: #5AC8FA;
-          border-radius: 4px;
         }
 
         .model-option {
@@ -2594,6 +3591,174 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           color: #30D158;
         }
 
+        .token-cost-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-family: var(--font-mono, monospace);
+          font-size: 9.5px;
+          font-weight: 700;
+          color: #30D158;
+          background: rgba(48, 209, 88, 0.12);
+          border: 1px solid rgba(48, 209, 88, 0.28);
+          letter-spacing: 0.2px;
+          white-space: nowrap;
+        }
+
+        .rules-active-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-family: var(--font-mono, monospace);
+          font-size: 9px;
+          font-weight: 600;
+          color: #64D2FF;
+          background: rgba(100, 210, 255, 0.12);
+          border: 1px solid rgba(100, 210, 255, 0.28);
+          max-width: 140px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .checkpoints-active-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-family: var(--font-mono, monospace);
+          font-size: 9px;
+          font-weight: 600;
+          color: #BF5AF2;
+          background: rgba(191, 90, 242, 0.12);
+          border: 1px solid rgba(191, 90, 242, 0.28);
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+        }
+
+        .checkpoints-active-pill:hover {
+          background: rgba(191, 90, 242, 0.24);
+          color: #FFFFFF;
+          border-color: rgba(191, 90, 242, 0.45);
+        }
+
+        .checkpoints-popover {
+          background: rgba(15, 20, 36, 0.98);
+          border: 1px solid rgba(191, 90, 242, 0.35);
+          border-radius: 8px;
+          padding: 8px 10px;
+          margin-bottom: 6px;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .checkpoints-popover-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          margin-bottom: 6px;
+        }
+
+        .checkpoints-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 10.5px;
+          font-weight: 700;
+          color: #FFFFFF;
+        }
+
+        .checkpoints-close-btn {
+          background: transparent;
+          border: none;
+          color: rgba(235, 235, 245, 0.5);
+          cursor: pointer;
+          padding: 2px;
+          border-radius: 3px;
+        }
+
+        .checkpoints-close-btn:hover {
+          color: #FFFFFF;
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .checkpoints-list {
+          max-height: 140px;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .checkpoint-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 5px 8px;
+          border-radius: 5px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .checkpoint-item.restored {
+          opacity: 0.55;
+        }
+
+        .cp-item-details {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          overflow: hidden;
+        }
+
+        .cp-desc {
+          font-size: 10px;
+          font-weight: 600;
+          color: #FFFFFF;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .cp-meta {
+          font-size: 8.5px;
+          color: rgba(235, 235, 245, 0.45);
+          font-family: var(--font-mono, monospace);
+        }
+
+        .cp-restored-tag {
+          font-size: 8.5px;
+          color: rgba(235, 235, 245, 0.4);
+          font-style: italic;
+        }
+
+        .cp-rollback-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 9.5px;
+          font-weight: 600;
+          color: #FF9F0A;
+          background: rgba(255, 159, 10, 0.15);
+          border: 1px solid rgba(255, 159, 10, 0.35);
+          padding: 2px 7px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .cp-rollback-btn:hover {
+          background: rgba(255, 159, 10, 0.3);
+          color: #FFFFFF;
+          border-color: rgba(255, 159, 10, 0.6);
+        }
+
         /* Settings Drawer & Tab Bar */
         .ai-settings-drawer {
           background: rgba(12, 16, 28, 0.96);
@@ -2842,6 +4007,39 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           margin-bottom: 6px;
         }
 
+        .prov-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .prov-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 9.5px;
+          color: #5AC8FA;
+          text-decoration: none;
+          padding: 1px 5px;
+          border-radius: 3px;
+          background: rgba(90, 200, 250, 0.1);
+          border: 1px solid rgba(90, 200, 250, 0.2);
+          transition: all 0.15s ease;
+        }
+
+        .prov-link:hover {
+          color: #FFFFFF;
+          background: rgba(90, 200, 250, 0.25);
+          border-color: rgba(90, 200, 250, 0.45);
+        }
+
+        .prov-helper-text {
+          margin-top: 5px;
+          font-size: 9.5px;
+          color: rgba(235, 235, 245, 0.55);
+          line-height: 1.35;
+        }
+
         .prov-title-left {
           display: flex;
           align-items: center;
@@ -2902,154 +4100,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           border: none;
           color: rgba(235, 235, 245, 0.5);
           cursor: pointer;
-        }
-
-        /* Google Antigravity Account Panel */
-        .google-account-panel {
-          padding: 4px 0;
-        }
-
-        .google-session-active {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .google-user-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .google-user-avatar {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          object-fit: cover;
-        }
-
-        .google-user-avatar.placeholder {
-          background: rgba(255, 255, 255, 0.1);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #5AC8FA;
-        }
-
-        .google-user-details {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .google-user-name {
-          font-size: 11px;
-          font-weight: 600;
-          color: #FFFFFF;
-        }
-
-        .google-user-email {
-          font-size: 10px;
-          color: rgba(235, 235, 245, 0.6);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .ag-active-pill {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 2px 6px;
-          border-radius: 999px;
-          background: rgba(48, 209, 88, 0.18);
-          border: 1px solid rgba(48, 209, 88, 0.35);
-          color: #30D158;
-          font-size: 9.5px;
-          font-weight: 600;
-          flex-shrink: 0;
-        }
-
-        .ag-quota-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: rgba(0, 0, 0, 0.3);
-          padding: 6px 8px;
-          border-radius: 4px;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          font-size: 10px;
-        }
-
-        .ag-quota-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .quota-label { color: rgba(235, 235, 245, 0.5); }
-        .quota-val { color: #5AC8FA; font-weight: 600; }
-
-        .google-session-actions {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .google-action-btn {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: 600;
-          cursor: pointer;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.05);
-          color: #FFFFFF;
-        }
-
-        .google-action-btn.logout {
-          color: #FF453A;
-          border-color: rgba(255, 69, 58, 0.3);
-          background: rgba(255, 69, 58, 0.1);
-        }
-
-        .google-signin-prompt {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          padding: 4px 0;
-        }
-
-        .google-signin-desc {
-          font-size: 10.5px;
-          color: rgba(235, 235, 245, 0.65);
-          line-height: 1.4;
-          margin: 0;
-        }
-
-        .google-signin-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 7px 12px;
-          border-radius: 6px;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          color: #FFFFFF;
-          font-size: 11px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .google-signin-btn:hover {
-          background: rgba(255, 255, 255, 0.14);
-          border-color: rgba(255, 255, 255, 0.3);
-          box-shadow: 0 0 12px rgba(66, 133, 244, 0.3);
         }
 
         /* Messages Scroll Container */
@@ -3134,6 +4184,61 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           border: 1px solid rgba(255, 255, 255, 0.1);
           color: rgba(255, 255, 255, 0.95);
           border-bottom-left-radius: 3px;
+        }
+
+        .message-usage-footer {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 6px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          font-family: var(--font-mono, monospace);
+          font-size: 9px;
+          color: rgba(235, 235, 245, 0.45);
+        }
+
+        .usage-item.cost {
+          color: #30D158;
+          font-weight: 600;
+          background: rgba(48, 209, 88, 0.08);
+          padding: 0 4px;
+          border-radius: 3px;
+        }
+
+        .usage-item.cached {
+          color: #5AC8FA;
+          font-weight: 600;
+          background: rgba(90, 200, 250, 0.12);
+          border: 1px solid rgba(90, 200, 250, 0.22);
+          padding: 0 5px;
+          border-radius: 3px;
+        }
+
+        .preparing-tool-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          padding: 5px 11px;
+          margin-bottom: 6px;
+          border-radius: 8px;
+          background: linear-gradient(135deg, rgba(10, 132, 255, 0.14) 0%, rgba(90, 200, 250, 0.08) 100%);
+          border: 1px solid rgba(90, 200, 250, 0.28);
+          font-size: 11px;
+          color: rgba(235, 245, 255, 0.9);
+          width: fit-content;
+          animation: subtlePulse 1.8s ease-in-out infinite;
+        }
+
+        .preparing-tool-pill strong {
+          color: #5AC8FA;
+          font-weight: 600;
+        }
+
+        @keyframes subtlePulse {
+          0%, 100% { opacity: 0.85; }
+          50% { opacity: 1; }
         }
 
         .attached-context-chip {
@@ -3430,87 +4535,477 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           transform: scale(1.08);
         }
 
+        /* Tool Dropdown & Accordion */
+        .tool-dropdown-container {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 12px;
+          width: 100%;
+        }
+
+        .tool-dropdown-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 7px 12px;
+          border-radius: 9px;
+          background: rgba(18, 24, 40, 0.65);
+          backdrop-filter: var(--glass-blur-sm);
+          -webkit-backdrop-filter: var(--glass-blur-sm);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          cursor: pointer;
+          font-size: 11px;
+          color: #d1d5db;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          text-align: left;
+          width: 100%;
+        }
+
+        .tool-dropdown-header:hover {
+          background: rgba(26, 34, 56, 0.85);
+          border-color: rgba(255, 255, 255, 0.14);
+        }
+
+        .tool-dropdown-header.pending {
+          border-color: rgba(255, 159, 10, 0.4);
+          background: linear-gradient(135deg, rgba(255, 159, 10, 0.1) 0%, rgba(20, 26, 46, 0.75) 100%);
+        }
+
+        .tool-dropdown-header.executing {
+          border-color: rgba(10, 132, 255, 0.45);
+          background: linear-gradient(135deg, rgba(10, 132, 255, 0.1) 0%, rgba(20, 26, 46, 0.75) 100%);
+        }
+
+        .tool-dropdown-header.failed {
+          border-color: rgba(255, 69, 58, 0.4);
+        }
+
+        .tool-dropdown-header-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .tool-dropdown-title {
+          font-weight: 600;
+          color: #f3f4f6;
+          letter-spacing: -0.01em;
+        }
+
+        .tool-category-chips {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .cat-chip {
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-size: 9.5px;
+          font-weight: 500;
+          text-transform: capitalize;
+        }
+
+        .cat-chip.read {
+          background: rgba(10, 132, 255, 0.18);
+          color: #60a5fa;
+          border: 1px solid rgba(10, 132, 255, 0.25);
+        }
+
+        .cat-chip.write {
+          background: rgba(48, 209, 88, 0.18);
+          color: #4ade80;
+          border: 1px solid rgba(48, 209, 88, 0.25);
+        }
+
+        .cat-chip.run {
+          background: rgba(255, 159, 10, 0.18);
+          color: #fbbf24;
+          border: 1px solid rgba(255, 159, 10, 0.25);
+        }
+
+        .cat-chip.git {
+          background: rgba(175, 82, 222, 0.18);
+          color: #c084fc;
+          border: 1px solid rgba(175, 82, 222, 0.25);
+        }
+
+        .cat-chip.mcp {
+          background: rgba(56, 189, 248, 0.18);
+          color: #38bdf8;
+          border: 1px solid rgba(56, 189, 248, 0.25);
+        }
+
+        .tool-dropdown-header-right {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #9ca3af;
+        }
+
+        .dropdown-status-badge {
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 7px;
+          border-radius: 4px;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+
+        .dropdown-status-badge.pending {
+          background: rgba(255, 159, 10, 0.2);
+          color: #ff9f0a;
+          border: 1px solid rgba(255, 159, 10, 0.35);
+        }
+
+        .dropdown-status-badge.executing {
+          background: rgba(10, 132, 255, 0.2);
+          color: #0a84ff;
+          border: 1px solid rgba(10, 132, 255, 0.35);
+        }
+
+        /* Cline / Kilo Style Compact 1-line Rows & Action Headlines */
+        .tool-header-text {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          min-width: 0;
+        }
+
+        .tool-headline {
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #f3f4f6;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 280px;
+        }
+
+        .tool-headline.mono-command,
+        .compact-headline.mono-command {
+          font-family: var(--font-mono, 'JetBrains Mono', monospace);
+          font-size: 11px;
+          color: #93c5fd;
+        }
+
+        .tool-subtext {
+          font-size: 10px;
+          color: #9ca3af;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 280px;
+        }
+
+        .tool-compact-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .tool-compact-wrapper.is-background {
+          opacity: 0.72;
+        }
+
+        .tool-compact-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 5px 10px;
+          border-radius: 7px;
+          background: rgba(18, 24, 40, 0.48);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          font-size: 11px;
+          gap: 8px;
+          transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .tool-compact-row:hover {
+          background: rgba(24, 32, 52, 0.7);
+          border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .compact-row-left {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .compact-icon {
+          display: flex;
+          align-items: center;
+          color: #60a5fa;
+          flex-shrink: 0;
+        }
+
+        .compact-icon.cat-git { color: #c084fc; }
+        .compact-icon.cat-run { color: #fbbf24; }
+        .compact-icon.cat-write { color: #4ade80; }
+
+        .compact-headline {
+          font-weight: 500;
+          color: #e5e7eb;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .compact-subtext {
+          font-size: 10px;
+          color: #6b7280;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 150px;
+        }
+
+        .compact-metric {
+          font-size: 9.5px;
+          color: #9ca3af;
+          background: rgba(255, 255, 255, 0.05);
+          padding: 1px 5px;
+          border-radius: 4px;
+          flex-shrink: 0;
+        }
+
+        .compact-row-right {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex-shrink: 0;
+        }
+
+        .compact-action-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: none;
+          color: #9ca3af;
+          cursor: pointer;
+          padding: 2px;
+          border-radius: 4px;
+          transition: color 0.15s, background 0.15s;
+        }
+
+        .compact-action-icon:hover {
+          color: #f3f4f6;
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .compact-peek {
+          max-height: 180px;
+          font-size: 10.5px;
+          margin-left: 12px;
+          border-left: 2px solid rgba(96, 165, 250, 0.35);
+        }
+
+        .toggle-bg-tools-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          align-self: flex-start;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          color: #9ca3af;
+          font-size: 10px;
+          padding: 3px 9px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .toggle-bg-tools-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: #e5e7eb;
+        }
+
         /* Tool Calls Container & Cards */
         .tool-calls-container {
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          margin-bottom: 10px;
+          gap: 10px;
+          margin-bottom: 4px;
         }
 
         .tool-call-card {
-          border-radius: 8px;
-          padding: 10px 12px;
-          background: rgba(20, 26, 46, 0.65);
+          border-radius: 10px;
+          padding: 12px 14px;
+          background: rgba(18, 24, 40, 0.72);
+          backdrop-filter: var(--glass-blur-sm);
+          -webkit-backdrop-filter: var(--glass-blur-sm);
           border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
           font-size: 11px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 8px;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .tool-call-card.pending {
-          border-color: rgba(255, 159, 10, 0.4);
-          background: rgba(255, 159, 10, 0.08);
+          border-color: rgba(255, 159, 10, 0.38);
+          background: linear-gradient(135deg, rgba(255, 159, 10, 0.08) 0%, rgba(20, 26, 46, 0.75) 100%);
+          box-shadow: 0 4px 20px rgba(255, 159, 10, 0.12), inset 0 1px 0 rgba(255, 159, 10, 0.2);
         }
 
         .tool-call-card.executing {
-          border-color: rgba(10, 132, 255, 0.5);
-          background: rgba(10, 132, 255, 0.09);
+          border-color: rgba(10, 132, 255, 0.45);
+          background: linear-gradient(135deg, rgba(10, 132, 255, 0.09) 0%, rgba(20, 26, 46, 0.75) 100%);
+          box-shadow: 0 4px 20px rgba(10, 132, 255, 0.16), inset 0 1px 0 rgba(10, 132, 255, 0.25);
         }
 
         .tool-call-card.completed {
-          border-color: rgba(48, 209, 88, 0.35);
-          background: rgba(48, 209, 88, 0.06);
+          border-color: rgba(48, 209, 88, 0.3);
+          background: linear-gradient(135deg, rgba(48, 209, 88, 0.05) 0%, rgba(20, 26, 46, 0.75) 100%);
         }
 
         .tool-call-card.blocked {
-          border-color: rgba(255, 69, 58, 0.45);
-          background: rgba(255, 69, 58, 0.08);
+          border-color: rgba(255, 69, 58, 0.4);
+          background: linear-gradient(135deg, rgba(255, 69, 58, 0.08) 0%, rgba(20, 26, 46, 0.75) 100%);
+        }
+
+        .tool-call-card.rejected {
+          border-color: rgba(255, 255, 255, 0.06);
+          background: rgba(14, 18, 30, 0.5);
+          opacity: 0.7;
+        }
+
+        .tool-call-card.failed {
+          border-color: rgba(255, 69, 58, 0.4);
+          background: linear-gradient(135deg, rgba(255, 69, 58, 0.08) 0%, rgba(20, 26, 46, 0.75) 100%);
         }
 
         .tool-card-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 8px;
         }
 
         .tool-card-title {
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-weight: 600;
-          color: #FFFFFF;
-        }
-
-        .tool-icon {
-          color: #5AC8FA;
+          gap: 8px;
+          min-width: 0;
         }
 
         .tool-category-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
           font-size: 9px;
           font-weight: 700;
-          padding: 1px 5px;
-          border-radius: 4px;
+          letter-spacing: 0.5px;
+          padding: 2px 7px;
+          border-radius: 6px;
+          text-transform: uppercase;
+          border: 1px solid transparent;
         }
 
-        .tool-category-badge.cat-read { background: rgba(10, 132, 255, 0.2); color: #5AC8FA; }
-        .tool-category-badge.cat-write { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
-        .tool-category-badge.cat-run { background: rgba(48, 209, 88, 0.2); color: #30D158; }
-        .tool-category-badge.cat-git { background: rgba(191, 90, 242, 0.2); color: #BF5AF2; }
+        .tool-category-badge.cat-read {
+          background: rgba(10, 132, 255, 0.16);
+          color: #5AC8FA;
+          border-color: rgba(10, 132, 255, 0.3);
+        }
+
+        .tool-category-badge.cat-write {
+          background: rgba(255, 159, 10, 0.16);
+          color: #FF9F0A;
+          border-color: rgba(255, 159, 10, 0.35);
+        }
+
+        .tool-category-badge.cat-run {
+          background: rgba(48, 209, 88, 0.16);
+          color: #30D158;
+          border-color: rgba(48, 209, 88, 0.3);
+        }
+
+        .tool-category-badge.cat-git {
+          background: rgba(191, 90, 242, 0.16);
+          color: #BF5AF2;
+          border-color: rgba(191, 90, 242, 0.3);
+        }
+
+        .tool-category-badge.cat-browser {
+          background: rgba(100, 210, 255, 0.16);
+          color: #64D2FF;
+          border-color: rgba(100, 210, 255, 0.3);
+        }
 
         .status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
           font-size: 10px;
-          padding: 2px 6px;
+          font-weight: 600;
+          padding: 2px 8px;
           border-radius: 999px;
-          font-weight: 500;
+          border: 1px solid transparent;
         }
 
-        .status-badge.pending { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
-        .status-badge.executing { background: rgba(10, 132, 255, 0.2); color: #0A84FF; animation: pulse 1.5s infinite; }
-        .status-badge.completed { background: rgba(48, 209, 88, 0.2); color: #30D158; }
-        .status-badge.blocked { background: rgba(255, 69, 58, 0.2); color: #FF453A; }
-        .status-badge.rejected { background: rgba(255, 255, 255, 0.1); color: rgba(235, 235, 245, 0.5); }
+        .status-badge.pending {
+          background: rgba(255, 159, 10, 0.16);
+          color: #FF9F0A;
+          border-color: rgba(255, 159, 10, 0.35);
+        }
+
+        .status-badge.executing {
+          background: rgba(10, 132, 255, 0.16);
+          color: #5AC8FA;
+          border-color: rgba(10, 132, 255, 0.35);
+        }
+
+        .status-badge.completed {
+          background: rgba(48, 209, 88, 0.16);
+          color: #30D158;
+          border-color: rgba(48, 209, 88, 0.3);
+        }
+
+        .status-badge.blocked {
+          background: rgba(255, 69, 58, 0.16);
+          color: #FF453A;
+          border-color: rgba(255, 69, 58, 0.35);
+        }
+
+        .status-badge.rejected {
+          background: rgba(255, 255, 255, 0.08);
+          color: rgba(235, 235, 245, 0.5);
+        }
+
+        .status-badge.failed {
+          background: rgba(255, 69, 58, 0.16);
+          color: #FF453A;
+          border-color: rgba(255, 69, 58, 0.35);
+        }
+
+        .pulse-indicator {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #FF9F0A;
+          box-shadow: 0 0 6px #FF9F0A;
+          animation: pulseGlow 1.4s ease-in-out infinite;
+        }
+
+        .spin-icon {
+          animation: spinAnim 1s linear infinite;
+        }
+
+        @keyframes spinAnim {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulseGlow {
+          0%, 100% { opacity: 0.4; transform: scale(0.85); }
+          50% { opacity: 1; transform: scale(1.15); }
+        }
 
         .tool-args-preview {
           display: flex;
@@ -3518,61 +5013,196 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           gap: 6px;
           font-family: 'JetBrains Mono', monospace;
           font-size: 10px;
-          color: rgba(235, 235, 245, 0.85);
-          background: rgba(0, 0, 0, 0.25);
-          padding: 4px 8px;
-          border-radius: 4px;
+          color: rgba(235, 235, 245, 0.9);
+          background: rgba(0, 0, 0, 0.32);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          padding: 6px 10px;
+          border-radius: 6px;
+        }
+
+        .tool-arg-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
         }
 
         .arg-key { color: #5AC8FA; font-weight: 600; }
-        .arg-val { color: #EBEBF5; word-break: break-all; }
+        .arg-val { color: rgba(235, 235, 245, 0.9); word-break: break-all; }
 
         .tool-guardrail-banner {
           display: flex;
           align-items: center;
           gap: 6px;
-          padding: 4px 8px;
+          padding: 6px 10px;
           background: rgba(255, 69, 58, 0.15);
-          border: 1px solid rgba(255, 69, 58, 0.3);
-          border-radius: 4px;
+          border: 1px solid rgba(255, 69, 58, 0.32);
+          border-radius: 6px;
           color: #FF453A;
           font-size: 10px;
+          font-weight: 500;
         }
 
+        /* Overhauled Liquid Glass Action Buttons */
         .tool-card-actions {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           margin-top: 4px;
         }
 
         .tool-action-btn {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 4px;
-          padding: 4px 10px;
-          border-radius: 5px;
+          gap: 6px;
+          padding: 6px 14px;
+          border-radius: 7px;
           font-size: 11px;
           font-weight: 600;
           cursor: pointer;
-          border: 1px solid transparent;
+          transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+          backdrop-filter: var(--glass-blur-sm);
+          -webkit-backdrop-filter: var(--glass-blur-sm);
         }
 
         .tool-action-btn.approve {
-          background: rgba(48, 209, 88, 0.2);
-          border-color: rgba(48, 209, 88, 0.4);
+          background: linear-gradient(135deg, rgba(48, 209, 88, 0.22) 0%, rgba(48, 209, 88, 0.12) 100%);
+          border: 1px solid rgba(48, 209, 88, 0.45);
           color: #30D158;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
 
         .tool-action-btn.approve:hover {
-          background: rgba(48, 209, 88, 0.3);
-          box-shadow: 0 0 10px rgba(48, 209, 88, 0.3);
+          background: linear-gradient(135deg, rgba(48, 209, 88, 0.34) 0%, rgba(48, 209, 88, 0.2) 100%);
+          border-color: rgba(48, 209, 88, 0.65);
+          color: #FFFFFF;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 16px rgba(48, 209, 88, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .tool-action-btn.approve:active {
+          transform: translateY(0);
         }
 
         .tool-action-btn.reject {
-          background: rgba(255, 69, 58, 0.15);
-          border-color: rgba(255, 69, 58, 0.3);
+          background: rgba(255, 69, 58, 0.1);
+          border: 1px solid rgba(255, 69, 58, 0.28);
           color: #FF453A;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .tool-action-btn.reject:hover {
+          background: rgba(255, 69, 58, 0.2);
+          border-color: rgba(255, 69, 58, 0.45);
+          color: #FFFFFF;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px rgba(255, 69, 58, 0.3);
+        }
+
+        .tool-action-btn.reject:active {
+          transform: translateY(0);
+        }
+
+        .tool-card-actions-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-top: 4px;
+        }
+
+        .tool-action-btn.steer {
+          background: rgba(255, 159, 10, 0.12);
+          border: 1px solid rgba(255, 159, 10, 0.35);
+          color: #FF9F0A;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .tool-action-btn.steer:hover, .tool-action-btn.steer.active {
+          background: rgba(255, 159, 10, 0.24);
+          border-color: rgba(255, 159, 10, 0.55);
+          color: #FFFFFF;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px rgba(255, 159, 10, 0.3);
+        }
+
+        .steering-drawer {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 8px 10px;
+          background: rgba(16, 22, 38, 0.95);
+          border: 1px solid rgba(255, 159, 10, 0.35);
+          border-radius: 7px;
+          margin-top: 2px;
+        }
+
+        .steering-drawer-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 10px;
+          font-weight: 600;
+          color: #FF9F0A;
+        }
+
+        .steering-input {
+          width: 100%;
+          background: rgba(0, 0, 0, 0.45);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 5px;
+          padding: 6px 8px;
+          font-size: 11px;
+          color: #FFFFFF;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.15s ease;
+        }
+
+        .steering-input:focus {
+          border-color: #5AC8FA;
+          box-shadow: 0 0 8px rgba(90, 200, 250, 0.25);
+        }
+
+        .steering-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 6px;
+        }
+
+        .steering-btn {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 4px 10px;
+          border-radius: 4px;
+          cursor: pointer;
+          border: none;
+          transition: all 0.15s ease;
+        }
+
+        .steering-btn.cancel {
+          background: rgba(255, 255, 255, 0.08);
+          color: rgba(235, 235, 245, 0.7);
+        }
+
+        .steering-btn.cancel:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: #FFFFFF;
+        }
+
+        .steering-btn.submit {
+          background: linear-gradient(135deg, rgba(255, 159, 10, 0.35) 0%, rgba(255, 69, 58, 0.28) 100%);
+          border: 1px solid rgba(255, 159, 10, 0.5);
+          color: #FFFFFF;
+        }
+
+        .steering-btn.submit:hover:not(:disabled) {
+          background: linear-gradient(135deg, rgba(255, 159, 10, 0.5) 0%, rgba(255, 69, 58, 0.4) 100%);
+          box-shadow: 0 0 10px rgba(255, 159, 10, 0.4);
+        }
+
+        .steering-btn.submit:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
 
         .tool-result-box {
@@ -3583,93 +5213,536 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
         }
 
         .tool-output-content {
-          max-height: 140px;
+          max-height: 160px;
           overflow-y: auto;
-          background: rgba(0, 0, 0, 0.4);
-          padding: 6px 8px;
-          border-radius: 4px;
+          background: rgba(0, 0, 0, 0.42);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          padding: 8px 10px;
+          border-radius: 6px;
           font-family: 'JetBrains Mono', monospace;
           font-size: 10px;
-          color: rgba(235, 235, 245, 0.85);
+          color: rgba(235, 235, 245, 0.88);
           white-space: pre-wrap;
           word-break: break-all;
+          line-height: 1.4;
+          margin-top: 4px;
+        }
+
+        .tool-output-content pre {
+          margin: 0;
+          font-family: inherit;
+          font-size: inherit;
+          color: inherit;
         }
 
         /* Diff Viewer Card */
         .tool-diff-card {
-          background: rgba(0, 0, 0, 0.5);
+          background: rgba(0, 0, 0, 0.45);
           border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 6px;
+          border-radius: 8px;
           overflow: hidden;
+          margin-top: 4px;
         }
 
         .tool-diff-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 5px 8px;
-          background: rgba(255, 255, 255, 0.05);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 6px 10px;
+          background: rgba(255, 255, 255, 0.04);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
         }
 
         .diff-header-left {
           display: flex;
           align-items: center;
-          gap: 5px;
+          gap: 6px;
           font-weight: 600;
+          color: #FFFFFF;
+          font-size: 11px;
+        }
+
+        .diff-file-name {
+          font-family: 'JetBrains Mono', monospace;
           color: #FFFFFF;
         }
 
-        .apply-diff-btn {
-          display: flex;
+        .diff-stats-pill {
+          display: inline-flex;
           align-items: center;
           gap: 4px;
-          padding: 2px 8px;
+          font-size: 9px;
+          font-family: 'JetBrains Mono', monospace;
+          font-weight: 700;
+          background: rgba(0, 0, 0, 0.4);
+          padding: 1px 6px;
           border-radius: 4px;
+          margin-left: 4px;
+        }
+
+        .diff-stat-sub { color: #FF453A; }
+        .diff-stat-add { color: #30D158; }
+
+        .apply-diff-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 9px;
+          border-radius: 5px;
           font-size: 10px;
           font-weight: 600;
-          background: rgba(10, 132, 255, 0.25);
+          background: rgba(10, 132, 255, 0.22);
           border: 1px solid rgba(10, 132, 255, 0.4);
           color: #5AC8FA;
           cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .apply-diff-btn:hover {
+          background: rgba(10, 132, 255, 0.35);
+          color: #FFFFFF;
+          box-shadow: 0 0 10px rgba(10, 132, 255, 0.4);
         }
 
         .diff-applied-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          font-weight: 600;
+          color: #30D158;
+          background: rgba(48, 209, 88, 0.12);
+          border: 1px solid rgba(48, 209, 88, 0.28);
+          padding: 2px 7px;
+          border-radius: 5px;
+        }
+
+        .diff-applied-group {
           display: flex;
           align-items: center;
+          gap: 5px;
+        }
+
+        .diff-rollback-btn {
+          display: inline-flex;
+          align-items: center;
           gap: 3px;
-          font-size: 10px;
-          color: #30D158;
+          font-size: 9.5px;
           font-weight: 600;
+          color: #FF9F0A;
+          background: rgba(255, 159, 10, 0.12);
+          border: 1px solid rgba(255, 159, 10, 0.32);
+          padding: 2px 6px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .diff-rollback-btn:hover {
+          background: rgba(255, 159, 10, 0.25);
+          color: #FFFFFF;
+          border-color: rgba(255, 159, 10, 0.55);
+        }
+
+        .diff-restored-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 9.5px;
+          font-weight: 600;
+          color: rgba(235, 235, 245, 0.5);
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+
+        .diff-header-right {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .diff-view-toggle {
+          display: flex;
+          align-items: center;
+          background: rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+          padding: 1px;
+        }
+
+        .diff-toggle-btn {
+          background: transparent;
+          border: none;
+          color: rgba(235, 235, 245, 0.5);
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 6px;
+          border-radius: 3px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .diff-toggle-btn.active {
+          background: rgba(255, 255, 255, 0.15);
+          color: #FFFFFF;
+        }
+
+        .diff-expand-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 3px 6px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: rgba(235, 235, 245, 0.7);
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .diff-expand-btn:hover {
+          color: #5AC8FA;
+          background: rgba(90, 200, 250, 0.15);
+          border-color: rgba(90, 200, 250, 0.35);
+        }
+
+        .snippet-diff-split {
+          display: flex;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          max-height: 240px;
+          overflow: auto;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .split-diff-col {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .split-diff-col.original {
+          border-right: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 69, 58, 0.03);
+        }
+
+        .split-diff-col.modified {
+          background: rgba(48, 209, 88, 0.03);
+        }
+
+        .split-col-header {
+          padding: 3px 8px;
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          background: rgba(0, 0, 0, 0.25);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          color: rgba(235, 235, 245, 0.5);
+        }
+
+        .split-col-content {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .split-line {
+          display: flex;
+          align-items: flex-start;
+          padding: 1px 6px;
+          line-height: 1.45;
+          white-space: pre;
+          word-break: normal;
+        }
+
+        .split-line.removal {
+          background: rgba(255, 69, 58, 0.12);
+          color: #FF8077;
+        }
+
+        .split-line.addition {
+          background: rgba(48, 209, 88, 0.12);
+          color: #5BE37D;
+        }
+
+        .line-num {
+          width: 22px;
+          color: rgba(235, 235, 245, 0.35);
+          font-size: 8.5px;
+          user-select: none;
+          flex-shrink: 0;
+        }
+
+        .line-prefix {
+          width: 12px;
+          font-weight: 700;
+          user-select: none;
+          flex-shrink: 0;
+        }
+
+        .line-text {
+          flex: 1;
+        }
+
+        .output-compacted-banner {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 8px;
+          background: rgba(90, 200, 250, 0.1);
+          border: 1px solid rgba(90, 200, 250, 0.25);
+          border-radius: 4px;
+          font-size: 9.5px;
+          color: #5AC8FA;
+          margin-bottom: 6px;
+        }
+
+        /* Full-Screen / Modal Diff Overlay */
+        .expanded-diff-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+
+        .expanded-diff-modal {
+          width: 90vw;
+          max-width: 1100px;
+          height: 85vh;
+          background: rgba(14, 18, 32, 0.96);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 12px;
+          box-shadow: 0 16px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(10, 132, 255, 0.2);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        .expanded-diff-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 18px;
+          background: rgba(255, 255, 255, 0.04);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .expanded-diff-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          font-weight: 700;
+          color: #FFFFFF;
+        }
+
+        .expanded-diff-path {
+          font-family: 'JetBrains Mono', monospace;
+          color: #5AC8FA;
+        }
+
+        .expanded-diff-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .modal-action-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 5px 12px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .modal-action-btn.secondary {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #FFFFFF;
+        }
+
+        .modal-action-btn.secondary:hover {
+          background: rgba(255, 255, 255, 0.16);
+        }
+
+        .modal-action-btn.primary {
+          background: linear-gradient(135deg, rgba(48, 209, 88, 0.3) 0%, rgba(48, 209, 88, 0.18) 100%);
+          border: 1px solid rgba(48, 209, 88, 0.55);
+          color: #30D158;
+        }
+
+        .modal-action-btn.primary:hover {
+          background: linear-gradient(135deg, rgba(48, 209, 88, 0.45) 0%, rgba(48, 209, 88, 0.28) 100%);
+          color: #FFFFFF;
+          box-shadow: 0 0 12px rgba(48, 209, 88, 0.4);
+        }
+
+        .modal-close-btn {
+          background: transparent;
+          border: none;
+          color: rgba(235, 235, 245, 0.6);
+          padding: 4px;
+          border-radius: 4px;
+          cursor: pointer;
+        }
+
+        .modal-close-btn:hover {
+          color: #FF453A;
+          background: rgba(255, 69, 58, 0.12);
+        }
+
+        .expanded-diff-content {
+          flex: 1;
+          overflow: auto;
+          background: rgba(0, 0, 0, 0.5);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11.5px;
+        }
+
+        .expanded-split-container {
+          display: flex;
+          min-height: 100%;
+        }
+
+        .expanded-split-pane {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+
+        .expanded-split-pane.left {
+          border-right: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 69, 58, 0.02);
+        }
+
+        .expanded-split-pane.right {
+          background: rgba(48, 209, 88, 0.02);
+        }
+
+        .expanded-pane-header {
+          padding: 6px 14px;
+          font-size: 10.5px;
+          font-weight: 700;
+          text-transform: uppercase;
+          background: rgba(255, 255, 255, 0.04);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          color: rgba(235, 235, 245, 0.6);
+        }
+
+        .expanded-pane-lines {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .expanded-line {
+          display: flex;
+          align-items: flex-start;
+          padding: 2px 10px;
+          line-height: 1.5;
+          white-space: pre-wrap;
+          word-break: break-all;
+        }
+
+        .expanded-line.removal {
+          background: rgba(255, 69, 58, 0.12);
+          color: #FF8077;
+        }
+
+        .expanded-line.addition {
+          background: rgba(48, 209, 88, 0.12);
+          color: #5BE37D;
+        }
+
+        .expanded-line-no {
+          width: 32px;
+          color: rgba(235, 235, 245, 0.35);
+          font-size: 9.5px;
+          user-select: none;
+          flex-shrink: 0;
+        }
+
+        .expanded-line-marker {
+          width: 14px;
+          font-weight: 700;
+          user-select: none;
+          flex-shrink: 0;
+        }
+
+        .expanded-line-code {
+          flex: 1;
+        }
+
+        .expanded-full-view {
+          padding: 16px;
+          color: #5BE37D;
+          background: rgba(48, 209, 88, 0.06);
+          line-height: 1.5;
+        }
+
+        .expanded-full-view pre {
+          margin: 0;
+          font-family: inherit;
         }
 
         .snippet-diff-body {
           font-family: 'JetBrains Mono', monospace;
           font-size: 10px;
+          max-height: 240px;
+          overflow-y: auto;
           display: flex;
           flex-direction: column;
         }
 
         .diff-chunk {
           display: flex;
-          padding: 3px 8px;
+          padding: 4px 10px;
+          white-space: pre-wrap;
+          word-break: break-all;
+          line-height: 1.45;
+        }
+
+        .diff-chunk pre {
+          margin: 0;
+          font-family: inherit;
+          font-size: inherit;
+          color: inherit;
           white-space: pre-wrap;
         }
 
         .diff-chunk.removal {
-          background: rgba(255, 69, 58, 0.15);
-          color: #FF453A;
+          background: rgba(255, 69, 58, 0.12);
+          color: #FF8077;
+          border-left: 2px solid #FF453A;
         }
 
         .diff-chunk.addition {
-          background: rgba(48, 209, 88, 0.15);
-          color: #30D158;
+          background: rgba(48, 209, 88, 0.12);
+          color: #5BE37D;
+          border-left: 2px solid #30D158;
+        }
+
+        .diff-chunk.addition.full-write {
+          background: rgba(48, 209, 88, 0.08);
         }
 
         .diff-prefix {
-          width: 14px;
+          width: 16px;
           font-weight: 700;
           user-select: none;
+          flex-shrink: 0;
         }
 
         /* Autocomplete Popup */

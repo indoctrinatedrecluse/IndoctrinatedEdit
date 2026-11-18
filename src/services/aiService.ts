@@ -7,6 +7,9 @@ import {
   AiAutoApproveSettings,
   AutoApprovePreset,
 } from '@sdk/types'
+import { streamAiResponse, cancelAiStream } from '@sdk/aiCore'
+import { McpService } from './mcpService'
+import { AiTokenizer } from './aiTokenizer'
 
 export interface ProviderSetting {
   apiKey: string
@@ -20,6 +23,8 @@ const DEFAULT_SETTINGS: AiSettingsMap = {
   gemini: { apiKey: '', endpoint: 'https://generativelanguage.googleapis.com' },
   claude: { apiKey: '', endpoint: 'https://api.anthropic.com' },
   openai: { apiKey: '', endpoint: 'https://api.openai.com/v1' },
+  openrouter: { apiKey: '', endpoint: 'https://openrouter.ai/api/v1' },
+  custom: { apiKey: '', endpoint: 'http://localhost:1234/v1' },
   ollama: { apiKey: '', endpoint: 'http://localhost:11434' },
   antigravity: { apiKey: '', endpoint: '' },
 }
@@ -186,6 +191,101 @@ export const PRESET_MODELS: AiModelOption[] = [
     description: 'Compact reasoning model optimised for coding with extended thinking',
     supportsReasoning: true,
   },
+
+  // OpenRouter (Unified BYOK Gateway - 300+ models)
+  {
+    id: 'openrouter/anthropic/claude-3.7-sonnet',
+    name: 'Claude 3.7 Sonnet (OpenRouter)',
+    provider: 'openrouter',
+    description: 'Hybrid reasoning and state-of-the-art coding via OpenRouter',
+    supportsReasoning: true,
+  },
+  {
+    id: 'openrouter/anthropic/claude-3.5-sonnet',
+    name: 'Claude 3.5 Sonnet (OpenRouter)',
+    provider: 'openrouter',
+    description: 'Industry benchmark leader for architecture, coding, and debugging',
+    supportsReasoning: false,
+  },
+  {
+    id: 'openrouter/deepseek/deepseek-r1',
+    name: 'DeepSeek R1 (OpenRouter)',
+    provider: 'openrouter',
+    description: 'Extended chain-of-thought reasoning matching OpenAI o1-level coding',
+    supportsReasoning: true,
+  },
+  {
+    id: 'openrouter/deepseek/deepseek-chat',
+    name: 'DeepSeek V3 (OpenRouter)',
+    provider: 'openrouter',
+    description: 'Fast, highly cost-efficient flagship open model for coding',
+  },
+  {
+    id: 'openrouter/openai/gpt-4o',
+    name: 'GPT-4o (OpenRouter)',
+    provider: 'openrouter',
+    description: 'OpenAI flagship model with multimodal understanding via OpenRouter',
+  },
+  {
+    id: 'openrouter/google/gemini-2.0-flash-001',
+    name: 'Gemini 2.0 Flash (OpenRouter)',
+    provider: 'openrouter',
+    description: 'Ultra-low latency with massive context via OpenRouter',
+  },
+  {
+    id: 'openrouter/qwen/qwen-2.5-coder-32b-instruct',
+    name: 'Qwen 2.5 Coder 32B (OpenRouter)',
+    provider: 'openrouter',
+    description: 'Leading specialized open-source coding model',
+  },
+
+  // Ollama Local Models (Zero Cost, Offline, Private)
+  {
+    id: 'llama3.3:latest',
+    name: 'Llama 3.3 70B (Ollama)',
+    provider: 'ollama',
+    description: 'Meta Llama 3.3 flagship open model running locally via Ollama',
+  },
+  {
+    id: 'qwen2.5-coder:32b',
+    name: 'Qwen 2.5 Coder 32B (Ollama)',
+    provider: 'ollama',
+    description: 'Premier local code generation, refactoring, and reasoning model',
+  },
+  {
+    id: 'qwen2.5-coder:7b',
+    name: 'Qwen 2.5 Coder 7B (Ollama)',
+    provider: 'ollama',
+    description: 'Lightweight, ultra-fast local code completion and editing',
+  },
+  {
+    id: 'deepseek-r1:14b',
+    name: 'DeepSeek R1 Distill 14B (Ollama)',
+    provider: 'ollama',
+    description: 'Local chain-of-thought reasoning distilled from DeepSeek R1',
+    supportsReasoning: true,
+  },
+  {
+    id: 'deepseek-r1:8b',
+    name: 'DeepSeek R1 Distill 8B (Ollama)',
+    provider: 'ollama',
+    description: 'Compact 8B reasoning model with native thinking process',
+    supportsReasoning: true,
+  },
+  {
+    id: 'mistral:latest',
+    name: 'Mistral 7B (Ollama)',
+    provider: 'ollama',
+    description: 'High performance general instruction and code companion',
+  },
+
+  // Custom OpenAI-Compatible Endpoints (LM Studio, vLLM, Groq, Mistral, etc.)
+  {
+    id: 'custom-model',
+    name: 'Custom / Local Model',
+    provider: 'custom',
+    description: 'Connect to LM Studio, vLLM, Groq, Together AI, or custom server',
+  },
 ]
 
 const SETTINGS_STORAGE_KEY = 'indoctrinated_ai_settings'
@@ -219,10 +319,11 @@ export class AiService {
     try {
       // Hard truncate history to avoid localStorage quota issues
       let historyToSave = messages
-      // A query is user + assistant. 40 messages = 20 queries + welcome message.
+      // Keep a sliding window of up to 40 messages (welcome + 39 most recent) to prevent localStorage bloat
+      // while preserving full multi-turn conversational continuity.
       if (historyToSave.length > 40) {
         const welcome = historyToSave[0]
-        const recent = historyToSave.slice(-4) // keep last 4 to be safe (e.g. user, tool_result, assistant)
+        const recent = historyToSave.slice(-39)
         historyToSave = [welcome, ...recent]
       }
       
@@ -434,6 +535,35 @@ export class AiService {
     return this.getMode() === 'plan' ? this.getPlanModelId() : this.getActModelId()
   }
 
+  /**
+   * Resolves the active `AiModelOption` for any consumer (AI Chat, Inline Copilot, etc.),
+   * supporting preset BYOK models, local Ollama models, and custom OpenAI-compatible IDs.
+   */
+  static resolveActiveModelOption(preferredId?: string): AiModelOption {
+    const targetId = preferredId || this.getActiveModelIdForCurrentMode() || this.getActiveModelId() || 'gemini-2.5-flash'
+    const preset = PRESET_MODELS.find((m) => m.id === targetId)
+    if (preset) return preset
+
+    // Dynamically construct model descriptor for custom / pulled Ollama / OpenRouter slugs
+    if (targetId.includes(':')) {
+      return {
+        id: targetId,
+        name: targetId,
+        provider: 'ollama',
+        description: 'Local Ollama Model',
+      }
+    }
+    if (targetId.includes('/')) {
+      return {
+        id: targetId,
+        name: targetId,
+        provider: 'openrouter',
+        description: 'OpenRouter Model',
+      }
+    }
+    return PRESET_MODELS.find((m) => m.id === 'gemini-2.5-flash') || PRESET_MODELS[0]
+  }
+
   static getSystemPromptForMode(mode: ChatMode): string {
     return this.getModeSystemPrompt(mode as AiChatMode)
   }
@@ -459,11 +589,6 @@ export class AiService {
     this.modeListeners.forEach((fn) => fn(state))
   }
 
-  static getModelForMode(mode: AiChatMode, availableModels: AiModelOption[]): AiModelOption {
-    const targetId = mode === 'plan' ? this.getPlanModelId() : this.getActModelId()
-    return availableModels.find((m) => m.id === targetId) || availableModels.find((m) => m.id === this.getActiveModelId()) || availableModels[0]
-  }
-
   static getModeSystemPrompt(mode: AiChatMode): string {
     if (mode === 'plan') {
       return `You are in **Plan Mode** in IndoctrinatedEdit.
@@ -471,7 +596,7 @@ Your objective is to investigate the codebase, analyze architecture, answer ques
 
 ### Plan Mode Operational Guidelines:
 1. **Direct Answers & Summaries**: When the user asks general questions, requests a project or file summary, asks for architecture explanations, or inquires about code logic, answer directly and clearly with the requested information. There is no need to create an implementation plan or suggest switching modes for informational queries.
-2. **Read-Only / No Code Writing**: In Plan Mode, you can freely read files (\`read_file\`), search keywords (\`search_code\`), check diagnostics (\`get_workspace_diagnostics\`), inspect directory trees (\`list_workspace_files\`), and query MCP tools. You must NOT write or overwrite code files directly. Do NOT attempt to use \`propose_file_edit\`.
+2. **Read-Only / No Code Writing**: In Plan Mode, you can freely read files (\`read_file\`), search keywords (\`search_code\`), check diagnostics (\`get_editor_diagnostics\`), inspect directory trees (\`list_workspace_files\`), and query MCP tools. You must NOT write or overwrite code files directly. Do NOT attempt to use \`propose_file_edit\`.
 3. **Structured Implementation Plan (Only When Code Changes Are Requested)**: If and only if the user is asking to implement a feature, refactor code, or fix a bug, formulate a structured implementation plan with:
    - **Problem Analysis & Root Cause**: Clear explanation of what needs to be solved.
    - **Proposed Changes**: Step-by-step list of files to modify or create.
@@ -487,9 +612,43 @@ Your objective is to autonomously execute implementation plans, write high-quali
 3. **Safety**: Destructive commands and path traversal are guarded.`
   }
 
+  /**
+   * Automatically discovers and loads project-specific instructions from workspace root:
+   * .indoctrinatedrules, .cursorrules, .clinerules, AGENTS.md, or INSTRUCTIONS.md
+   */
+  static async loadWorkspaceRules(workspaceRoot: string): Promise<{ fileName: string; content: string } | null> {
+    if (!workspaceRoot) return null
+
+    const candidates = [
+      '.indoctrinatedrules',
+      '.cursorrules',
+      '.clinerules',
+      'AGENTS.md',
+      'INSTRUCTIONS.md',
+    ]
+
+    for (const fileName of candidates) {
+      try {
+        const separator = workspaceRoot.includes('\\') ? '\\' : '/'
+        const cleanRoot = workspaceRoot.replace(/[/\\]+$/, '')
+        const fullPath = `${cleanRoot}${separator}${fileName}`
+
+        if (typeof window !== 'undefined' && window.electronAPI?.readFile) {
+          const content = await window.electronAPI.readFile(fullPath)
+          if (content && typeof content === 'string' && content.trim().length > 0) {
+            return { fileName, content: content.trim() }
+          }
+        }
+      } catch {
+        // Continue searching next candidate if file doesn't exist
+      }
+    }
+    return null
+  }
+
   static async fetchOllamaModels(host = 'http://localhost:11434'): Promise<AiModelOption[]> {
     try {
-      if (window.electronAPI?.ai?.listOllamaModels) {
+      if (typeof window !== 'undefined' && window.electronAPI?.ai?.listOllamaModels) {
         const modelNames = await window.electronAPI.ai.listOllamaModels(host)
         return modelNames.map((name) => ({
           id: name,
@@ -518,28 +677,22 @@ Your objective is to autonomously execute implementation plans, write high-quali
   }
 
   /**
-   * Automatically trims the oldest messages from history when approaching the context limit.
-   * Keeps the welcome message and the most recent N messages.
-   * Returns a new (possibly shorter) messages array safe to send to the API.
+   * Intelligently compacts conversation history when approaching context limits.
+   * Multi-stage compaction:
+   * 1. In-place tool output and log compaction on older turns (preserving conversational structure).
+   * 2. Semantic sliding window preserving:
+   *    - Pinned welcome / system preamble
+   *    - The original user task goal (first user message)
+   *    - The recent N conversational turns intact
+   *    - Atomicity: Tool calls and their corresponding tool results are kept or pruned together.
    */
   static trimConversationHistory(
     messages: AiChatMessage[],
     systemPrompt: string,
     modelId: string
   ): AiChatMessage[] {
-    const limit = (() => {
-      const MODEL_LIMITS: Record<string, number> = {
-        'gemini-2.5-pro': 1_048_576, 'gemini-2.5-flash': 1_048_576,
-        'gemini-2.0-flash': 1_048_576, 'gemini-2.0-flash-thinking-exp': 1_048_576,
-        'claude-sonnet-4-5': 200_000, 'claude-opus-4-5': 200_000,
-        'deepseek-chat': 64_000, 'deepseek-reasoner': 64_000,
-        'gpt-4o': 128_000, 'gpt-4o-mini': 128_000, 'o3-mini': 200_000,
-      }
-      return MODEL_LIMITS[modelId] || 128_000
-    })()
-
-    // Simple token estimate: ~3.5 chars per token
-    const est = (s: string) => Math.ceil((s || '').length / 3.5)
+    const limit = AiTokenizer.getModelContextLimit(modelId)
+    const est = (s: string) => AiTokenizer.estimateTokens(s || '')
     const sysTokens = est(systemPrompt)
     const budget = Math.floor(limit * 0.80) - sysTokens // use 80% max, leave headroom
 
@@ -558,35 +711,131 @@ Your objective is to autonomously execute implementation plans, write high-quali
       return total
     }
 
-    // If already under budget, return as-is
+    // Step 0: Check if already under budget
     const totalNow = messages.reduce((acc, m) => acc + getMsgTokens(m), 0)
     if (totalNow <= budget) return messages
 
-    // Keep pinned welcome message, drop from the front until under budget
-    const [welcome, ...rest] = messages
-    let trimmed = [...rest]
-    while (trimmed.length > 2) {
-      const total = trimmed.reduce((acc, m) => acc + getMsgTokens(m), 0)
-      if (total <= budget) break
-      trimmed.shift() // drop oldest
+    // Step 1: In-Place Tool Output Compaction on older turns
+    // For messages older than the last 4 turns, compact verbose tool outputs and result logs
+    const keepTail = 4
+    const headThreshold = Math.max(0, messages.length - keepTail)
+    const stage1Messages: AiChatMessage[] = messages.map((msg, index) => {
+      if (index >= headThreshold) return msg // keep recent turns intact
+
+      let modified = false
+      let newContent = msg.content
+      let newToolResults = msg.toolResults
+
+      // Compact tool results
+      if (msg.toolResults && msg.toolResults.length > 0) {
+        newToolResults = msg.toolResults.map((r) => {
+          if (r.output && r.output.length > 250) {
+            modified = true
+            const compact = AiTokenizer.compactToolOutput(r.output, { maxLines: 12, maxChars: 600 })
+            return { ...r, output: compact.content }
+          }
+          return r
+        })
+      }
+
+      // Compact tool result blocks formatted inside message content
+      if (newContent && newContent.includes('```') && (newContent.includes('Tool `') || newContent.includes('result:'))) {
+        const compact = AiTokenizer.compactToolOutput(newContent, { maxLines: 18, maxChars: 1200 })
+        if (compact.truncated) {
+          modified = true
+          newContent = compact.content
+        }
+      }
+
+      if (modified) {
+        return {
+          ...msg,
+          content: newContent,
+          toolResults: newToolResults,
+        }
+      }
+      return msg
+    })
+
+    const stage1Tokens = stage1Messages.reduce((acc, m) => acc + getMsgTokens(m), 0)
+    if (stage1Tokens <= budget) return stage1Messages
+
+    // Step 2: Semantic Sliding Window with Goal Retention & Call/Result Atomicity
+    // Always preserve:
+    // 1. messages[0] (Welcome/Intro)
+    // 2. The original user task goal (first message with role === 'user')
+    // 3. The last `keepRecent` messages
+    if (stage1Messages.length <= 4) return stage1Messages
+
+    const welcome = stage1Messages[0]
+    // Find first user task message
+    const firstUserIndex = stage1Messages.findIndex((m, i) => i > 0 && m.role === 'user')
+    const firstUserTask = firstUserIndex > 0 ? stage1Messages[firstUserIndex] : null
+
+    // Determine the tail boundary
+    let tailStart = Math.max(
+      firstUserIndex > 0 ? firstUserIndex + 1 : 1,
+      stage1Messages.length - keepTail
+    )
+
+    // Atomicity check: Never start the tail on an orphaned tool result
+    if (tailStart < stage1Messages.length && stage1Messages[tailStart].role === 'user' && stage1Messages[tailStart].content?.startsWith('Tool `')) {
+      // Step back one to include the paired assistant tool call if available
+      if (tailStart > 1 && stage1Messages[tailStart - 1].role === 'assistant') {
+        tailStart--
+      }
     }
-    return [welcome, ...trimmed]
+
+    const tailMessages = stage1Messages.slice(tailStart)
+    const middlePruned = stage1Messages.slice(
+      firstUserIndex > 0 ? firstUserIndex + 1 : 1,
+      tailStart
+    )
+
+    const compactedNotice: AiChatMessage = {
+      id: `compact-summary-${Date.now()}`,
+      role: 'user',
+      content: `[System Compaction Notice: ${middlePruned.length} intermediate conversational turns compacted to optimize context window while preserving user goal and active workspace state.]`,
+      timestamp: Date.now(),
+    }
+
+    const result: AiChatMessage[] = [welcome]
+    if (firstUserTask && firstUserTask !== welcome) {
+      result.push(firstUserTask)
+    }
+    if (middlePruned.length > 0) {
+      result.push(compactedNotice)
+    }
+    result.push(...tailMessages)
+
+    return result
   }
 
   /**
-   * Stream a prompt request with full support for Electron IPC or browser fetch fallback
+   * Stream a prompt request via Vercel AI SDK (Electron IPC when available for zero CORS,
+   * or direct isomorphic Vercel AI SDK fallback in browser/Vite preview mode).
    */
   static streamChat(
     model: AiModelOption,
     messages: AiChatMessage[],
-    onChunk: (chunk: AiStreamChunk) => void
+    onChunk: (chunk: AiStreamChunk) => void,
+    modeOrOptions?: AiChatMode | {
+      mode?: AiChatMode
+      disableTools?: boolean
+      temperature?: number
+      maxOutputTokens?: number
+    }
   ): () => void {
     const requestId = `ai-req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const settings = this.getSettings()
     const providerSettings = settings[model.provider] || { apiKey: '', endpoint: '' }
+    const streamOpts = typeof modeOrOptions === 'string' ? { mode: modeOrOptions } : (modeOrOptions || {})
+    const effectiveMode = streamOpts.mode ?? this.getActiveMode()
+    const disableTools = Boolean(streamOpts.disableTools)
 
-    // Format chat messages including attachments and tool call results
-    const formattedMessages = messages.map((m) => {
+    // Format chat messages including attachments and tool call results (deduplicating
+    // tool results that are already carried by an immediately following internal tool-result message)
+    const formattedMessages = messages.map((m, idx) => {
       let content = m.content
 
       if (m.attachment) {
@@ -608,10 +857,20 @@ Your objective is to autonomously execute implementation plans, write high-quali
       }
 
       if (m.toolResults && m.toolResults.length > 0) {
-        const resultsText = m.toolResults
-          .map((tr) => `\n<tool_result name="${tr.toolName}" success="${tr.success}">\n${tr.error ? `<error>${tr.error}</error>` : ''}\n<output>\n${tr.output}\n</output>\n</tool_result>`)
-          .join('\n')
-        content = `${content}\n${resultsText}`
+        const nextMsg = messages[idx + 1]
+        const nextIsToolResult = Boolean(
+          nextMsg && (nextMsg.isInternalToolResult || nextMsg.id?.startsWith('tool-result-'))
+        )
+        const nonDuplicatedResults = nextIsToolResult
+          ? m.toolResults.filter((tr) => !nextMsg.content.includes(`Tool \`${tr.toolName}\` result:`))
+          : m.toolResults
+
+        if (nonDuplicatedResults.length > 0) {
+          const resultsText = nonDuplicatedResults
+            .map((tr) => `\n<tool_result name="${tr.toolName}" success="${tr.success}">\n${tr.error ? `<error>${tr.error}</error>` : ''}\n<output>\n${tr.output}\n</output>\n</tool_result>`)
+            .join('\n')
+          content = `${content}\n${resultsText}`
+        }
       }
 
       return {
@@ -620,253 +879,51 @@ Your objective is to autonomously execute implementation plans, write high-quali
       }
     })
 
-    // If Electron IPC is available, use it (zero CORS restrictions)
-    if (window.electronAPI?.ai?.startStream) {
-      return window.electronAPI.ai.startStream(
-        requestId,
-        {
-          provider: model.provider,
-          model: model.id,
-          messages: formattedMessages,
-          apiKey: providerSettings.apiKey,
-          endpoint: providerSettings.endpoint,
-        },
-        onChunk
-      )
-    }
-
-    // Fallback: Browser direct fetch (for Vite dev or preview)
-    const controller = new AbortController()
-
-    const runBrowserFetch = async () => {
+    // Collect enabled dynamic MCP tools via McpService's canonical Vercel AI SDK bridge
+    let extraTools: Array<{ name: string; description?: string; parameters?: Record<string, any>; requiredParams?: string[] }> | undefined
+    if (!disableTools) {
       try {
-        const cleanKey = (providerSettings.apiKey || '').trim()
-
-        // ── Gemini native REST API ────────────────────────────────────────────
-        if (model.provider === 'gemini') {
-          const geminiModel = model.id // e.g. 'gemini-3.8-flash'
-          const baseEndpoint = (providerSettings.endpoint || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '')
-          const url = `${baseEndpoint}/v1beta/models/${geminiModel}:streamGenerateContent?key=${cleanKey}&alt=sse`
-
-          // Convert messages to Gemini format (system instruction + contents)
-          const systemMsg = formattedMessages.find((m) => m.role === 'system')
-          const conversationMsgs = formattedMessages.filter((m) => m.role !== 'system')
-          const contents = conversationMsgs.map((m) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content || '' }],
-          }))
-
-          const body: Record<string, any> = { contents }
-          if (systemMsg?.content) {
-            body.systemInstruction = { parts: [{ text: systemMsg.content }] }
-          }
-          body.generationConfig = { temperature: 0.7 }
-
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          })
-
-          if (!res.ok) {
-            const errText = await res.text()
-            throw new Error(`Gemini API error (${res.status}): ${errText}`)
-          }
-
-          if (!res.body) throw new Error('Response body empty')
-          const reader = res.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-            for (const line of lines) {
-              const trimmed = line.trim()
-              if (!trimmed || trimmed.startsWith(':')) continue
-              if (trimmed.startsWith('data: ')) {
-                try {
-                  const json = JSON.parse(trimmed.slice(6))
-                  const text = json.candidates?.[0]?.content?.parts?.[0]?.text
-                  if (text) onChunk({ text })
-                } catch { /* partial */ }
-              }
-            }
-          }
-          onChunk({ done: true })
-          return
+        const mcpExtra = McpService.toAiSdkExtraTools()
+        if (mcpExtra.length > 0) {
+          extraTools = mcpExtra
         }
-
-        // ── Claude / Anthropic API ─────────────────────────────────────────────
-        if (model.provider === 'claude') {
-          const claudeBase = (providerSettings.endpoint || 'https://api.anthropic.com').replace(/\/+$/, '')
-          const url = `${claudeBase}/v1/messages`
-          const systemMsg = formattedMessages.find((m) => m.role === 'system')
-          const conversationMsgs = formattedMessages.filter((m) => m.role !== 'system')
-
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': cleanKey,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: model.id,
-              max_tokens: 16384,
-              system: systemMsg?.content || undefined,
-              messages: conversationMsgs,
-              stream: true,
-            }),
-            signal: controller.signal,
-          })
-
-          if (!res.ok) {
-            const errText = await res.text()
-            throw new Error(`Claude API error (${res.status}): ${errText}`)
-          }
-
-          if (!res.body) throw new Error('Response body empty')
-          const reader = res.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-            for (const line of lines) {
-              const trimmed = line.trim()
-              if (!trimmed || trimmed.startsWith(':')) continue
-              if (trimmed === 'data: [DONE]') { onChunk({ done: true }); return }
-              if (trimmed.startsWith('data: ')) {
-                try {
-                  const json = JSON.parse(trimmed.slice(6))
-                  // Claude stream events: content_block_delta with delta.text
-                  if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-                    onChunk({ text: json.delta.text })
-                  } else if (json.type === 'message_stop') {
-                    onChunk({ done: true })
-                    return
-                  }
-                } catch { /* partial */ }
-              }
-            }
-          }
-          onChunk({ done: true })
-          return
-        }
-
-        //  OpenAI-compatible (OpenAI, DeepSeek, Ollama, OpenRouter) 
-        const isOpenRouter = cleanKey.startsWith('sk-or-v1-')
-        let baseUrl = providerSettings.endpoint || (isOpenRouter ? 'https://openrouter.ai/api/v1' : (model.provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1'))
-
-        // Automatically route to OpenRouter if an OpenRouter key is used but the endpoint is still the DeepSeek default
-        if (isOpenRouter && baseUrl === 'https://api.deepseek.com') {
-          baseUrl = 'https://openrouter.ai/api/v1'
-        }
-
-        let cleanBase = baseUrl.trim().replace(/\/+$/, '')
-        let url = cleanBase
-        if (!url.endsWith('/chat/completions')) {
-          url = `${url}/chat/completions`
-        }
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        }
-        if (cleanKey) {
-          headers['Authorization'] = cleanKey.startsWith('Bearer ') ? cleanKey : `Bearer ${cleanKey}`
-          if (isOpenRouter || url.includes('openrouter.ai')) {
-            headers['HTTP-Referer'] = 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit'
-            headers['X-Title'] = 'IndoctrinatedEdit'
-          }
-        }
-
-        let targetModel = model.id
-        if (cleanBase.includes('openrouter.ai')) {
-          if (model.provider === 'deepseek' && !targetModel.includes('/')) {
-            // deepseek-reasoner maps to the R1 slug on OpenRouter
-            if (targetModel === 'deepseek-reasoner') targetModel = 'deepseek/deepseek-r1'
-            else targetModel = `deepseek/${targetModel}`
-          }
-        }
-        // Direct api.deepseek.com: pass model ID as-is (deepseek-chat, deepseek-reasoner)
-
-        const bodyPayload: Record<string, any> = {
-          model: targetModel,
-          messages: formattedMessages,
-          stream: true,
-          max_tokens: 8192,
-        }
-
-        if (url.includes('openrouter.ai')) {
-          bodyPayload.include_reasoning = true
-        }
-
-        const res = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(bodyPayload),
-          signal: controller.signal,
-        })
-
-        if (!res.ok) {
-          const errText = await res.text()
-          throw new Error(`API error (${res.status}): ${errText}`)
-        }
-
-        if (!res.body) throw new Error('Response body empty')
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (!trimmed || trimmed.startsWith(':')) continue
-            if (trimmed === 'data: [DONE]') {
-              onChunk({ done: true })
-              return
-            }
-            if (trimmed.startsWith('data: ')) {
-              try {
-                const json = JSON.parse(trimmed.slice(6))
-                const delta = json.choices?.[0]?.delta
-                if (delta?.content) onChunk({ text: delta.content })
-                if (delta?.reasoning_content) onChunk({ reasoning: delta.reasoning_content })
-              } catch {
-                // partial line
-              }
-            }
-          }
-        }
-        onChunk({ done: true })
-      } catch (err: unknown) {
-        if (!controller.signal.aborted) {
-          const message = err instanceof Error ? err.message : String(err)
-          onChunk({ error: message, done: true })
-        }
+      } catch {
+        // Fallback if McpService not ready
       }
     }
 
-    runBrowserFetch()
+    const requestOptions = {
+      provider: model.provider,
+      model: model.id,
+      messages: formattedMessages,
+      apiKey: providerSettings.apiKey,
+      endpoint: providerSettings.endpoint,
+      mode: effectiveMode,
+      disableTools,
+      temperature: streamOpts.temperature,
+      maxOutputTokens: streamOpts.maxOutputTokens,
+      extraTools,
+    }
+
+    // If Electron IPC is available, route through main process (zero CORS restrictions)
+    if (typeof window !== 'undefined' && window.electronAPI?.ai?.startStream) {
+      return window.electronAPI.ai.startStream(requestId, requestOptions, onChunk)
+    }
+
+    // Browser / Vite preview fallback: use the exact same Vercel AI SDK v7 engine
+    // instead of hand-rolled fetch/SSE parsers (full native tools, reasoning extraction,
+    // prompt caching, activeTools enforcement, tool call repair, and usage telemetry).
+    void streamAiResponse(
+      requestId,
+      {
+        ...requestOptions,
+        isBrowserFallback: true,
+      },
+      onChunk
+    )
 
     return () => {
-      controller.abort()
+      cancelAiStream(requestId)
     }
   }
 }

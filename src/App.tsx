@@ -1002,6 +1002,70 @@ export const App: React.FC = () => {
     [fileContents, tabs, getActiveEditor]
   )
 
+  // Direct safe file write applied from AI Assistant
+  const handleApplyFileEditFromAi = useCallback(
+    async (filePath: string, newContent: string): Promise<boolean> => {
+      let fullPath = filePath
+      const isAbsolute = /^[a-zA-Z]:[/\\]/.test(filePath) || filePath.startsWith('/') || filePath.startsWith('\\\\')
+      if (workspacePath && !isAbsolute) {
+        fullPath = `${workspacePath.replace(/[/\\]+$/, '')}/${filePath.replace(/^[/\\]+/, '')}`
+      }
+
+      let saved = false
+      if (typeof window !== 'undefined' && window.electronAPI?.saveFile) {
+        try {
+          saved = await window.electronAPI.saveFile(fullPath, newContent)
+        } catch (err) {
+          console.error('Failed to save file from AI:', err)
+          return false
+        }
+      } else {
+        saved = true
+      }
+
+      if (saved) {
+        const fileName = fullPath.split(/[/\\]/).pop() || fullPath
+        setFileContents((prev) => ({
+          ...prev,
+          [fullPath]: newContent,
+          [filePath]: newContent,
+          [fileName]: newContent,
+        }))
+
+        // Synchronize tab isDirty state if currently open
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === fullPath || t.id === filePath || t.id === fileName
+              ? { ...t, isDirty: false }
+              : t
+          )
+        )
+
+        // Refresh workspace file list if a new file was created
+        if (workspacePath && window.electronAPI?.readFolder) {
+          window.electronAPI.readFolder(workspacePath).then((res) => {
+            if (res?.files) {
+              setWorkspaceFiles(res.files)
+            }
+          })
+        }
+        return true
+      }
+      return false
+    },
+    [workspacePath]
+  )
+
+  const openFilesForAi = useMemo(
+    () =>
+      tabs.map((t) => ({
+        path: t.id,
+        name: t.name,
+        content: fileContents[t.id] ?? fileContents[t.name] ?? '',
+      })),
+    [tabs, fileContents]
+  )
+
   // Synchronize workspace file contents with Global Search & Batch Replace service
   useEffect(() => {
     globalSearchService.registerWorkspace(
@@ -1513,9 +1577,9 @@ export const App: React.FC = () => {
       // Git & Toolchain
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
 
-      // Google Antigravity Studio & Personal Account
-      { id: 'antigravity.toggle', title: 'Google Antigravity: Toggle Studio & Personal Account', category: 'AI', shortcut: 'Ctrl+Alt+G', description: 'Open Google Antigravity Studio, manage personal account login, Python SDK sidecar & quota metrics', handler: handleToggleAntigravity },
-      { id: 'antigravity.login', title: 'Google Antigravity: Sign in with Google Account', category: 'AI', description: 'Authenticate your personal Google account with Antigravity SDK', handler: () => { handleToggleAntigravity(); window.electronAPI?.antigravity?.login(); } },
+      // Google Antigravity Studio (Official ACP Client)
+      { id: 'antigravity.toggle', title: 'Google Antigravity: Toggle ACP Studio', category: 'AI', shortcut: 'Ctrl+Alt+G', description: 'Open Google Antigravity Studio connected to the official agy acp CLI (Pro/Ultra/Business subscriptions)', handler: handleToggleAntigravity },
+      { id: 'antigravity.login', title: 'Google Antigravity: Connect via Official agy CLI', category: 'AI', description: 'Connect IndoctrinatedEdit to your authenticated agy acp agent', handler: () => { handleToggleAntigravity(); window.electronAPI?.antigravity?.connect({ cwd: workspacePath || undefined }); } },
       
       // Port & Process Sentinel
       { id: 'ports.toggle', title: 'Port Sentinel: Toggle Port & Process Sentinel', category: 'Tools', shortcut: 'Ctrl+Alt+1', description: 'Inspect active listening ports, detect conflicts, probe latency, and kill processes', handler: handleTogglePorts },
@@ -1928,6 +1992,10 @@ export const App: React.FC = () => {
                 activeFileName={activeTab?.name || 'untitled.ts'}
                 activeFileContent={currentContent}
                 currentSelection={currentSelection}
+                workspaceRoot={workspacePath}
+                openFiles={openFilesForAi}
+                onOpenFile={(path, line, col) => handleOpenFileAndNavigate(path, line || 1, col || 1)}
+                onApplyFileEdit={handleApplyFileEditFromAi}
                 onInsertAtCursor={handleInsertAtCursor}
                 onReplaceSelection={handleReplaceSelection}
                 onCreateNotebook={handleCreateNotebook}
@@ -2024,7 +2092,7 @@ export const App: React.FC = () => {
             setIsLicenseOpen(false)
           }
         }}
-        version="5.1.1"
+        version="5.3.0"
         isForceLockout={isLicenseLockout}
       />
 

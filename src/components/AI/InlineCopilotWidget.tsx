@@ -3,14 +3,16 @@ import {
   Sparkles,
   X,
   RotateCcw,
-  Zap,
+  Square,
   Code2,
   Check,
   CornerDownLeft,
   FileCode2,
+  Cpu,
 } from 'lucide-react'
-import { AiService, PRESET_MODELS } from '../../services/aiService'
-import { AiStreamChunk } from '@sdk/types'
+import { AiService } from '../../services/aiService'
+import { AiTokenizer } from '../../services/aiTokenizer'
+import { AiStreamChunk, AiTokenUsage } from '@sdk/types'
 
 interface InlineCopilotWidgetProps {
   isOpen: boolean
@@ -19,6 +21,14 @@ interface InlineCopilotWidgetProps {
   onClose: () => void
   onAccept: (transformedCode: string) => void
 }
+
+const INLINE_PRESETS = [
+  { label: 'Refactor Cleanly', prompt: 'Refactor and modernize code with clean types' },
+  { label: 'Add JSDoc / Comments', prompt: 'Add detailed documentation and docstrings' },
+  { label: 'Convert to Async/Await', prompt: 'Convert promises and callbacks to async/await' },
+  { label: 'Write Unit Tests', prompt: 'Generate comprehensive unit tests' },
+  { label: 'Optimize Performance', prompt: 'Optimize algorithm and minimize allocations' },
+]
 
 export const InlineCopilotWidget: React.FC<InlineCopilotWidgetProps> = ({
   isOpen,
@@ -31,8 +41,25 @@ export const InlineCopilotWidget: React.FC<InlineCopilotWidgetProps> = ({
   const [isGenerating, setIsGenerating] = useState(false)
   const [proposedCode, setProposedCode] = useState<string | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [isOfflineFallback, setIsOfflineFallback] = useState(false)
+  const [usage, setUsage] = useState<AiTokenUsage | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
+
+  const activeModel = AiService.resolveActiveModelOption()
+
+  const cancelActiveStream = () => {
+    if (abortRef.current) {
+      abortRef.current()
+      abortRef.current = null
+    }
+    setIsGenerating(false)
+  }
+
+  const handleClose = () => {
+    cancelActiveStream()
+    onClose()
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -40,79 +67,31 @@ export const InlineCopilotWidget: React.FC<InlineCopilotWidgetProps> = ({
       setProposedCode(null)
       setIsGenerating(false)
       setStreamError(null)
-      setTimeout(() => {
+      setIsOfflineFallback(false)
+      setUsage(null)
+      const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 60)
+      return () => clearTimeout(timer)
     } else {
-      if (abortRef.current) {
-        abortRef.current()
-        abortRef.current = null
-      }
+      cancelActiveStream()
     }
   }, [isOpen])
 
-  if (!isOpen) return null
-
-  const handleGenerate = async (customPrompt?: string) => {
-    const activePrompt = customPrompt || prompt
-    if (!activePrompt.trim() || isGenerating) return
-
-    setIsGenerating(true)
-    setStreamError(null)
-
-    const activeModelId = AiService.getActiveModelIdForCurrentMode() || 'gemini-3.7-flash'
-    const modelOption = PRESET_MODELS.find((m) => m.id === activeModelId) || PRESET_MODELS[0]
-
-    // Construct a focused system instructions + prompt
-    const systemPrompt = `You are IndoctrinatedEdit Inline Copilot.
-You transform or generate code precisely based on user instructions.
-Language: ${language}
-RULES:
-1. Return ONLY the transformed code snippet.
-2. DO NOT wrap with markdown conversational banter.
-3. Keep indentation and formatting clean and idiomatic for ${language}.`
-
-    const userMessageContent = selectedText
-      ? `${systemPrompt}\n\nOriginal Code:\n\`\`\`${language}\n${selectedText}\n\`\`\`\n\nTask: ${activePrompt}`
-      : `${systemPrompt}\n\nGenerate code for: ${activePrompt}`
-
-    let accumulatedText = ''
-
-    try {
-      const abortFn = AiService.streamChat(
-        modelOption,
-        [{ id: 'inline-msg', role: 'user', content: userMessageContent, timestamp: Date.now() }],
-        (chunk: AiStreamChunk) => {
-          if (chunk.error) {
-            setStreamError(chunk.error)
-          }
-          if (chunk.text) {
-            accumulatedText += chunk.text
-            const cleaned = accumulatedText
-              .replace(/^```[a-zA-Z0-9_-]*\n/, '')
-              .replace(/\n```$/, '')
-            setProposedCode(cleaned)
-          }
-          if (chunk.done) {
-            setIsGenerating(false)
-            if (!accumulatedText.trim()) {
-              applyLocalFallbackTransform(activePrompt)
-            }
-          }
-        }
-      )
-      abortRef.current = abortFn
-    } catch {
-      applyLocalFallbackTransform(activePrompt)
+  useEffect(() => {
+    return () => {
+      abortRef.current?.()
     }
-  }
+  }, [])
+
+  if (!isOpen) return null
 
   const applyLocalFallbackTransform = (activePrompt: string) => {
     let result = selectedText || `// Generated code for: ${activePrompt}`
     const lowerPrompt = activePrompt.toLowerCase()
 
     if (lowerPrompt.includes('doc') || lowerPrompt.includes('comment')) {
-      result = `/**\n * ✨ ${activePrompt}\n */\n` + (selectedText || '// Implementation details')
+      result = `/**\n * ${activePrompt}\n */\n` + (selectedText || '// Implementation details')
     } else if (lowerPrompt.includes('async') || lowerPrompt.includes('await')) {
       result = selectedText.replace(/function\s+([A-Za-z0-9_]+)/g, 'async function $1')
       if (!result.includes('async')) {
@@ -121,23 +100,103 @@ RULES:
     } else if (lowerPrompt.includes('test')) {
       result = `describe('${activePrompt}', () => {\n  it('should execute successfully', () => {\n    ${selectedText || 'expect(true).toBe(true)'}\n  });\n});`
     } else if (lowerPrompt.includes('optimize') || lowerPrompt.includes('clean')) {
-      result = `// ✨ Optimized & Cleaned (${language})\n` + selectedText.split('\n').map((l) => l.trimEnd()).join('\n')
+      result = selectedText.split('\n').map((l) => l.trimEnd()).join('\n') || `// Optimized (${language})`
     } else {
-      result = `// ✨ AI Transformation: ${activePrompt}\n` + (selectedText || `export const result = '${activePrompt}'`)
+      result = `// Offline local preview (${activePrompt})\n` + (selectedText || `export const result = '${activePrompt}'`)
     }
 
     setProposedCode(result)
+    setIsOfflineFallback(true)
     setIsGenerating(false)
+  }
+
+  const handleGenerate = (customPrompt?: string) => {
+    const activePrompt = customPrompt || prompt
+    if (!activePrompt.trim() || isGenerating) return
+
+    cancelActiveStream()
+    setIsGenerating(true)
+    setStreamError(null)
+    setIsOfflineFallback(false)
+    setUsage(null)
+
+    const modelOption = AiService.resolveActiveModelOption()
+    const settings = AiService.getSettings()
+    const providerCfg = settings[modelOption.provider]
+    const needsKey = modelOption.provider !== 'ollama' && modelOption.provider !== 'custom'
+
+    // If no cloud API key is configured, show clear offline fallback immediately instead of failing 401
+    if (needsKey && !providerCfg?.apiKey?.trim()) {
+      setStreamError(`No API key configured for ${modelOption.provider}. Showing offline transform — configure a BYOK key in AI Chat Settings.`)
+      applyLocalFallbackTransform(activePrompt)
+      return
+    }
+
+    const systemPrompt = `You are IndoctrinatedEdit Inline Copilot.
+Transform or generate code precisely based on user instructions.
+Language: ${language || 'text'}
+RULES:
+1. Return ONLY the raw code snippet — no prose, no explanations, no markdown code fences.
+2. Preserve indentation, types, and idiomatic style for ${language || 'text'}.`
+
+    const userMessageContent = selectedText
+      ? `Original Code:\n\`\`\`${language || 'text'}\n${selectedText}\n\`\`\`\n\nTask: ${activePrompt}`
+      : `Generate code for: ${activePrompt}`
+
+    let accumulatedText = ''
+    let hadError = false
+
+    try {
+      const abortFn = AiService.streamChat(
+        modelOption,
+        [
+          { id: 'inline-sys', role: 'system', content: systemPrompt, timestamp: Date.now() },
+          { id: 'inline-msg', role: 'user', content: userMessageContent, timestamp: Date.now() },
+        ],
+        (chunk: AiStreamChunk) => {
+          if (chunk.usage) {
+            setUsage(chunk.usage)
+          }
+          if (chunk.error) {
+            hadError = true
+            setStreamError(chunk.error)
+          }
+          if (chunk.text) {
+            accumulatedText += chunk.text
+            const cleaned = accumulatedText
+              .replace(/^```[a-zA-Z0-9_-]*\r?\n/, '')
+              .replace(/\r?\n```\s*$/, '')
+            setProposedCode(cleaned)
+          }
+          if (chunk.done) {
+            abortRef.current = null
+            setIsGenerating(false)
+            if (!accumulatedText.trim() && !hadError) {
+              setStreamError('Model returned an empty response. Try refining your prompt or switching models.')
+            }
+          }
+        },
+        {
+          mode: 'act',
+          disableTools: true,
+          temperature: 0.15,
+          maxOutputTokens: 4096,
+        }
+      )
+      abortRef.current = abortFn
+    } catch (err) {
+      setStreamError(err instanceof Error ? err.message : String(err))
+      setIsGenerating(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      if (abortRef.current) abortRef.current()
-      onClose()
+      handleClose()
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       if (proposedCode) {
         onAccept(proposedCode)
-        onClose()
+        handleClose()
       } else {
         handleGenerate()
       }
@@ -146,21 +205,12 @@ RULES:
     }
   }
 
-  const presets = [
-    { label: 'Refactor Cleanly', prompt: 'Refactor and modernize code with clean types' },
-    { label: 'Add JSDoc / Comments', prompt: 'Add detailed documentation and docstrings' },
-    { label: 'Convert to Async/Await', prompt: 'Convert promises and callbacks to async/await' },
-    { label: 'Write Unit Tests', prompt: 'Generate comprehensive unit tests' },
-    { label: 'Optimize Performance', prompt: 'Optimize algorithm and minimize allocations' },
-  ]
-
   return (
     <div
       className="inline-copilot-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          if (abortRef.current) abortRef.current()
-          onClose()
+          handleClose()
         }
       }}
     >
@@ -172,6 +222,9 @@ RULES:
               <Sparkles size={14} className="copilot-sparkle-icon" />
             </div>
             <span className="copilot-title">Inline AI Copilot</span>
+            <span className="copilot-model-tag" title={`Active BYOK model (${activeModel.provider})`}>
+              {activeModel.name}
+            </span>
             <span className="copilot-lang-tag">{language || 'text'}</span>
             {selectedText && (
               <span className="copilot-selection-tag">
@@ -184,10 +237,7 @@ RULES:
             <span className="copilot-shortcut-hint">Esc to dismiss</span>
             <button
               className="copilot-close-btn"
-              onClick={() => {
-                if (abortRef.current) abortRef.current()
-                onClose()
-              }}
+              onClick={handleClose}
               title="Close (Esc)"
             >
               <X size={14} />
@@ -211,31 +261,33 @@ RULES:
             }
             className="copilot-input-field"
           />
-          <button
-            onClick={() => handleGenerate()}
-            disabled={!prompt.trim() || isGenerating}
-            className="copilot-generate-btn"
-            title="Generate (Enter)"
-          >
-            {isGenerating ? (
-              <>
-                <Zap size={13} className="animate-spin text-cyan" />
-                <span>Thinking...</span>
-              </>
-            ) : (
-              <>
-                <span>Generate</span>
-                <CornerDownLeft size={12} />
-              </>
-            )}
-          </button>
+          {isGenerating ? (
+            <button
+              onClick={cancelActiveStream}
+              className="copilot-stop-btn"
+              title="Stop Generation (Esc)"
+            >
+              <Square size={11} />
+              <span>Stop</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => handleGenerate()}
+              disabled={!prompt.trim()}
+              className="copilot-generate-btn"
+              title="Generate (Enter)"
+            >
+              <span>Generate</span>
+              <CornerDownLeft size={12} />
+            </button>
+          )}
         </div>
 
         {/* Quick Presets */}
         {!proposedCode && !isGenerating && (
           <div className="copilot-presets-row">
             <span className="presets-caption">Quick Presets:</span>
-            {presets.map((preset, idx) => (
+            {INLINE_PRESETS.map((preset, idx) => (
               <button
                 key={idx}
                 onClick={() => {
@@ -263,12 +315,26 @@ RULES:
             <div className="preview-header">
               <div className="preview-header-left">
                 <Code2 size={13} className="text-sapphire" />
-                <span>Proposed Code Transformation</span>
+                <span>
+                  {isOfflineFallback ? 'Offline Fallback Preview' : 'Proposed Code Transformation'}
+                </span>
                 <span className="preview-line-count">
                   {proposedCode.split('\n').length} lines
                 </span>
               </div>
               <div className="preview-header-right">
+                {usage && (
+                  <span className="copilot-usage-pill">
+                    <Cpu size={10} />
+                    <span>{usage.promptTokens + usage.completionTokens} tok</span>
+                    {usage.cachedInputTokens && usage.cachedInputTokens > 0 && (
+                      <span className="copilot-cached-pill">⚡ {usage.cachedInputTokens}</span>
+                    )}
+                    <span className="copilot-cost-pill">
+                      ${AiTokenizer.estimateCost(activeModel.id, usage.promptTokens, usage.completionTokens).toFixed(4)}
+                    </span>
+                  </span>
+                )}
                 <span className="accept-hint">Ctrl+Enter to Accept</span>
               </div>
             </div>
@@ -287,10 +353,7 @@ RULES:
                 <span>Regenerate</span>
               </button>
               <button
-                onClick={() => {
-                  if (abortRef.current) abortRef.current()
-                  onClose()
-                }}
+                onClick={handleClose}
                 className="copilot-secondary-btn"
               >
                 <X size={12} />
@@ -299,7 +362,7 @@ RULES:
               <button
                 onClick={() => {
                   onAccept(proposedCode)
-                  onClose()
+                  handleClose()
                 }}
                 className="copilot-accept-btn"
               >
@@ -382,6 +445,20 @@ RULES:
           font-weight: 600;
           color: #FFFFFF;
           letter-spacing: -0.01em;
+        }
+
+        .copilot-model-tag {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 7px;
+          border-radius: 4px;
+          background: rgba(191, 90, 242, 0.14);
+          border: 1px solid rgba(191, 90, 242, 0.3);
+          color: #D8B4FE;
+          max-width: 170px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .copilot-lang-tag {
@@ -489,6 +566,55 @@ RULES:
         .copilot-generate-btn:disabled {
           opacity: 0.4;
           cursor: not-allowed;
+        }
+
+        .copilot-stop-btn {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 6px 12px;
+          border-radius: 6px;
+          background: rgba(255, 69, 58, 0.18);
+          border: 1px solid rgba(255, 69, 58, 0.45);
+          color: #FF6961;
+          font-size: 11.5px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .copilot-stop-btn:hover {
+          background: rgba(255, 69, 58, 0.28);
+          color: #FFFFFF;
+        }
+
+        .preview-header-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .copilot-usage-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+          font-size: 9.5px;
+          color: rgba(235, 235, 245, 0.65);
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+
+        .copilot-cached-pill {
+          color: #5AC8FA;
+          font-weight: 600;
+        }
+
+        .copilot-cost-pill {
+          color: #30D158;
+          font-weight: 600;
         }
 
         .copilot-presets-row {

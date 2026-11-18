@@ -292,7 +292,7 @@ class DockerService {
       currentReplicas: 1,
       updatedReplicas: 1,
       availableReplicas: 1,
-      image: 'registry.indoctrinated.internal/core-engine:v5.1.1',
+      image: 'registry.indoctrinated.internal/core-engine:v5.3.0',
       age: '2d',
       strategy: 'Recreate',
     },

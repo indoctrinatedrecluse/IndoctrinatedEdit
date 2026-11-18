@@ -147,5 +147,140 @@ describe('AI Plan Mode vs Act Mode & Tokenizer Subsystem', () => {
       expect(optimized.content).toContain('pruned for token efficiency')
       expect(optimized.tokenCount).toBeLessThan(longSnippet.length)
     })
+
+    it('accurately estimates dollar costs for Gemini, Claude, DeepSeek, and OpenRouter models', () => {
+      // DeepSeek V3: $0.14 / M in, $0.28 / M out
+      const deepseekCost = AiTokenizer.estimateCost('deepseek-chat', 1_000_000, 1_000_000)
+      expect(deepseekCost).toBeCloseTo(0.42, 2)
+
+      // Gemini 2.5 Flash: $0.15 / M in, $0.60 / M out
+      const geminiFlashCost = AiTokenizer.estimateCost('gemini-2.5-flash', 1_000_000, 1_000_000)
+      expect(geminiFlashCost).toBeCloseTo(0.75, 2)
+
+      // Claude 3.7 Sonnet: $3.00 / M in, $15.00 / M out
+      const claudeCost = AiTokenizer.estimateCost('claude-3-7-sonnet-20250219', 1_000_000, 1_000_000)
+      expect(claudeCost).toBeCloseTo(18.00, 2)
+
+      // OpenRouter Claude: matches Claude pricing
+      const openRouterCost = AiTokenizer.estimateCost('openrouter/anthropic/claude-3.7-sonnet', 1_000_000, 1_000_000)
+      expect(openRouterCost).toBeCloseTo(18.00, 2)
+
+      // Ollama / Local / Custom defaults to 0
+      const localCost = AiTokenizer.estimateCost('ollama-llama3', 1_000_000, 1_000_000)
+      expect(localCost).toBe(0)
+    })
+  })
+
+  describe('Workspace Rules Detection & Ingestion', () => {
+    it('discovers .indoctrinatedrules with highest priority', async () => {
+      const g = globalThis as any
+      const originalWindow = g.window
+      try {
+        g.window = {
+          electronAPI: {
+            readFile: async (path: string) => {
+              if (path.endsWith('.indoctrinatedrules')) {
+                return '# Indoctrinated Rules\nFollow Liquid Glass styling.'
+              }
+              if (path.endsWith('.cursorrules')) {
+                return '# Cursor Rules\nLower priority.'
+              }
+              throw new Error('File not found')
+            },
+          },
+        }
+
+        const rules = await AiService.loadWorkspaceRules('d:/Projects/MyProject')
+        expect(rules).not.toBeNull()
+        expect(rules?.fileName).toBe('.indoctrinatedrules')
+        expect(rules?.content).toContain('Follow Liquid Glass styling.')
+      } finally {
+        g.window = originalWindow
+      }
+    })
+
+    it('falls back to .cursorrules or .clinerules if .indoctrinatedrules is not found', async () => {
+      const g = globalThis as any
+      const originalWindow = g.window
+      try {
+        g.window = {
+          electronAPI: {
+            readFile: async (path: string) => {
+              if (path.endsWith('.cursorrules')) {
+                return '# Cursor Rules Content'
+              }
+              throw new Error('File not found')
+            },
+          },
+        }
+
+        const rules = await AiService.loadWorkspaceRules('d:/Projects/MyProject')
+        expect(rules).not.toBeNull()
+        expect(rules?.fileName).toBe('.cursorrules')
+        expect(rules?.content).toBe('# Cursor Rules Content')
+      } finally {
+        g.window = originalWindow
+      }
+    })
+
+    it('returns null if workspaceRoot is empty or no rule files exist', async () => {
+      expect(await AiService.loadWorkspaceRules('')).toBeNull()
+
+      const g = globalThis as any
+      const originalWindow = g.window
+      try {
+        g.window = {
+          electronAPI: {
+            readFile: async () => {
+              throw new Error('File not found')
+            },
+          },
+        }
+        const rules = await AiService.loadWorkspaceRules('d:/Projects/Empty')
+        expect(rules).toBeNull()
+      } finally {
+        g.window = originalWindow
+      }
+    })
+  })
+
+  describe('AiTokenizer Smart Tool Output Compactor (Phase 2)', () => {
+    it('leaves short outputs uncompacted when within budget', () => {
+      const shortOutput = 'Compiled successfully in 420ms\n0 errors, 0 warnings.'
+      const result = AiTokenizer.compactToolOutput(shortOutput, { maxLines: 50, maxChars: 5000 })
+      expect(result.truncated).toBe(false)
+      expect(result.content).toBe(shortOutput)
+      expect(result.omittedLines).toBe(0)
+      expect(result.omittedChars).toBe(0)
+    })
+
+    it('compacts large terminal/tool outputs preserving head and tail context', () => {
+      const lines = Array.from({ length: 200 }, (_, i) => `Log line ${i + 1}: processing module ${i}...`)
+      const longOutput = lines.join('\n')
+
+      const result = AiTokenizer.compactToolOutput(longOutput, {
+        maxLines: 50,
+        maxChars: 5000,
+        headLines: 15,
+        tailLines: 20,
+      })
+
+      expect(result.truncated).toBe(true)
+      expect(result.omittedLines).toBe(200 - 15 - 20) // 165 omitted lines
+      expect(result.omittedChars).toBeGreaterThan(0)
+      expect(result.content).toContain('Log line 1:')
+      expect(result.content).toContain('Log line 15:')
+      expect(result.content).toContain('[✂️ Output truncated: 165 lines omitted for token efficiency]')
+      expect(result.content).toContain('Log line 181:')
+      expect(result.content).toContain('Log line 200:')
+      // Does not contain middle lines
+      expect(result.content).not.toContain('Log line 100:')
+    })
+
+    it('handles empty or blank output gracefully', () => {
+      const result = AiTokenizer.compactToolOutput('')
+      expect(result.truncated).toBe(false)
+      expect(result.content).toBe('')
+    })
   })
 })

@@ -15,14 +15,69 @@ export interface TokenBreakdown {
   percentUsed: number
 }
 
+export interface ModelPricing {
+  inputPerMillion: number
+  outputPerMillion: number
+}
+
+// Model pricing in USD per 1 Million tokens
+export const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Google Gemini (Direct AI Studio API)
+  'gemini-2.5-pro': { inputPerMillion: 1.25, outputPerMillion: 5.00 },
+  'gemini-2.5-flash': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
+  'gemini-2.0-flash': { inputPerMillion: 0.10, outputPerMillion: 0.40 },
+  'gemini-2.0-flash-thinking-exp': { inputPerMillion: 0.00, outputPerMillion: 0.00 },
+  'gemini-3.8-flash': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
+  'gemini-3.7-flash': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
+  'gemini-3.6-flash': { inputPerMillion: 0.10, outputPerMillion: 0.40 },
+
+  // Anthropic Claude Direct API
+  'claude-3-7-sonnet': { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+  'claude-3-5-sonnet': { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+  'claude-sonnet-4-5': { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+  'claude-opus-4-5': { inputPerMillion: 15.00, outputPerMillion: 75.00 },
+
+  // DeepSeek Direct API
+  'deepseek-chat': { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  'deepseek/deepseek-chat': { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  'deepseek-reasoner': { inputPerMillion: 0.55, outputPerMillion: 2.19 },
+  'deepseek/deepseek-r1': { inputPerMillion: 0.55, outputPerMillion: 2.19 },
+
+  // OpenAI Direct API
+  'gpt-4o': { inputPerMillion: 2.50, outputPerMillion: 10.00 },
+  'gpt-4o-mini': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
+  'o3-mini': { inputPerMillion: 1.10, outputPerMillion: 4.40 },
+
+  // OpenRouter Gateway Models
+  'openrouter/anthropic/claude-3.7-sonnet': { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+  'openrouter/anthropic/claude-3.5-sonnet': { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+  'openrouter/deepseek/deepseek-r1': { inputPerMillion: 0.55, outputPerMillion: 2.19 },
+  'openrouter/deepseek/deepseek-chat': { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  'openrouter/openai/gpt-4o': { inputPerMillion: 2.50, outputPerMillion: 10.00 },
+  'openrouter/google/gemini-2.0-flash-001': { inputPerMillion: 0.10, outputPerMillion: 0.40 },
+  'openrouter/qwen/qwen-2.5-coder-32b-instruct': { inputPerMillion: 0.12, outputPerMillion: 0.20 },
+
+  // Local / Custom
+  'ollama': { inputPerMillion: 0.00, outputPerMillion: 0.00 },
+  'llama3.3': { inputPerMillion: 0.00, outputPerMillion: 0.00 },
+  'qwen2.5-coder': { inputPerMillion: 0.00, outputPerMillion: 0.00 },
+  'mistral:latest': { inputPerMillion: 0.00, outputPerMillion: 0.00 },
+  'custom': { inputPerMillion: 0.00, outputPerMillion: 0.00 },
+  'default': { inputPerMillion: 0.50, outputPerMillion: 1.50 },
+}
+
 // Known context window limits per model family
 const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  // Gemini Models
+  // Gemini Models (1M Context)
   'gemini-2.5-pro': 1_048_576,
   'gemini-2.5-flash': 1_048_576,
   'gemini-2.0-flash': 1_048_576,
   'gemini-2.0-flash-thinking-exp': 1_048_576,
-  // Legacy Gemini (keep for backward compat with stored settings)
+  'gemini-3.8-flash': 1_048_576,
+  'gemini-3.7-flash': 1_048_576,
+  'gemini-3.6-flash': 1_048_576,
+  'gemini-3.5-flash': 1_048_576,
+  'gemini-3.1-pro-preview': 1_048_576,
   'gemini-2.5-flash-preview': 1_048_576,
   'gemini-2.5-pro-preview': 1_048_576,
 
@@ -36,12 +91,31 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   // DeepSeek Models (64k context)
   'deepseek-chat': 64_000,
   'deepseek-reasoner': 64_000,
+  'deepseek/deepseek-chat': 64_000,
+  'deepseek/deepseek-r1': 64_000,
 
   // OpenAI Models
   'gpt-4o': 128_000,
   'gpt-4o-mini': 128_000,
   'o3-mini': 200_000,
   'chatgpt-4o-latest': 128_000,
+
+  // OpenRouter Models
+  'openrouter/anthropic/claude-3.7-sonnet': 200_000,
+  'openrouter/anthropic/claude-3.5-sonnet': 200_000,
+  'openrouter/deepseek/deepseek-r1': 64_000,
+  'openrouter/deepseek/deepseek-chat': 64_000,
+  'openrouter/openai/gpt-4o': 128_000,
+  'openrouter/google/gemini-2.0-flash-001': 1_048_576,
+  'openrouter/qwen/qwen-2.5-coder-32b-instruct': 131_072,
+
+  // Local Ollama Models
+  'llama3.3:latest': 128_000,
+  'qwen2.5-coder:32b': 131_072,
+  'qwen2.5-coder:7b': 131_072,
+  'deepseek-r1:14b': 64_000,
+  'deepseek-r1:8b': 64_000,
+  'mistral:latest': 32_768,
 
   // Default fallback
   default: 128_000,
@@ -197,6 +271,18 @@ export class AiTokenizer {
   }
 
   /**
+   * Estimates dollar cost in USD for the given token consumption and model.
+   */
+  static estimateCost(modelId: string, promptTokens: number, completionTokens: number): number {
+    const norm = (modelId || '').toLowerCase()
+    const matchKey = Object.keys(MODEL_PRICING).find((k) => norm.includes(k.toLowerCase()))
+    const pricing = matchKey ? MODEL_PRICING[matchKey] : MODEL_PRICING.default
+    const inCost = (promptTokens / 1_000_000) * pricing.inputPerMillion
+    const outCost = (completionTokens / 1_000_000) * pricing.outputPerMillion
+    return Number((inCost + outCost).toFixed(5))
+  }
+
+  /**
    * Helper alias for calculating token breakdown from an options object.
    */
   static calculateBreakdown(params: {
@@ -252,6 +338,58 @@ export class AiTokenizer {
     ].join('\n')
 
     return { content: pruned, truncated: true, tokenCount: this.countTokens(pruned) }
+  }
+
+  /**
+   * Smart head/tail token compactor for tool outputs (terminal logs, search results, directory listings).
+   * Preserves critical startup context (head) and final exits/error stack traces (tail)
+   * while eliminating massive middle noise to drastically cut token consumption and prevent context overflow.
+   */
+  static compactToolOutput(
+    output: string,
+    options: { maxLines?: number; maxChars?: number; headLines?: number; tailLines?: number } = {}
+  ): {
+    content: string
+    truncated: boolean
+    originalChars: number
+    omittedChars: number
+    omittedLines: number
+  } {
+    if (!output) {
+      return { content: '', truncated: false, originalChars: 0, omittedChars: 0, omittedLines: 0 }
+    }
+
+    const maxLines = options.maxLines ?? 70
+    const maxChars = options.maxChars ?? 10_000
+    const lines = output.split(/\r?\n/)
+    const originalChars = output.length
+
+    if (lines.length <= maxLines && originalChars <= maxChars) {
+      return { content: output, truncated: false, originalChars, omittedChars: 0, omittedLines: 0 }
+    }
+
+    const headCount = options.headLines ?? Math.min(25, Math.max(10, Math.floor(lines.length * 0.35)))
+    const tailCount = options.tailLines ?? Math.min(35, Math.max(15, Math.floor(lines.length * 0.45)))
+
+    const headLines = lines.slice(0, headCount)
+    const tailLines = lines.slice(-tailCount)
+    const omittedLines = Math.max(0, lines.length - headCount - tailCount)
+
+    const truncatedBody = [
+      ...headLines,
+      `\n... [✂️ Output truncated: ${omittedLines} lines omitted for token efficiency] ...\n`,
+      ...tailLines,
+    ].join('\n')
+
+    const omittedChars = Math.max(0, originalChars - truncatedBody.length)
+
+    return {
+      content: truncatedBody,
+      truncated: true,
+      originalChars,
+      omittedChars,
+      omittedLines,
+    }
   }
 }
 

@@ -5,6 +5,56 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-11-18
+
+### 🤖 Major Feature Release — Vercel AI SDK v7 Autonomous Engine, Cline/Kilo UX, MCP & Copilot Alignment, and Official Google Antigravity ACP v1 Studio
+
+IndoctrinatedEdit 5.3.0 completely overhauls the AI ecosystem — uniting AI Chat, Inline Copilot, and MCP Studio on **Vercel AI SDK v7 (`ai@7.0.173`)** with full BYOK freedom, and rebuilding **Google Antigravity Studio** from scratch as a native **Agent Client Protocol (ACP v1)** client connecting directly to the official `agy acp` CLI for personal Pro/Ultra and Business Google subscriptions:
+
+#### 🔑 Phase 1: Multi-Provider BYOK & Live Token Economics
+- **OpenRouter Gateway**: First-class support for `openrouter` with attribution headers, unlocking 200+ models (Claude 3.7 Sonnet, DeepSeek R1, Llama 3.3, Qwen 2.5 Coder) with a single key.
+- **Google Gemini Direct (AI Studio)**: Direct connectivity via `@ai-sdk/google` targeting Google AI Studio endpoints (`generativelanguage.googleapis.com`) with `AIza...` keys for Gemini 2.5 Pro/Flash and 2.0 Flash Thinking.
+- **DeepSeek API Direct**: Direct official connectivity to `https://api.deepseek.com` for DeepSeek-V3 and DeepSeek-R1.
+- **Custom OpenAI-Compatible Endpoints**: Connect to LM Studio, vLLM, Groq, Together, Cerebras, or self-hosted models with custom base URLs and model IDs.
+- **Live Token & Cost Counter**: Real-time context window meter bar with running session spend in USD (`AiTokenizer.estimateCost`) and per-turn input/output token footers.
+- **Workspace Rules Ingestion**: Automated discovery and priority injection of `.indoctrinatedrules`, `.cursorrules`, `.clinerules`, and `AGENTS.md`.
+
+#### 🧭 Phase 2: Interactive Steering, Token Compaction & Split Diff Review
+- **Reject with Steering Guidance**: Interactive steering drawer on tool action cards allowing developers to reject actions with explicit instructions that automatically steer the agent's next turn.
+- **Head/Tail Tool Output Compactor**: Smart output pruning for verbose terminal commands, code searches, and diagnostic dumps, preserving startup headers and fatal stack traces while saving 80–90% of tokens.
+- **Dual-Mode Diff Review**: In-card mode switcher between **Unified** and side-by-side **Split** diffs, plus a full-screen Liquid Glass Diff Modal with 1-click **Open in Editor** and **Accept & Apply Diff**.
+
+#### 🛡️ Phase 3: Deep Extensibility & Safety Snapshots
+- **Dynamic MCP Tool Bridging**: Native function calling dispatch for enabled Model Context Protocol (MCP) servers (filesystem, git, web fetcher, documentation search) directly in the Vercel AI SDK tool registry.
+- **Shadow Checkpoint Snapshots (`AiCheckpointService`)**: Automatically captures pre-edit file states before agent modifications and provides 1-click **Rollback** on diff cards and in the session snapshots history popover.
+
+#### 🔒 Phase 4: Local Ollama Parity, Hardened Guardrails & Semantic Compaction
+- **Ollama & Local Model First-Class Parity**: Fixed browser fallback endpoint routing to ensure `/v1/chat/completions` compatibility, added popular local presets (`llama3.3:latest`, `qwen2.5-coder:32b`, `qwen2.5-coder:7b`, `deepseek-r1:14b`, `mistral:latest`), and verified $0.00 zero-cost economics for offline models.
+- **Hardened Security Guardrails (`AiGuardrailService`)**: Added automated protection for sensitive credentials (`.env*`, `.git/*` internals, `.ssh/*`, `.npmrc`, `.aws/*`, cryptographic `.pem`/`.key` files) and expanded the destructive command blocklist to prohibit `chmod -R 777`, `git push --force`, `git clean -fdx`, `rd /s /q`, and Windows registry alterations.
+- **Autonomous Tool Loop Guardrail**: Implemented sliding-window action signature tracking in `AiGuardrailService` that detects repetitive identical tool calls (>= 3 consecutive invocations) and safely pauses autonomous execution with an explicit steering alert to prevent infinite token burn.
+- **Smart Semantic Context Compaction**: Upgraded `AiService.trimConversationHistory` with a multi-stage compaction algorithm: in-place pruning of verbose older tool outputs followed by goal-anchored sliding window compaction that preserves the user's primary task goal, pinned preamble, and strict tool call/result atomicity to eliminate orphaned schema errors.
+
+#### ⚡ Phase 5: Cline/Kilo Tool Dropdown UX & Vercel AI SDK v7 Deep Optimizations
+- **Cline/Kilo-Style Tool Activity Dropdown**: Replaced verbose generic tool headers with narrative action summaries (e.g., `Edited AiChatPanel.tsx · Ran npm test`), compact 1-line rows for completed reads/searches/git checks with jump-to-file and peek-output toggles, and muted background noise (`list_workspace_files`, `get_editor_diagnostics`, `open_editor_file`) tucked behind a `+{N} background checks` toggle.
+- **Vercel AI SDK v7 Capabilities Audit**:
+  - **Unified Isomorphic SDK Engine (`packages/sdk/aiCore.ts`)**: Replaced ~250 lines of hand-rolled browser `fetch` + SSE parsers in `AiService` with a single shared Vercel AI SDK v7 engine used by both Electron IPC and browser/Vite preview mode.
+  - **Dynamic MCP Tools (`dynamicTool` + `jsonSchema`)**: Bridged runtime MCP tools using Vercel AI SDK's `dynamicTool` and typed JSON Schemas (`properties` + `required`) instead of loose catch-all objects.
+  - **Middleware Reasoning Extraction (`wrapLanguageModel` + `extractReasoningMiddleware`)**: Wrapped provider models so inline `<think>...</think>` streams from local Ollama (`deepseek-r1`, Qwen QwQ), vLLM, and OpenRouter flow natively into the Reasoning CoT accordion.
+  - **Schema-Enforced Plan Mode (`activeTools`)**: Enforced read-only Plan Mode at the LLM tool-schema layer via Vercel AI SDK `activeTools`, physically omitting mutating write/shell tools during planning.
+  - **Self-Healing Tool Calls (`experimental_repairToolCall` + `parsePartialJson`)**: Automatically recovers from hallucinated tool-name aliases (`readFile`, `edit_file`, `run_command`) and malformed/fenced JSON arguments without wasting an extra round-trip.
+  - **Typed SDK Error Diagnostics (`APICallError`, `RetryError`, `LoadAPIKeyError`)**: Surfaced clean, actionable BYOK messages for 401/402/403/404/429/503, missing keys, and local host connection failures.
+  - **Prompt Caching & Native Thinking (`providerOptions`)**: Enabled Anthropic ephemeral prompt caching on system prompts (saving up to 90% input tokens across multi-turn autonomous loops, surfaced via a `⚡ cached` badge in the usage footer) and native Gemini 2.5/3.x thought streaming (`includeThoughts: true`).
+  - **Smooth Streaming & Resilient Retries**: Added `smoothStream({ delayInMs: 10, chunking: 'word' })`, explicit `maxOutputTokens: 8192`, smart coding `temperature: 0.2` (automatically omitted for strict reasoning models like `o1`, `o3`, and `deepseek-r1`), and exponential backoff retries (`maxRetries: 2` for cloud APIs, `0` fail-fast for local Ollama endpoints).
+  - **Strict Multi-Provider Message Normalization (`pruneMessages`)**: Added `normalizeMessagesForProvider` combining empty-message stripping, consecutive same-role merging, and Vercel AI SDK `pruneMessages` to prevent Anthropic/Gemini 400 alternation errors.
+  - **Live Tool Preparation Telemetry (`tool-input-start`)**: Surfaced a pulsing Liquid Glass `Preparing <tool>…` pill while large edits or file writes stream their JSON arguments.
+- **Autonomous Loop Integrity & Token Deduplication**: Fixed stale React closure overwrites during multi-step autonomous tool follow-ups, hid duplicate internal tool-result user bubbles from the chat feed, deduplicated outbound tool results between assistant messages and follow-up payloads, and upgraded chat persistence to a true 40-message sliding window.
+- **Inline AI Copilot & MCP Studio Alignment**: Upgraded `InlineCopilotWidget` with `disableTools: true` (zero wasted tool schema tokens), proper system/user message roles, live model resolution, Stop/Abort control, and token/cost telemetry; added canonical `McpService.toAiSdkExtraTools()` and `McpService.toVercelAiSdkTools()` bridges, real SSE JSON-RPC 2.0 dispatch, and persistent Knowledge Graph Memory MCP.
+- **Google Antigravity Studio Overhaul (Official ACP v1 Client)**: Rewrote Antigravity Studio from scratch as a native Agent Client Protocol (ACP v1) JSON-RPC 2.0 stdio client (`electron/antigravity-acp-service.ts`), replacing the legacy Python OAuth sidecar (`sidecars/antigravity_backend.py`). Connects directly to the user's locally installed, unmodified official `agy acp` CLI (supporting personal Pro/Ultra and Business Google accounts natively) with:
+  - **1-Click Official `agy` CLI Auto-Installer & Auto-Connect**: Cross-platform installer (`install.ps1` / `install.sh`) with live progress logs, expanded PATH detection, and terminal OAuth sign-in helper.
+  - **Full Coding Agent Capabilities**: Guarded ACP `terminal/*` execution (`terminal/create`, `terminal/output`, `terminal/wait_for_exit`, `terminal/kill`, `terminal/release`) with destructive command blocking, sandboxed `fs/read_text_file` & `fs/write_text_file` with automatic editor tab syncing and 1-click Shadow Checkpoint rollback, MCP Studio server forwarding (`mcpServers`), slash command autocomplete (`available_commands_update`), live reasoning, Cline/Kilo-style tool dropdowns with inline diffs, agent plans, and interactive `session/request_permission` approvals.
+
+---
+
 ## [5.1.1] - 2026-10-10
 
 ### 📄 Feature Release — Universal Document & Prose Studio (Native PDF & Word DOCX/DOC Live Viewers)

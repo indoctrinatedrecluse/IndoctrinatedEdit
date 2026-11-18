@@ -5,9 +5,11 @@ import {
   AiStreamChunk,
   ToolchainDefinition,
   DetectedToolchain,
-  AntigravitySession,
-  AntigravityQuotaInfo,
-  AntigravitySidecarStatus,
+  AcpBinaryDetection,
+  AcpInstallResult,
+  AcpMcpServerSpec,
+  AcpStatusInfo,
+  AcpStreamEvent,
 } from '../packages/sdk/types'
 
 export interface FileOpenResult {
@@ -41,24 +43,39 @@ export interface ElectronAiAPI {
       messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
       apiKey?: string
       endpoint?: string
+      mode?: 'plan' | 'act'
+      disableTools?: boolean
+      temperature?: number
+      maxOutputTokens?: number
+      maxRetries?: number
+      extraTools?: Array<{
+        name: string
+        description?: string
+        parameters?: Record<string, any>
+        requiredParams?: string[]
+      }>
     },
     onChunk: (chunk: AiStreamChunk) => void
   ) => () => void
 }
 
 export interface ElectronAntigravityAPI {
-  login: () => Promise<AntigravitySession>
-  logout: () => Promise<boolean>
-  getSession: () => Promise<AntigravitySession | null>
-  getQuota: () => Promise<AntigravityQuotaInfo>
-  getStatus: () => Promise<AntigravitySidecarStatus>
-  getLogs: () => Promise<{ logFile: string; logs: string[] }>
-  setApiKey: (apiKey: string) => Promise<AntigravitySession | null>
-  removeApiKey: () => Promise<boolean>
-  tokenize: (
-    text: string,
-    messages?: Array<{ role: string; content: string }>
-  ) => Promise<{ characterCount: number; estimatedTokens: number; contextLimit: number; remainingContext: number }>
+  detectCli: (command?: string) => Promise<AcpBinaryDetection>
+  installCli: () => Promise<AcpInstallResult>
+  launchCliLogin: (command?: string) => Promise<boolean>
+  connect: (options?: { command?: string; args?: string[]; cwd?: string; mcpServers?: AcpMcpServerSpec[] }) => Promise<AcpStatusInfo>
+  disconnect: () => Promise<boolean>
+  authenticate: (methodId: string) => Promise<AcpStatusInfo>
+  newSession: (cwd?: string, mcpServers?: AcpMcpServerSpec[]) => Promise<string>
+  sendPrompt: (text: string) => Promise<{ stopReason?: string }>
+  cancelPrompt: () => Promise<boolean>
+  setMode: (modeId: string) => Promise<boolean>
+  setModel: (modelId: string) => Promise<boolean>
+  respondPermission: (requestId: string | number, optionId: string | null) => Promise<boolean>
+  getStatus: () => Promise<AcpStatusInfo>
+  getLogs: () => Promise<string[]>
+  openExternalUrl: (url: string) => Promise<boolean>
+  onEvent: (callback: (event: AcpStreamEvent) => void) => () => void
 }
 
 export interface ElectronToolchainAPI {
@@ -282,15 +299,29 @@ const api: ElectronAPI = {
   },
 
   antigravity: {
-    login: () => ipcRenderer.invoke('antigravity:login'),
-    logout: () => ipcRenderer.invoke('antigravity:logout'),
-    getSession: () => ipcRenderer.invoke('antigravity:getSession'),
-    getQuota: () => ipcRenderer.invoke('antigravity:getQuota'),
+    detectCli: (command) => ipcRenderer.invoke('antigravity:detectCli', command),
+    installCli: () => ipcRenderer.invoke('antigravity:installCli'),
+    launchCliLogin: (command) => ipcRenderer.invoke('antigravity:launchCliLogin', command),
+    connect: (options) => ipcRenderer.invoke('antigravity:connect', options),
+    disconnect: () => ipcRenderer.invoke('antigravity:disconnect'),
+    authenticate: (methodId) => ipcRenderer.invoke('antigravity:authenticate', methodId),
+    newSession: (cwd, mcpServers) => ipcRenderer.invoke('antigravity:newSession', cwd, mcpServers),
+    sendPrompt: (text) => ipcRenderer.invoke('antigravity:sendPrompt', text),
+    cancelPrompt: () => ipcRenderer.invoke('antigravity:cancelPrompt'),
+    setMode: (modeId) => ipcRenderer.invoke('antigravity:setMode', modeId),
+    setModel: (modelId) => ipcRenderer.invoke('antigravity:setModel', modelId),
+    respondPermission: (requestId, optionId) =>
+      ipcRenderer.invoke('antigravity:respondPermission', requestId, optionId),
     getStatus: () => ipcRenderer.invoke('antigravity:getStatus'),
     getLogs: () => ipcRenderer.invoke('antigravity:getLogs'),
-    setApiKey: (apiKey: string) => ipcRenderer.invoke('antigravity:setApiKey', apiKey),
-    removeApiKey: () => ipcRenderer.invoke('antigravity:removeApiKey'),
-    tokenize: (text, messages) => ipcRenderer.invoke('antigravity:tokenize', text, messages),
+    openExternalUrl: (url) => ipcRenderer.invoke('antigravity:openExternalUrl', url),
+    onEvent: (callback) => {
+      const handler = (_: unknown, event: AcpStreamEvent) => callback(event)
+      ipcRenderer.on('antigravity:acpEvent', handler)
+      return () => {
+        ipcRenderer.removeListener('antigravity:acpEvent', handler)
+      }
+    },
   },
 
   toolchain: {

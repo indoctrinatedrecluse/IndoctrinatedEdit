@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Server,
   Wrench,
@@ -56,20 +56,7 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
   // Ping status
   const [pingingServerId, setPingingServerId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!isOpen) return
-    refreshData()
-
-    const unsubServers = McpService.onServersChanged(() => refreshData())
-    const unsubTools = McpService.onToolsChanged(() => refreshData())
-
-    return () => {
-      unsubServers()
-      unsubTools()
-    }
-  }, [isOpen])
-
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     const sList = McpService.getServers()
     setServers(sList)
     setTools(McpService.listTools())
@@ -77,11 +64,29 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
     setPrompts(McpService.listPrompts())
     setRawConfigJson(McpService.exportConfigFile())
 
-    if (sList.length > 0 && !selectedServerId) {
-      setSelectedServerId(sList[0].id)
-      setEditingServer({ ...sList[0] })
+    setSelectedServerId((prevId) => {
+      if (prevId && sList.some((s) => s.id === prevId)) return prevId
+      if (sList.length > 0) {
+        setEditingServer({ ...sList[0] })
+        return sList[0].id
+      }
+      setEditingServer({})
+      return null
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+    refreshData()
+
+    const unsubServers = McpService.onServersChanged(refreshData)
+    const unsubTools = McpService.onToolsChanged(refreshData)
+
+    return () => {
+      unsubServers()
+      unsubTools()
     }
-  }
+  }, [isOpen, refreshData])
 
   const handleSelectServer = (s: McpServerConfig) => {
     setSelectedServerId(s.id)
@@ -125,26 +130,15 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
       timeoutMs: Number(editingServer.timeoutMs) || 15000,
     })
     notificationService.notifySuccess('MCP Studio', `Saved configuration for "${editingServer.name}"`)
-    refreshData()
   }
 
   const handleDeleteServer = (id: string) => {
     McpService.deleteServer(id)
     notificationService.notifyInfo('MCP Studio', 'Server removed')
-    const remaining = McpService.getServers()
-    if (remaining.length > 0) {
-      setSelectedServerId(remaining[0].id)
-      setEditingServer({ ...remaining[0] })
-    } else {
-      setSelectedServerId(null)
-      setEditingServer({})
-    }
-    refreshData()
   }
 
   const handleToggleServer = (id: string, enabled: boolean) => {
     McpService.toggleServer(id, enabled)
-    refreshData()
   }
 
   const handlePingServer = async (id: string) => {
@@ -156,7 +150,6 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
     } else {
       notificationService.notifyError('MCP Ping', `Ping failed: ${res.error}`)
     }
-    refreshData()
   }
 
   const handleSelectToolForTesting = (tool: McpToolDefinition) => {
@@ -219,25 +212,21 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
   }
 
   const handleInstallPreset = (preset: McpServerConfig) => {
-    const existing = McpService.getServer(preset.id)
-    if (existing) {
-      McpService.saveServer({ ...preset, enabled: true, status: 'connected' })
-      notificationService.notifySuccess('MCP Catalog', `Re-enabled "${preset.name}"`)
-    } else {
-      McpService.saveServer({ ...preset, enabled: true, status: 'connected' })
-      notificationService.notifySuccess('MCP Catalog', `Installed and connected "${preset.name}"`)
-    }
-    refreshData()
+    const alreadyExists = Boolean(McpService.getServer(preset.id))
+    McpService.saveServer({ ...preset, enabled: true, status: 'connected' })
+    notificationService.notifySuccess(
+      'MCP Catalog',
+      alreadyExists ? `Re-enabled "${preset.name}"` : `Installed and connected "${preset.name}"`
+    )
     setActiveTab('servers')
     setSelectedServerId(preset.id)
-    setEditingServer({ ...preset })
+    setEditingServer({ ...preset, enabled: true, status: 'connected' })
   }
 
   const handleApplyRawConfig = () => {
     const res = McpService.importConfigFile(rawConfigJson)
     if (res.importedCount > 0) {
       notificationService.notifySuccess('MCP Config', `Successfully imported ${res.importedCount} MCP servers`)
-      refreshData()
     } else {
       notificationService.notifyError('MCP Config', `Import error: ${res.errors?.join(', ') || 'Invalid JSON'}`)
     }
@@ -253,7 +242,6 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
   const handleResetDefaults = () => {
     McpService.resetToDefaults()
     notificationService.notifySuccess('MCP Studio', 'Reset all MCP servers to factory defaults')
-    refreshData()
   }
 
   if (!isOpen) return null
@@ -268,9 +256,14 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
               <Server className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <div className="modal-title">Model Context Protocol (MCP) Studio</div>
+              <div className="modal-title-line">
+                <div className="modal-title">Model Context Protocol (MCP) Studio</div>
+                <span className="sdk-bridge-pill" title="Enabled MCP tools are bridged to Vercel AI SDK v7 via dynamicTool + jsonSchema">
+                  Vercel AI SDK · {tools.length} dynamicTools
+                </span>
+              </div>
               <div className="modal-subtitle">
-                Configure stdio & SSE servers, inspect dynamic tool schemas, run live tests, and empower AI agents.
+                Configure stdio & SSE servers, inspect typed JSON schemas, run live tests, and bridge tools to AI Chat.
               </div>
             </div>
           </div>
@@ -779,6 +772,24 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
           display: flex;
           align-items: center;
           justify-content: center;
+        }
+
+        .modal-title-line {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .sdk-bridge-pill {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 999px;
+          background: rgba(56, 189, 248, 0.14);
+          border: 1px solid rgba(56, 189, 248, 0.32);
+          color: #7DD3FC;
+          font-family: 'JetBrains Mono', monospace;
         }
 
         .modal-title {
