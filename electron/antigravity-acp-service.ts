@@ -500,9 +500,9 @@ export class AntigravityAcpClient {
           version: (() => {
             try {
               // eslint-disable-next-line @typescript-eslint/no-var-requires
-              return require('electron')?.app?.getVersion?.() || '5.3.0'
+              return require('electron')?.app?.getVersion?.() || '6.0.0'
             } catch {
-              return '5.3.0'
+              return '6.0.0'
             }
           })(),
         },

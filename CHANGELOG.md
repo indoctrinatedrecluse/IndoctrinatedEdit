@@ -5,6 +5,52 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - 2026-11-18
+
+### 🚀 Major Architecture Release — Full End-to-End Native Runtime Implementation Across Every Studio & Extension
+
+IndoctrinatedEdit **6.0.0** is a landmark release replacing every remaining mock, simulation, and placeholder across all 45+ built-in extensions and studios with genuine desktop runtimes, native protocols, persistent execution engines, and hardened security & lifecycle persistence:
+
+#### 🛡️ Resilient License Persistence & Hardened Security
+- **Cross-Update & Reinstall License Persistence**: Fixed license persistence across upgrades, reinstalls, and portable launches with multi-anchor self-healing storage and legacy v1 flat `license.json` migration.
+- **XSS, Path Traversal & CSS Isolation Hardening**: Hardened HTML/SVG sanitization across Live Preview, Diagram Studio, and SVG Studio, extracted and root-scoped 31 studio stylesheets, and enforced workspace path guardrails across filesystem & MCP tools.
+
+#### 🧩 Shell, Extension Lifecycle, Output & Editor Preferences
+- **Live Extension Dispose & Re-Registration**: Toggling extensions now cleanly disposes Monaco providers/subscriptions and re-registers them live without reloading the window.
+- **Real Output Channels, Preferences, Updater & Session Restore**: Wired `outputChannelService` across Run/Tasks/Debug/LSP/Extensions, synchronized live `editorPreferencesService` settings, fixed updater error surfacing, and restored binary documents cleanly on session reload.
+
+#### 🗄️ Native Database, Docker & Kubernetes Studios
+- **SQLite WASM Engine (`sql.js`)**: Embedded genuine SQLite execution (`electron/sqlite-wasm-service.ts`) supporting open/create/save `.db` files, multi-statement SQL execution, live Schema DDL inspection, and CLI bridges for PostgreSQL/MySQL.
+- **Live Docker & Kubernetes Daemon Sync**: Connected Docker Studio & Kubernetes views to real `docker` and `kubectl` CLIs for container lifecycle actions, live logs, interactive `exec`, manifest `apply`, and real cluster/pod telemetry.
+
+#### 🌐 Real Network, Protocol & Infrastructure Studios
+- **Remote Protocol Studio**: Implemented real OpenSSH command execution, SFTP directory browsing/read/write/upload/download/delete, raw TCP/TLS socket streaming, and SMTP email delivery with HTML bodies and `AUTH PLAIN`.
+- **Redis Studio**: Built a live RESP2 TCP/TLS explorer (`KEYS`, `SCAN`, `TYPE`, `TTL`, `GET`/`SET`/`HGETALL`/`LRANGE`/`SMEMBERS`/`ZRANGE`) and persistent Pub/Sub subscriber streams.
+- **GraphQL, gRPC, MockLab, Port Sentinel, WebSocket/SSE & REST Client**: Added live GraphQL schema introspection, `.proto` parsing & gRPC invocation (`@grpc/grpc-js`), live Express/HTTP MockLab route sync (`PATCH`, toggles, live traffic log), OS-aware multi-PID Port Sentinel scanning & process termination, CORS-free Electron SSE + custom-header/subprotocol WebSocket client, and persistent REST Client with collections, environment editor, and `form-data`/`x-www-form-urlencoded` bodies.
+
+#### 🐞 Real Debugger (CDP/DAP), Full Git Backend & 3-Way Merge Studio
+- **Live Node.js/TS CDP & Stdio DAP Debugger (`electron/debug-adapter-service.ts`)**: Real breakpoints, conditional breakpoints, logpoints, stepping (`continue`/`stepOver`/`stepInto`/`stepOut`), live call stack, nested variable inspection & mutation, and REPL evaluation for Node/TS (`--inspect-brk`) plus generic DAP support (`debugpy`, `dlv`, `lldb-dap`).
+- **Full Git Workbench & GitHub Actions**: Added branch creation/checkout/deletion, pull/push/fetch, stash list/save/pop/drop, cherry-pick, revert, discard changes, hunk-level patch staging (`git apply`), real `.github/workflows/*.yml` discovery + live `gh` CLI / REST API workflow dispatch & cancellation, and a true 3-column diff3 **Merge Studio** with editable custom resolution.
+
+#### ⚡ Core IDE Subsystems: Real LSP, Diagnostics, Search, Tasks, Tests, Packages & Terminal
+- **Stdio JSON-RPC 2.0 LSP Manager (`electron/lsp-client-service.ts`)**: Launches and synchronizes real language servers (`typescript-language-server`, `pyright-langserver`, `rust-analyzer`, `gopls`, `clangd`) for Go-to-Definition, Find References, and pushed diagnostics.
+- **Live Workspace Diagnostics, Search, Tasks, Tests & Packages**: Added real `tsc`/`ruff`/`go vet` workspace diagnostics, disk-wide search & batch replace, `.vscode/tasks.json`/`launch.json` loading, real Vitest/Jest/Rust/Dart test discovery & JSON result parsing, `npm outdated`/`npm audit --json` + deterministic NVD/GHSA offline CVE advisories, source-map bundle analysis + Bundlephobia import sizing, and live `xterm.js` configuration syncing.
+
+#### 📓 Persistent Jupyter Kernels, Web Crypto Lab & Live `.env` Vault
+- **Persistent Python & Node.js Jupyter Kernels (`electron/jupyter-kernel-service.ts`)**: Stateful Python REPL retaining globals across cells with IPython-style last-expression AST evaluation, Matplotlib Agg PNG plot capture, Pandas HTML table rendering, real `locals()` variable inspection, RSS memory telemetry, and a persistent Node.js `vm` kernel.
+- **Web Crypto DevTools Lab**: Implemented real Web Crypto JWT HMAC signing & verification, RSA-2048/4096, ECDSA-P256, and Ed25519 keypair generation, RFC 6238 TOTP 2FA tokens, pure-JS ASN.1 DER X.509 certificate parsing, and AES-256-GCM encryption/decryption.
+- **Live Env Vault**: Direct workspace `.env*` disk loading, comment-preserving writes, live multi-environment diff matrix, and AES-256-GCM encrypted vault import/export.
+
+#### 🔌 Live MCP Discovery, Resources/Prompts & Studio Upgrades
+- **Full MCP Protocol Support (`electron/mcp-client-service.ts`, `McpService`, `McpStudioModal`)**: Added dynamic `tools/list`, `resources/list`, `prompts/list`, `resources/read`, and `prompts/get` over both stdio JSON-RPC 2.0 and CORS-free Electron HTTP/SSE JSON-RPC (`mcp:httpRpc`), real SQLite WASM & HTTP fetch dispatch, JSON `env`/`headers` editors, and interactive Resource/Prompt inspection.
+- **Hex, Diff, SVG, JSON, Diagram, Preview, Regex & Snippet Studios**:
+  - **Hex Inspector**: Real binary disk read/edit/undo/save (`workspace:writeFileBinary`), file magic-byte detection, Int64/UInt64 decoding, match stepping, and pagination.
+  - **Diff Studio**: LCS dynamic-programming line diff, multi-hunk `-U3` unified patches, 3-way `baseText` display, and 1-click **Compare vs Git HEAD**.
+  - **SVG & JSON Studios**: Multi-hyphen JSX attributes, inline `style={{}}` conversion, PNG canvas export, editable component name, active `.svg` sync; JQ `map`/`select`/`sort_by`/`to_entries`/`values`/`flatten`, extended JSON Schema validation, and YAML transform input.
+  - **Diagram, Preview, Regex & Snippets**: Real workspace module dependency radar with click-to-open-file, real TS/JS/Python AST-like class/method diagram extraction, dynamic Mermaid SVGs for `classDiagram`, `erDiagram`, `stateDiagram-v2`, and `gitGraph`, real binary PDF/DOCX loading + isolated iframe printing, `g`-flag & regex syntax error banners, and custom snippet editing + VS Code `.code-snippets` import/export.
+
+---
+
 ## [5.3.0] - 2026-11-18
 
 ### 🤖 Major Feature Release — Vercel AI SDK v7 Autonomous Engine, Cline/Kilo UX, MCP & Copilot Alignment, and Official Google Antigravity ACP v1 Studio
