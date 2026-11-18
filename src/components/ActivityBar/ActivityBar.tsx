@@ -382,7 +382,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
           <button
             className={`activity-btn glass-interactive antigravity-bar-btn ${isAntigravityOpen ? 'active' : ''}`}
             onClick={onToggleAntigravity}
-            title="Google Antigravity Studio (PRO) (Personal Account & Python SDK)"
+            title="Google Antigravity Studio (PRO) (Official ACP CLI · Ctrl+Alt+G)"
           >
             <AntigravityIcon size={20} className="antigravity-activity-icon" />
             <span className="activity-pro-tag">PRO</span>

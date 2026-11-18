@@ -36,6 +36,23 @@ interface ShortcutHandlers {
   onToggleDiagram?: () => void
   onToggleBundle?: () => void
   onToggleSvg?: () => void
+  onToggleAntigravity?: () => void
+  onToggleDiff?: () => void
+  onToggleHex?: () => void
+  onToggleSnippets?: () => void
+  onToggleColors?: () => void
+  onToggleJson?: () => void
+  onToggleMcpStudio?: () => void
+  onWorkspaceSymbols?: () => void
+  onAiExplain?: () => void
+  onGitRefresh?: () => void
+  onZoomIn?: () => void
+  onZoomOut?: () => void
+  onResetZoom?: () => void
+  onSplitVertical?: () => void
+  onSplitHorizontal?: () => void
+  onFocusPane?: (paneIndex: number) => void
+  isDebuggingActive?: () => boolean
   onToggleNotifications?: () => void
   onOpenShortcuts?: () => void
   onGoToLine?: () => void
@@ -106,6 +123,12 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
             handlers.onOpenShortcuts?.()
             return
           }
+          if (e.key === '\\') {
+            e.preventDefault()
+            chordRef.current = null
+            handlers.onSplitHorizontal?.()
+            return
+          }
         }
         chordRef.current = null
       }
@@ -138,10 +161,14 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
-      // Ctrl+Shift+F5 -> Run with Arguments
+      // Ctrl+Shift+F5 -> Restart Debugging when debug session is active, otherwise Run with Arguments
       if (e.key === 'F5' && e.shiftKey && ctrlOrCmd) {
         e.preventDefault()
-        handlers.onRunWithArgs?.()
+        if (handlers.isDebuggingActive?.()) {
+          handlers.onRestartDebugging?.()
+        } else {
+          handlers.onRunWithArgs?.()
+        }
         return
       }
 
@@ -166,10 +193,14 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
-      // F11 -> Step Into
-      if (e.key === 'F11' && !e.shiftKey && !ctrlOrCmd) {
+      // F11 -> Step Into when debugging is active, otherwise Toggle Fullscreen
+      if (e.key === 'F11' && !e.shiftKey && !ctrlOrCmd && !e.altKey) {
         e.preventDefault()
-        handlers.onStepInto?.()
+        if (handlers.isDebuggingActive?.()) {
+          handlers.onStepInto?.()
+        } else {
+          window.electronAPI?.toggleFullscreen?.()
+        }
         return
       }
 
@@ -212,13 +243,6 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (key === 'f' && e.shiftKey && e.altKey && !ctrlOrCmd) {
         e.preventDefault()
         handlers.onFormatDocument?.()
-        return
-      }
-
-      // F11 -> Toggle Fullscreen
-      if (e.key === 'F11' && !ctrlOrCmd && !e.altKey) {
-        e.preventDefault()
-        window.electronAPI?.toggleFullscreen?.()
         return
       }
 
@@ -329,15 +353,29 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
-      // Shift+Alt+F or Alt+Shift+F -> Format Document
-      if (key === 'f' && e.shiftKey && e.altKey) {
+      // Ctrl+Shift+I -> AI Explain Active Code / Selection
+      if (e.shiftKey && !e.altKey && key === 'i') {
         e.preventDefault()
-        handlers.onFormatDocument?.()
+        handlers.onAiExplain?.()
+        return
+      }
+
+      // Ctrl+Shift+R -> Refresh Git Status
+      if (e.shiftKey && !e.altKey && key === 'r') {
+        e.preventDefault()
+        handlers.onGitRefresh?.()
+        return
+      }
+
+      // Ctrl+Alt+Shift+R -> Configure Run Profiles
+      if (e.altKey && e.shiftKey && key === 'r') {
+        e.preventDefault()
+        handlers.onConfigureRun?.()
         return
       }
 
       // Ctrl+Shift+F -> Search
-      if (e.shiftKey && key === 'f') {
+      if (e.shiftKey && !e.altKey && key === 'f') {
         e.preventDefault()
         handlers.onShowSearch?.()
         return
@@ -494,6 +532,93 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if (e.altKey && key === '8') {
         e.preventDefault()
         handlers.onToggleSvg?.()
+        return
+      }
+
+      // Ctrl+Alt+G -> Toggle Google Antigravity Studio
+      if (e.altKey && key === 'g') {
+        e.preventDefault()
+        handlers.onToggleAntigravity?.()
+        return
+      }
+
+      // Ctrl+Alt+M -> Toggle Visual Diff & 3-Way Merge Studio
+      if (e.altKey && key === 'm') {
+        e.preventDefault()
+        handlers.onToggleDiff?.()
+        return
+      }
+
+      // Ctrl+Alt+H -> Toggle Hex & Binary Inspector
+      if (e.altKey && key === 'h') {
+        e.preventDefault()
+        handlers.onToggleHex?.()
+        return
+      }
+
+      // Ctrl+Alt+S -> Toggle Snippet Vault & Scratchpad
+      if (e.altKey && key === 's') {
+        e.preventDefault()
+        handlers.onToggleSnippets?.()
+        return
+      }
+
+      // Ctrl+Alt+O -> Toggle Color Palette & Liquid Glass Studio
+      if (e.altKey && key === 'o') {
+        e.preventDefault()
+        handlers.onToggleColors?.()
+        return
+      }
+
+      // Ctrl+Alt+Y -> Toggle JSON & JQ Structure Studio
+      if (e.altKey && key === 'y') {
+        e.preventDefault()
+        handlers.onToggleJson?.()
+        return
+      }
+
+      // Ctrl+Alt+U -> Open MCP Server Studio
+      if (e.altKey && key === 'u') {
+        e.preventDefault()
+        handlers.onToggleMcpStudio?.()
+        return
+      }
+
+      // Ctrl+T -> Go to Symbol in Workspace (#)
+      if (key === 't' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onWorkspaceSymbols?.()
+        return
+      }
+
+      // Ctrl+= / Ctrl+- / Ctrl+0 -> Zoom In / Out / Reset
+      if ((e.key === '=' || e.key === '+') && !e.altKey) {
+        e.preventDefault()
+        handlers.onZoomIn?.()
+        return
+      }
+      if (e.key === '-' && !e.altKey) {
+        e.preventDefault()
+        handlers.onZoomOut?.()
+        return
+      }
+      if (e.key === '0' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onResetZoom?.()
+        return
+      }
+
+      // Ctrl+\ -> Split Editor Vertical
+      if (e.key === '\\' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        handlers.onSplitVertical?.()
+        return
+      }
+
+      // Ctrl+1..4 -> Focus Editor Pane 1..4
+      if (!e.shiftKey && !e.altKey && ['1', '2', '3', '4'].includes(key)) {
+        e.preventDefault()
+        handlers.onFocusPane?.(Number(key))
         return
       }
 

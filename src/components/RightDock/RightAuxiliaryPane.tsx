@@ -143,31 +143,32 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   }, [])
 
   const TAB_EXTENSION_MAP: Partial<Record<RightDockTab, string>> = {
-    jupyter: 'indoctrinated.ext.jupyter-studio',
-    remote: 'indoctrinated.ext.remote-protocol',
+    jupyter: 'indoctrinated.ext.jupyter-notebook-engine',
+    remote: 'indoctrinated.ext.remote-protocol-studio',
     antigravity: 'indoctrinated.ext.antigravity',
+    ai: 'indoctrinated.ext.aiassistant',
     database: 'indoctrinated.ext.database-studio',
     rest: 'indoctrinated.ext.rest-client',
-    crypto: 'indoctrinated.ext.crypto-lab',
-    json: 'indoctrinated.ext.json-studio',
-    preview: 'indoctrinated.ext.live-preview',
+    crypto: 'indoctrinated.ext.cryptolab',
+    json: 'indoctrinated.ext.jsonstudio',
+    preview: 'indoctrinated.ext.livepreview',
     docker: 'indoctrinated.ext.docker',
     socket: 'indoctrinated.ext.websocket',
-    regex: 'indoctrinated.ext.regex-lab',
-    packages: 'indoctrinated.ext.package-manager',
-    tasks: 'indoctrinated.ext.task-runner',
-    diff: 'indoctrinated.ext.diff-studio',
-    hex: 'indoctrinated.ext.hex-inspector',
-    snippets: 'indoctrinated.ext.snippet-vault',
-    colors: 'indoctrinated.ext.color-studio',
-    ports: 'indoctrinated.ext.port-sentinel',
-    redis: 'indoctrinated.ext.redis-studio',
-    env: 'indoctrinated.ext.env-vault',
+    regex: 'indoctrinated.ext.regexlab',
+    packages: 'indoctrinated.ext.packagemanager',
+    tasks: 'indoctrinated.ext.taskrunner',
+    diff: 'indoctrinated.ext.diffstudio',
+    hex: 'indoctrinated.ext.hexinspector',
+    snippets: 'indoctrinated.ext.snippetvault',
+    colors: 'indoctrinated.ext.colorstudio',
+    ports: 'indoctrinated.ext.portsentinel',
+    redis: 'indoctrinated.ext.redisstudio',
+    env: 'indoctrinated.ext.envvault',
     mocklab: 'indoctrinated.ext.mocklab',
-    graphql: 'indoctrinated.ext.graphql-studio',
-    diagram: 'indoctrinated.ext.diagram-studio',
-    bundle: 'indoctrinated.ext.bundle-analyzer',
-    svg: 'indoctrinated.ext.svg-studio',
+    graphql: 'indoctrinated.ext.graphql',
+    diagram: 'indoctrinated.ext.diagramstudio',
+    bundle: 'indoctrinated.ext.bundleanalyzer',
+    svg: 'indoctrinated.ext.svgstudio',
   }
 
   const activeExtId = TAB_EXTENSION_MAP[activeTab]
@@ -276,7 +277,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'json' ? 'active' : ''}`}
             onClick={() => onSelectTab('json')}
-            title="JSON & JQ Structure Studio (Ctrl+Alt+J)"
+            title="JSON & JQ Structure Studio (Ctrl+Alt+Y)"
           >
             <FileCode2 size={13} className="tab-icon json" />
             <span>JSON & JQ</span>
@@ -377,7 +378,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'database' ? 'active' : ''}`}
             onClick={() => onSelectTab('database')}
-            title="Database Schema Viewer & SQL Query Runner (Ctrl+Shift+D)"
+            title="Database Schema Viewer & SQL Query Runner (Ctrl+Alt+D)"
           >
             <Database size={13} className="tab-icon db" />
             <span>Database Studio</span>
@@ -404,7 +405,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'remote' ? 'active' : ''}`}
             onClick={() => onSelectTab('remote')}
-            title="Remote Protocol Studio (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+S)"
+            title="Remote Protocol Studio (SSH, SFTP, FTP & SMTP) (Ctrl+Alt+E)"
           >
             <Server size={13} className="tab-icon remote" />
             <span>Remote Studio</span>
@@ -414,7 +415,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <button
             className={`dock-tab-item glass-interactive ${activeTab === 'antigravity' ? 'active' : ''}`}
             onClick={() => onSelectTab('antigravity')}
-            title="Google Antigravity Studio (Personal Account & Python SDK)"
+            title="Google Antigravity Studio (Official ACP CLI) (Ctrl+Alt+G)"
           >
             <AntigravityIcon size={14} className="tab-icon antigravity" />
             <span>Antigravity Studio</span>

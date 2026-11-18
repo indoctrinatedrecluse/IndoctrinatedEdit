@@ -99,6 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [extensionsList, setExtensionsList] = useState(() => extensionRegistry.getAll())
   const [extSearch, setExtSearch] = useState('')
   const [appVersion, setAppVersion] = useState('6.0.0')
+  const [selectedExtId, setSelectedExtId] = useState<string | null>(null)
   const [expandedDirs, setExpandedDirs] = useState<Record<string, WorkspaceFileItem[]>>({})
 
   useEffect(() => {
@@ -401,11 +402,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="ext-list">
             {extensions.map((ext) => {
               const enabled = ext.status !== 'Disabled'
+              const isExpanded = selectedExtId === ext.id
               return (
               <div
                 key={ext.id}
                 className="ext-card glass-panel glass-interactive"
-                style={{ opacity: enabled ? 1 : 0.6 }}
+                style={{ opacity: enabled ? 1 : 0.6, cursor: 'pointer' }}
+                onClick={() => setSelectedExtId(isExpanded ? null : ext.id)}
               >
                 <div className="ext-header">
                   <div className="ext-icon-wrapper">
@@ -433,6 +436,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 )}
 
+                {isExpanded && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: 'rgba(0,0,0,0.28)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      fontSize: '0.7rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div><strong>ID:</strong> <code>{ext.id}</code></div>
+                    <div><strong>Category:</strong> {ext.category} · <strong>Type:</strong> {ext.type}</div>
+                    {ext.languages && ext.languages.length > 0 && (
+                      <div>
+                        <strong>File Extensions:</strong>{' '}
+                        <code>
+                          {Array.from(new Set(ext.languages.flatMap((l) => l.extensions || []))).join(', ') || 'None'}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="ext-footer">
                   <div className="ext-tags-row">
                     <span className="ext-type-badge">{ext.type}</span>
@@ -445,7 +476,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     type="button"
                     className={`ext-status ${ext.status.toLowerCase()}`}
-                    onClick={() => extensionRegistry.toggle(ext.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      extensionRegistry.toggle(ext.id)
+                    }}
                     title={enabled ? 'Click to disable extension' : 'Click to enable extension'}
                     style={{
                       background: 'transparent',

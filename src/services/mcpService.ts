@@ -459,11 +459,12 @@ export class McpService {
   static saveServer(server: McpServerConfig): void {
     this.initialize()
     const existing = this.servers.get(server.id)
+    const defaultStatus: McpServerStatus = server.transport === 'builtin' ? 'connected' : 'disconnected'
     const updated: McpServerConfig = {
       ...existing,
       ...server,
       createdAt: server.createdAt || existing?.createdAt || Date.now(),
-      status: server.enabled ? (server.status || 'connected') : 'disabled',
+      status: server.enabled ? (server.status || existing?.status || defaultStatus) : 'disabled',
     }
     this.servers.set(updated.id, updated)
     this.persistToStorage()
@@ -493,7 +494,7 @@ export class McpService {
     const server = this.servers.get(id)
     if (server) {
       server.enabled = enabled
-      server.status = enabled ? 'connected' : 'disabled'
+      server.status = enabled ? (server.transport === 'builtin' ? 'connected' : 'disconnected') : 'disabled'
       if (!enabled && typeof window !== 'undefined' && window.electronAPI?.mcp?.disconnect) {
         window.electronAPI.mcp.disconnect(id).catch(() => {})
       }
@@ -1529,11 +1530,12 @@ export class McpService {
     for (const [id, s] of this.servers.entries()) {
       if (s.transport === 'stdio' || s.transport === 'builtin') {
         config.mcpServers[id] = {
+          ...(s.transport === 'builtin' ? { transport: 'builtin' as const } : {}),
           command: s.command || 'npx',
           args: s.args || [],
           env: s.env || {},
           disabled: !s.enabled,
-        }
+        } as any
       } else if (s.transport === 'sse' && s.url) {
         config.mcpServers[id] = {
           url: s.url,
@@ -1558,14 +1560,25 @@ export class McpService {
         return { importedCount: 0, errors: ['Invalid JSON format: missing "mcpServers" object'] }
       }
 
+      const builtinPresetIds = new Set(
+        DEFAULT_MCP_PRESETS.filter((p) => p.transport === 'builtin').map((p) => p.id)
+      )
+
       let count = 0
       for (const [key, rawConfig] of Object.entries(serversObj)) {
         if (typeof rawConfig !== 'object' || !rawConfig) continue
         const c = rawConfig as any
-        const transport: McpTransportType = c.url ? 'sse' : 'stdio'
+        const normalizedId = key.toLowerCase().replace(/[^a-z0-9_-]/g, '-')
+        const existing = this.servers.get(normalizedId)
+        const transport: McpTransportType = c.url
+          ? 'sse'
+          : c.transport === 'builtin' || builtinPresetIds.has(normalizedId) || existing?.transport === 'builtin'
+          ? 'builtin'
+          : 'stdio'
         const server: McpServerConfig = {
-          id: key.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-          name: key,
+          id: normalizedId,
+          name: existing?.name || key,
+          description: existing?.description,
           transport,
           command: c.command || 'npx',
           args: Array.isArray(c.args) ? c.args : [],
@@ -1573,8 +1586,8 @@ export class McpService {
           url: c.url,
           headers: typeof c.headers === 'object' ? c.headers : {},
           enabled: !c.disabled,
-          status: c.disabled ? 'disabled' : 'connected',
-          createdAt: Date.now(),
+          status: c.disabled ? 'disabled' : transport === 'builtin' ? 'connected' : 'disconnected',
+          createdAt: existing?.createdAt || Date.now(),
         }
         this.saveServer(server)
         count++

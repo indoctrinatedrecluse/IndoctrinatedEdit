@@ -87,7 +87,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     if (trimmed.startsWith('@')) return 'symbol'
     if (trimmed.startsWith('#')) return 'workspace-symbol'
     if (trimmed.startsWith(':')) return 'gotoline'
-    if (trimmed.startsWith('?') || trimmed.startsWith('help')) return 'help'
+    if (trimmed.startsWith('?') || trimmed === 'help') return 'help'
     return 'unified'
   }, [query])
 

@@ -300,11 +300,31 @@ export class AiService {
   private static autoApproveSettings: AiAutoApproveSettings | null = null
   private static autoApproveListeners: Set<(settings: AiAutoApproveSettings) => void> = new Set()
 
+  private static encodeStorageKeyPart(str: string): string {
+    try {
+      const bytes = new TextEncoder().encode(str)
+      let bin = ''
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+      return btoa(bin).replace(/[+/=]/g, (c) => (c === '+' ? '-' : c === '/' ? '_' : ''))
+    } catch {
+      return encodeURIComponent(str)
+    }
+  }
+
   static getChatHistory(workspaceRoot: string, modelId: string): AiChatMessage[] | null {
     if (typeof localStorage === 'undefined' || !workspaceRoot) return null
     try {
-      const key = `indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`
-      const raw = localStorage.getItem(key)
+      const encoded = this.encodeStorageKeyPart(workspaceRoot)
+      const key = `indoctrinated_ai_history_${encoded}_${modelId}`
+      let raw = localStorage.getItem(key)
+      // Backward compatibility fallback for existing ASCII btoa keys
+      if (!raw) {
+        try {
+          raw = localStorage.getItem(`indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`)
+        } catch {
+          // ignore non-Latin1 legacy fallback
+        }
+      }
       if (raw) {
         return JSON.parse(raw) as AiChatMessage[]
       }
@@ -326,8 +346,8 @@ export class AiService {
         const recent = historyToSave.slice(-39)
         historyToSave = [welcome, ...recent]
       }
-      
-      const key = `indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`
+
+      const key = `indoctrinated_ai_history_${this.encodeStorageKeyPart(workspaceRoot)}_${modelId}`
       localStorage.setItem(key, JSON.stringify(historyToSave))
     } catch (err) {
       console.warn('Failed to save chat history', err)
@@ -337,8 +357,13 @@ export class AiService {
   static clearChatHistory(workspaceRoot: string, modelId: string): void {
     if (typeof localStorage === 'undefined' || !workspaceRoot) return
     try {
-      const key = `indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`
+      const key = `indoctrinated_ai_history_${this.encodeStorageKeyPart(workspaceRoot)}_${modelId}`
       localStorage.removeItem(key)
+      try {
+        localStorage.removeItem(`indoctrinated_ai_history_${btoa(workspaceRoot)}_${modelId}`)
+      } catch {
+        // ignore non-Latin1 legacy key
+      }
     } catch (err) {
       console.warn('Failed to clear chat history', err)
     }
@@ -862,7 +887,11 @@ Your objective is to autonomously execute implementation plans, write high-quali
           nextMsg && (nextMsg.isInternalToolResult || nextMsg.id?.startsWith('tool-result-'))
         )
         const nonDuplicatedResults = nextIsToolResult
-          ? m.toolResults.filter((tr) => !nextMsg.content.includes(`Tool \`${tr.toolName}\` result:`))
+          ? m.toolResults.filter((tr) => {
+              const snippet = (tr.output || tr.error || '').slice(0, 80).trim()
+              const hasName = nextMsg.content.includes(`Tool \`${tr.toolName}\` result:`)
+              return !(hasName && (!snippet || nextMsg.content.includes(snippet)))
+            })
           : m.toolResults
 
         if (nonDuplicatedResults.length > 0) {

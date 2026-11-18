@@ -63,6 +63,7 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
   const [previewTitle, setPreviewTitle] = useState<string>('')
   const [previewContent, setPreviewContent] = useState<string>('')
   const [previewLoading, setPreviewLoading] = useState<boolean>(false)
+  const [promptArgValues, setPromptArgValues] = useState<Record<string, Record<string, string>>>({})
 
   const refreshData = useCallback(() => {
     const sList = McpService.getServers()
@@ -115,7 +116,7 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
       args: ['-y', 'my-mcp-package'],
       env: {},
       enabled: true,
-      status: 'connected',
+      status: 'disconnected',
       timeoutMs: 15000,
       createdAt: Date.now(),
     }
@@ -211,11 +212,18 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
     setPreviewTitle(`Prompt: ${p.name}`)
     setPreviewLoading(true)
     setPreviewContent('')
-    const defaultArgs: Record<string, string> = {}
+    const key = `${p.serverId}:${p.name}`
+    const userArgs = promptArgValues[key] || {}
+    const resolvedArgs: Record<string, string> = {}
     for (const arg of p.arguments || []) {
-      defaultArgs[arg.name] = arg.name === 'targetLanguage' ? 'typescript' : 'conventional'
+      resolvedArgs[arg.name] =
+        userArgs[arg.name] !== undefined && userArgs[arg.name] !== ''
+          ? userArgs[arg.name]
+          : arg.name === 'targetLanguage'
+          ? 'typescript'
+          : 'conventional'
     }
-    const res = await McpService.getPromptAsync(p.serverId, p.name, defaultArgs)
+    const res = await McpService.getPromptAsync(p.serverId, p.name, resolvedArgs)
     setPreviewLoading(false)
     setPreviewContent(res.success ? res.content : `Error: ${res.error || 'Failed to render prompt'}`)
   }
@@ -737,6 +745,29 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
                       <div key={`${p.serverId}-${p.name}`} className="resource-card">
                         <div className="prompt-name">{p.name}</div>
                         <div className="prompt-desc">{p.description}</div>
+                        {p.arguments && p.arguments.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                            {p.arguments.map((a) => {
+                              const pKey = `${p.serverId}:${p.name}`
+                              return (
+                                <input
+                                  key={a.name}
+                                  type="text"
+                                  className="glass-input font-mono"
+                                  style={{ fontSize: '0.72rem', padding: '4px 8px' }}
+                                  value={promptArgValues[pKey]?.[a.name] || ''}
+                                  onChange={(e) =>
+                                    setPromptArgValues((prev) => ({
+                                      ...prev,
+                                      [pKey]: { ...(prev[pKey] || {}), [a.name]: e.target.value },
+                                    }))
+                                  }
+                                  placeholder={`${a.name}${a.required ? ' *' : ''}${a.description ? ` — ${a.description}` : ''}`}
+                                />
+                              )
+                            })}
+                          </div>
+                        )}
                         <div className="resource-meta" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                           <div className="prompt-args">
                             {p.arguments?.map((a) => (

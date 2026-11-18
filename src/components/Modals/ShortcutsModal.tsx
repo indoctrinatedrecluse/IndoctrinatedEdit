@@ -301,7 +301,7 @@ const SHORTCUT_DATABASE: Omit<ShortcutEntry, 'onExecute'>[] = [
     id: 'view.database',
     title: 'Toggle Database Studio (SQL Runner)',
     category: 'View',
-    keys: ['Ctrl', 'Shift', 'D'],
+    keys: ['Ctrl', 'Alt', 'D'],
     description: 'Open right-docked database schema explorer and SQL runner',
     actionId: 'db.toggle',
   },
@@ -653,7 +653,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
                           {item.keys.map((k, idx) => (
                             <React.Fragment key={idx}>
                               <kbd className="key-cap">{k}</kbd>
-                              {idx < item.keys.length - 1 && item.keys[idx] !== 'Ctrl' && (
+                              {idx < item.keys.length - 1 && (
                                 <span className="key-plus">+</span>
                               )}
                             </React.Fragment>

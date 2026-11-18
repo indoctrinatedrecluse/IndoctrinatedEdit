@@ -71,11 +71,13 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       const opts = formatterService.getOptions()
       setLiveIndent(opts.useTabs ? `Tabs: ${opts.tabWidth}` : `Spaces: ${opts.tabWidth}`)
     }
+    const unsubFormatter = formatterService.subscribe(syncIndent)
     window.addEventListener('storage', syncIndent)
     return () => {
       unsubAcp()
       unsubExt()
       unsubMcp()
+      unsubFormatter()
       window.removeEventListener('storage', syncIndent)
     }
   }, [])

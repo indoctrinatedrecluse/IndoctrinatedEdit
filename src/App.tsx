@@ -38,6 +38,7 @@ import { testExplorerService } from './services/testExplorerService'
 import { lspService, LspRenameResult } from './services/lspService'
 import { jupyterKernelService } from './services/jupyterKernelService'
 import { licenseService } from './services/licenseService'
+import { antigravityAcpService } from './services/antigravityAcpService'
 
 const demoFiles: WorkspaceFileItem[] = [
   { name: 'welcome.ts', path: 'welcome.ts', isDirectory: false, lang: 'TypeScript' },
@@ -1197,8 +1198,8 @@ export const App: React.FC = () => {
 
     let content = fileContents[activeTabId] ?? ''
 
-    // Auto-format on save if configured
-    if (formatterService.getOptions().formatOnSave) {
+    // Auto-format on save if configured and Prettier extension is enabled
+    if (formatterService.getOptions().formatOnSave && extensionRegistry.isEnabled('indoctrinated.ext.prettier-formatter')) {
       try {
         const formatRes = await formatterService.formatDocument(content, activeTab.language)
         if (formatRes.hasChanges) {
@@ -1400,9 +1401,14 @@ export const App: React.FC = () => {
   }, [bottomPanelTab])
 
   const handleOpenProblems = useCallback(() => {
-    setIsBottomPanelOpen(true)
-    setBottomPanelTab('problems')
-  }, [])
+    setIsBottomPanelOpen((prevOpen) => {
+      if (prevOpen && bottomPanelTab === 'problems') {
+        return false
+      }
+      setBottomPanelTab('problems')
+      return true
+    })
+  }, [bottomPanelTab])
 
   const handleOpenTerminalConfig = useCallback(() => {
     setIsTerminalConfigOpen(true)
@@ -1504,11 +1510,22 @@ export const App: React.FC = () => {
       handleToggleAi,
       handleToggleDatabase,
       handleToggleRestClient,
+      handleTogglePorts,
+      handleToggleRedis,
+      handleToggleEnv,
+      handleToggleMockLab,
+      handleToggleGraphQL,
+      handleToggleDiagram,
+      handleToggleBundle,
+      handleToggleSvg,
       handleToggleSidebar,
       handleToggleNotifications,
       handleToggleTerminal,
       handleOpenTerminalConfig,
       handleOpenProblems,
+      handleRunActiveFile,
+      handleRunWithArgs,
+      handleOpenRunConfig,
       handleToggleJupyter,
       handleCreateNotebook,
       tabs,
@@ -1603,7 +1620,7 @@ export const App: React.FC = () => {
       // Run & Execution Subsystem
       { id: 'run.activeFile', title: 'Run: Run Active File in Terminal', category: 'Run', shortcut: 'Ctrl+F5', description: 'Execute active buffer with default runner', handler: () => handleRunActiveFile() },
       { id: 'run.withArgs', title: 'Run: Run with Custom Arguments...', category: 'Run', shortcut: 'Ctrl+Shift+F5', description: 'Prompt for CLI arguments and environment flags', handler: handleRunWithArgs },
-      { id: 'run.configure', title: 'Run: Configure Run Profiles & Compilers...', category: 'Run', shortcut: 'Ctrl+Alt+R', description: 'Open Run Configuration Studio', handler: handleOpenRunConfig },
+      { id: 'run.configure', title: 'Run: Configure Run Profiles & Compilers...', category: 'Run', shortcut: 'Ctrl+Alt+Shift+R', description: 'Open Run Configuration Studio', handler: handleOpenRunConfig },
 
       // Debug Subsystem
       { id: 'debug.start', title: 'Debug: Start / Continue Debugging', category: 'Run', shortcut: 'F5', description: 'Launch compiler debugger or continue execution', handler: () => { const active = tabs.find((t) => t.id === activeTabId); debugService.startDebugging(active?.id || 'main.ts') } },
@@ -1624,7 +1641,7 @@ export const App: React.FC = () => {
 
       // Google Antigravity Studio (Official ACP Client)
       { id: 'antigravity.toggle', title: 'Google Antigravity: Toggle ACP Studio', category: 'AI', shortcut: 'Ctrl+Alt+G', description: 'Open Google Antigravity Studio connected to the official agy acp CLI (Pro/Ultra/Business subscriptions)', handler: handleToggleAntigravity },
-      { id: 'antigravity.login', title: 'Google Antigravity: Connect via Official agy CLI', category: 'AI', description: 'Connect IndoctrinatedEdit to your authenticated agy acp agent', handler: () => { handleToggleAntigravity(); window.electronAPI?.antigravity?.connect({ cwd: workspacePath || undefined }); } },
+      { id: 'antigravity.login', title: 'Google Antigravity: Connect via Official agy CLI', category: 'AI', description: 'Connect IndoctrinatedEdit to your authenticated agy acp agent', handler: () => { setIsRightPaneOpen(true); setRightPaneTab('antigravity'); void antigravityAcpService.connect(workspacePath || undefined); } },
       
       // Port & Process Sentinel
       { id: 'ports.toggle', title: 'Port Sentinel: Toggle Port & Process Sentinel', category: 'Tools', shortcut: 'Ctrl+Alt+1', description: 'Inspect active listening ports, detect conflicts, probe latency, and kill processes', handler: handleTogglePorts },
@@ -1689,18 +1706,18 @@ export const App: React.FC = () => {
       { id: 'jupyter.newEdaNotebook', title: 'Jupyter: Create Exploratory Data Analysis (EDA) Pipeline Notebook', category: 'File', description: 'Create pre-populated Data Science EDA notebook with DataFrame charts and statistical summary', handler: () => handleCreateNotebook('EDA_Pipeline.ipynb', 'eda') },
 
       // Database Studio & SQL Runner
-      { id: 'db.toggle', title: 'Database: Toggle Database Studio & SQL Runner', category: 'Tools', shortcut: 'Ctrl+Shift+D', description: 'Open database schema explorer and query runner', handler: handleToggleDatabase },
-      { id: 'db.sampleEcommerce', title: 'Database: Switch to E-Commerce SQLite DB', category: 'Tools', description: 'Explore orders, customers, and product inventory schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('ecommerce_db') } },
-      { id: 'db.sampleTelemetry', title: 'Database: Switch to Cloud Telemetry Postgres DB', category: 'Tools', description: 'Explore clusters, nodes, and microservices schema', handler: () => { handleToggleDatabase(); databaseService.setActiveDatabase('telemetry_db') } },
+      { id: 'db.toggle', title: 'Database: Toggle Database Studio & SQL Runner', category: 'Tools', shortcut: 'Ctrl+Alt+D', description: 'Open database schema explorer and query runner', handler: handleToggleDatabase },
+      { id: 'db.sampleEcommerce', title: 'Database: Switch to E-Commerce SQLite DB', category: 'Tools', description: 'Explore orders, customers, and product inventory schema', handler: () => { setIsRightPaneOpen(true); setRightPaneTab('database'); databaseService.setActiveDatabase('ecommerce_db') } },
+      { id: 'db.sampleTelemetry', title: 'Database: Switch to Cloud Telemetry Postgres DB', category: 'Tools', description: 'Explore clusters, nodes, and microservices schema', handler: () => { setIsRightPaneOpen(true); setRightPaneTab('database'); databaseService.setActiveDatabase('telemetry_db') } },
 
       // REST & GraphQL API Client
       { id: 'rest.toggle', title: 'REST Client: Toggle REST & GraphQL Client', category: 'Tools', shortcut: 'Ctrl+Alt+R', description: 'Open REST and GraphQL API runner dock', handler: handleToggleRestClient },
 
       // Remote Protocol Studio (SSH, SFTP, FTP & SMTP)
-      { id: 'remote.toggle', title: 'Remote Protocol Studio: Toggle SSH, SFTP, FTP & SMTP Suite', category: 'Tools', shortcut: 'Ctrl+Alt+S', description: 'Open MobaXTerm-style remote protocol studio with SSH terminal, SFTP explorer & SMTP mail lab', handler: handleToggleRemote },
+      { id: 'remote.toggle', title: 'Remote Protocol Studio: Toggle SSH, SFTP, FTP & SMTP Suite', category: 'Tools', shortcut: 'Ctrl+Alt+E', description: 'Open MobaXTerm-style remote protocol studio with SSH terminal, SFTP explorer & SMTP mail lab', handler: handleToggleRemote },
 
       // JSON & Schema Studio
-      { id: 'json.toggle', title: 'JSON Studio: Toggle JSON & JQ Explorer', category: 'Tools', description: 'Open JSON formatter, JQ query runner, and schema validator', handler: handleToggleJson },
+      { id: 'json.toggle', title: 'JSON Studio: Toggle JSON & JQ Explorer', category: 'Tools', shortcut: 'Ctrl+Alt+Y', description: 'Open JSON formatter, JQ query runner, and schema validator', handler: handleToggleJson },
 
       // Window Zoom & Fullscreen
       { id: 'view.zoomIn', title: 'View: Zoom In', category: 'View', shortcut: 'Ctrl+=', description: 'Increase UI zoom scale', handler: () => { void window.electronAPI?.setZoom?.('in') } },
@@ -1716,7 +1733,20 @@ export const App: React.FC = () => {
       { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: () => openAiWithPrompt('Write thorough unit tests covering normal paths and edge cases for this code.') },
 
       // Model Context Protocol (MCP) Studio
-      { id: 'mcp.studio', title: 'MCP Studio: Manage Model Context Protocol Servers & Tools', category: 'AI', shortcut: 'Ctrl+Shift+M', description: 'Open MCP Server and Tooling Studio to configure stdio & SSE servers', handler: () => setIsMcpStudioOpen(true) },
+      {
+        id: 'mcp.studio',
+        title: 'MCP Studio: Manage Model Context Protocol Servers & Tools',
+        category: 'AI',
+        shortcut: 'Ctrl+Alt+U',
+        description: 'Open MCP Server and Tooling Studio to configure stdio & SSE servers',
+        handler: () => {
+          if (!extensionRegistry.isEnabled('indoctrinated.ext.mcp-studio')) {
+            notificationService.notifyWarning('MCP Studio Disabled', 'Enable "Model Context Protocol (MCP) Studio" in Extensions first.')
+            return
+          }
+          setIsMcpStudioOpen(true)
+        },
+      },
 
       // Help & Shortcuts
       { id: 'help.shortcuts', title: 'Help: Keyboard Shortcuts Reference', category: 'Help', shortcut: 'Ctrl+K Ctrl+S', description: 'Show all keyboard shortcuts', handler: () => setIsShortcutsOpen(true) },
@@ -1724,7 +1754,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleToggleJupyter, handleCreateNotebook, handleSelectTheme, openPalette, tabs, setIsMcpStudioOpen])
+  }, [activeTabId, cursorPos.line, workspacePath, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleAntigravity, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleToggleJson, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleToggleJupyter, handleCreateNotebook, handleRunActiveFile, handleRunWithArgs, handleOpenRunConfig, openAiWithPrompt, handleSelectTheme, openPalette, tabs, getActiveEditor, setIsMcpStudioOpen])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -1765,6 +1795,32 @@ export const App: React.FC = () => {
     onToggleDiagram: handleToggleDiagram,
     onToggleBundle: handleToggleBundle,
     onToggleSvg: handleToggleSvg,
+    onToggleAntigravity: handleToggleAntigravity,
+    onToggleDiff: handleToggleDiff,
+    onToggleHex: handleToggleHex,
+    onToggleSnippets: handleToggleSnippets,
+    onToggleColors: handleToggleColors,
+    onToggleJson: handleToggleJson,
+    onToggleMcpStudio: () => {
+      if (!extensionRegistry.isEnabled('indoctrinated.ext.mcp-studio')) {
+        notificationService.notifyWarning('MCP Studio Disabled', 'Enable "Model Context Protocol (MCP) Studio" in Extensions first.')
+        return
+      }
+      setIsMcpStudioOpen((prev) => !prev)
+    },
+    onWorkspaceSymbols: () => openPalette('#'),
+    onAiExplain: () => openAiWithPrompt('Explain how this code works, including edge cases and data flow.'),
+    onGitRefresh: refreshGitStatus,
+    onZoomIn: () => { void window.electronAPI?.setZoom?.('in') },
+    onZoomOut: () => { void window.electronAPI?.setZoom?.('out') },
+    onResetZoom: () => { void window.electronAPI?.setZoom?.('reset') },
+    onSplitVertical: () => editorGridRef.current?.splitVertical(),
+    onSplitHorizontal: () => editorGridRef.current?.splitHorizontal(),
+    onFocusPane: (n) => editorGridRef.current?.focusPane(`pane-${n}`),
+    isDebuggingActive: () => {
+      const s = debugService.getSessionState()
+      return s === 'running' || s === 'paused'
+    },
     onToggleJupyter: handleToggleJupyter,
     onToggleNotifications: handleToggleNotifications,
     onOpenShortcuts: () => setIsShortcutsOpen(true),

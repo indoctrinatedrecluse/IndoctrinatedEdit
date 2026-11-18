@@ -4,7 +4,10 @@ import * as monaco from 'monaco-editor'
 import { ThemeDefinition } from '@sdk/index'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { debugService } from '../../services/debugService'
+import { diagnosticsService } from '../../services/diagnosticsService'
 import { formatterService } from '../../services/formatterService'
+import { licenseService } from '../../services/licenseService'
+import { notificationService } from '../../services/notificationService'
 import { lspService, LspLocation, LspRenameResult } from '../../services/lspService'
 import { editorPreferencesService, EditorPreferences } from '../../services/editorPreferencesService'
 import { FindReplaceWidget, FindOptions } from './FindReplaceWidget'
@@ -112,6 +115,89 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         minimap: { enabled: next.minimapEnabled },
       })
     })
+  }, [])
+
+  // Sync inline Monaco editor diagnostic squiggles from diagnosticsService & Electron LSP
+  useEffect(() => {
+    const syncModelMarkers = () => {
+      const editor = editorRef.current
+      const m = monacoRef.current
+      if (!editor || !m) return
+      const model = editor.getModel()
+      if (!model) return
+
+      if (!extensionRegistry.isEnabled('indoctrinated.ext.linter')) {
+        m.editor.setModelMarkers(model, 'indoctrinated-diagnostics', [])
+        return
+      }
+
+      const group = activeFilePath
+        ? diagnosticsService.getAllGroups().find((g) => g.filePath === activeFilePath)
+        : undefined
+      const fileDiagnostics = group?.items || []
+      const markers: monaco.editor.IMarkerData[] = fileDiagnostics.map((d) => ({
+        startLineNumber: Math.max(1, d.startLineNumber),
+        startColumn: Math.max(1, d.startColumn || 1),
+        endLineNumber: Math.max(1, d.endLineNumber || d.startLineNumber),
+        endColumn: Math.max(2, d.endColumn || (d.startColumn || 1) + 4),
+        message: d.code ? `[${d.code}] ${d.message}` : d.message,
+        source: d.source || 'Indoctrinated',
+        severity:
+          d.severity === 'error'
+            ? m.MarkerSeverity.Error
+            : d.severity === 'warning'
+            ? m.MarkerSeverity.Warning
+            : d.severity === 'info'
+            ? m.MarkerSeverity.Info
+            : m.MarkerSeverity.Hint,
+      }))
+      m.editor.setModelMarkers(model, 'indoctrinated-diagnostics', markers)
+    }
+
+    syncModelMarkers()
+    const unsubDiag = diagnosticsService.subscribe(syncModelMarkers)
+    const unsubExt = extensionRegistry.subscribe(syncModelMarkers)
+    const unsubLsp = window.electronAPI?.lsp?.onDiagnostics?.((payload: any) => {
+      if (payload?.filePath && Array.isArray(payload.diagnostics)) {
+        const fname = String(payload.filePath).split(/[\\/]/).pop() || String(payload.filePath)
+        diagnosticsService.syncExternalMarkers(
+          payload.filePath,
+          fname,
+          payload.diagnostics.map((d: any) => ({
+            startLineNumber: (d.range?.start?.line ?? 0) + 1,
+            startColumn: (d.range?.start?.character ?? 0) + 1,
+            endLineNumber: (d.range?.end?.line ?? d.range?.start?.line ?? 0) + 1,
+            endColumn: (d.range?.end?.character ?? 1) + 1,
+            severity: d.severity === 1 ? 'error' : d.severity === 2 ? 'warning' : 'info',
+            message: String(d.message || ''),
+            source: d.source || 'LSP',
+            code: d.code ? String(d.code) : undefined,
+          }))
+        )
+      }
+    })
+    return () => {
+      unsubDiag()
+      unsubExt()
+      unsubLsp?.()
+    }
+  }, [activeFilePath])
+
+  const openInlineCopilotGated = useCallback(async () => {
+    if (!extensionRegistry.isEnabled('indoctrinated.ext.aiassistant')) {
+      notificationService.notifyWarning('AI Assistant Disabled', 'Enable "AI Multi-Model Assistant" in Extensions to use Inline Copilot.')
+      return
+    }
+    try {
+      const lic = await licenseService.getInfo()
+      if (!lic || lic.isTrial || !lic.isValid) {
+        notificationService.notifyWarning('PRO Feature', 'Inline AI Copilot requires an active PRO license.')
+        return
+      }
+    } catch {
+      // Allow if license service unavailable in unit tests
+    }
+    setIsCopilotOpen(true)
   }, [])
 
   // Auto-relayout on container resize / split pane drag
@@ -293,8 +379,13 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
   const handleSelectAllMatches = useCallback(() => {
     const editor = editorRef.current
+    if (!editor) return
     const matches = findMatchesRef.current
-    if (!editor || matches.length === 0) return
+    if (matches.length === 0) {
+      editor.getAction('editor.action.selectHighlights')?.run()
+      editor.focus()
+      return
+    }
 
     const selections = matches.map((m) => new monaco.Selection(
       m.range.startLineNumber,
@@ -361,6 +452,10 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     formatDocument: async () => {
       const editor = editorRef.current
       if (!editor) return
+      if (!extensionRegistry.isEnabled('indoctrinated.ext.prettier-formatter')) {
+        notificationService.notifyWarning('Formatter Disabled', 'Enable "Universal Code Formatter (Prettier)" in Extensions to format documents.')
+        return
+      }
       const formatAction = editor.getAction('editor.action.formatDocument')
       if (formatAction) {
         await formatAction.run()
@@ -572,7 +667,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       setIsMergeStudioOpen(true)
     },
     openCopilot: () => {
-      setIsCopilotOpen(true)
+      void openInlineCopilotGated()
     },
   }))
 
@@ -683,6 +778,26 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     editorRef.current = editor
     monacoRef.current = monacoInstance
 
+    // Configure TypeScript/JavaScript compiler options so React TSX JSX & Angular/NestJS @Decorators validate cleanly
+    try {
+      const tsLang = monacoInstance.languages?.typescript as any
+      if (tsLang?.typescriptDefaults?.setCompilerOptions) {
+        tsLang.typescriptDefaults.setCompilerOptions({
+          target: tsLang.ScriptTarget?.ESNext ?? 99,
+          module: tsLang.ModuleKind?.ESNext ?? 99,
+          moduleResolution: tsLang.ModuleResolutionKind?.NodeJs ?? 2,
+          jsx: tsLang.JsxEmit?.ReactJSX ?? 4,
+          experimentalDecorators: true,
+          emitDecoratorMetadata: true,
+          allowNonTsExtensions: true,
+          allowSyntheticDefaultImports: true,
+          esModuleInterop: true,
+        })
+      }
+    } catch {
+      // Ignore in mocked/headless Monaco environments
+    }
+
     registerAndApplyTheme(monacoInstance, theme)
 
     // Track cursor position for reactive status bar updates and breadcrumbs
@@ -760,9 +875,9 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       setIsRenameOpen(true)
     })
 
-    // Register Ctrl+I (Inline AI Copilot)
+    // Register Ctrl+I (Inline AI Copilot — gated on AI extension + PRO license)
     editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyI, () => {
-      setIsCopilotOpen(true)
+      void openInlineCopilotGated()
     })
 
     editor.addAction({
@@ -772,7 +887,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       contextMenuGroupId: '1_modification',
       contextMenuOrder: 1.1,
       run: () => {
-        setIsCopilotOpen(true)
+        void openInlineCopilotGated()
       },
     })
 

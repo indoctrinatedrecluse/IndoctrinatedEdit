@@ -463,6 +463,13 @@ class ExtensionRegistry {
     this.isConstructing = false
     // Batch-index all registered manifests ONCE into the conflict arbiter
     this.reindexConflicts()
+    this.syncVisualExtensionState()
+  }
+
+  private syncVisualExtensionState(): void {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.dataset.liquidGlassExt = this.isEnabled('indoctrinated.ext.liquid-glass-fx') ? 'on' : 'off'
+    }
   }
 
   private loadDisabledState(): void {
@@ -545,6 +552,7 @@ class ExtensionRegistry {
 
     this.persistDisabledState()
     this.reindexConflicts()
+    this.syncVisualExtensionState()
     outputChannelService.append('Extensions', `Disabled extension: ${ext.name} (${id})`, 'info')
     this.notify()
     return true
@@ -557,6 +565,7 @@ class ExtensionRegistry {
     this.extensions.set(id, { ...ext, status: 'Active' })
     this.persistDisabledState()
     this.reindexConflicts()
+    this.syncVisualExtensionState()
 
     // Re-register Monaco providers live if Monaco is already initialized
     if (this.monacoInstance && this.registrars.has(id) && !this.disposablesByExtension.has(id)) {
@@ -608,7 +617,11 @@ class ExtensionRegistry {
       ? new Proxy(monacoInstance.languages, {
           get(target, prop, receiver) {
             const orig = Reflect.get(target, prop, receiver)
-            if (typeof orig === 'function' && typeof prop === 'string' && prop.startsWith('register')) {
+            if (
+              typeof orig === 'function' &&
+              typeof prop === 'string' &&
+              (prop.startsWith('register') || prop === 'setLanguageConfiguration' || prop === 'setMonarchTokensProvider')
+            ) {
               return (...args: unknown[]) => {
                 const res = orig.apply(target, args)
                 track(res)
