@@ -382,6 +382,7 @@ export interface ToolExecutionContext {
   mode?: 'plan' | 'act'
   workspaceRoot?: string
   activeFileName?: string
+  activeFileLanguage?: string
   activeFileContent?: string
   openFiles?: Array<{ path: string; name: string; content?: string }>
   onOpenFile?: (filePath: string, line?: number, column?: number) => void
@@ -504,6 +505,21 @@ export class AiToolExecutor {
 
         case 'list_workspace_files': {
           const folderPath = String(call.arguments.folderPath || context.workspaceRoot || '')
+          const maxDepth = call.arguments.maxDepth ? Math.max(1, Number(call.arguments.maxDepth)) : undefined
+          if (maxDepth && folderPath && typeof window !== 'undefined' && window.electronAPI?.workspace?.findFiles) {
+            const files = await window.electronAPI.workspace.findFiles({
+              rootDir: folderPath,
+              maxDepth,
+              maxFiles: 300,
+            })
+            const formatted = files.map((f) => `📄 ${f.relativePath}`).join('\n')
+            return {
+              toolCallId: call.id,
+              toolName: call.toolName,
+              success: true,
+              output: `Workspace Files in "${folderPath}" (maxDepth=${maxDepth}):\n${formatted || '(empty)'}`,
+            }
+          }
           if (typeof window !== 'undefined' && window.electronAPI?.readFolder) {
             const result = await window.electronAPI.readFolder(folderPath)
             if (result && result.files) {
@@ -535,7 +551,30 @@ export class AiToolExecutor {
             return { toolCallId: call.id, toolName: call.toolName, success: false, output: '', error: 'Query is required' }
           }
 
+          const isRegex = !!call.arguments.isRegex
+          const filePattern = typeof call.arguments.filePattern === 'string' ? call.arguments.filePattern : undefined
           const matches: string[] = []
+          const seenKeys = new Set<string>()
+
+          // 1. Search real workspace files on disk via Electron IPC when available
+          if (context.workspaceRoot && typeof window !== 'undefined' && window.electronAPI?.workspace?.searchText) {
+            const diskMatches = await window.electronAPI.workspace.searchText({
+              rootDir: context.workspaceRoot,
+              query,
+              isRegex,
+              filePattern,
+              maxMatches: 60,
+            })
+            for (const m of diskMatches) {
+              const key = `${m.relativePath}:${m.lineNumber}`
+              if (!seenKeys.has(key)) {
+                seenKeys.add(key)
+                matches.push(`${m.relativePath}:${m.lineNumber}: ${m.lineText}`)
+              }
+            }
+          }
+
+          // 2. Also search open editor buffers (captures unsaved edits & browser-mode tests)
           const openFiles = [...(context.openFiles || [])]
           if (
             context.activeFileName &&
@@ -545,21 +584,30 @@ export class AiToolExecutor {
             openFiles.push({ path: context.activeFileName, name: context.activeFileName, content: context.activeFileContent })
           }
 
-          const isRegex = !!call.arguments.isRegex
           let re: RegExp
           try {
-            // Do NOT use the 'g' flag with RegExp.test() in a loop (stateful lastIndex skips alternating matches)
             re = isRegex ? new RegExp(query) : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
           } catch (e: any) {
             return { toolCallId: call.id, toolName: call.toolName, success: false, output: '', error: `Invalid regex: ${e.message}` }
           }
 
+          let fileFilterRe: RegExp | null = null
+          if (filePattern && filePattern.trim()) {
+            const esc = filePattern.trim().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
+            fileFilterRe = new RegExp(esc, 'i')
+          }
+
           for (const file of openFiles) {
             if (!file.content) continue
+            if (fileFilterRe && !fileFilterRe.test(file.name) && !fileFilterRe.test(file.path)) continue
             const lines = file.content.split('\n')
             lines.forEach((line, idx) => {
               if (re.test(line)) {
-                matches.push(`${file.name}:${idx + 1}: ${line.trim()}`)
+                const key = `${file.name}:${idx + 1}`
+                if (!seenKeys.has(key)) {
+                  seenKeys.add(key)
+                  matches.push(`${file.name}:${idx + 1}: ${line.trim()}`)
+                }
               }
             })
           }
@@ -569,8 +617,8 @@ export class AiToolExecutor {
             toolName: call.toolName,
             success: true,
             output: matches.length > 0
-              ? `Found ${matches.length} matches:\n${matches.slice(0, 30).join('\n')}`
-              : `No matches found for "${query}" in active files.`,
+              ? `Found ${matches.length} matches:\n${matches.slice(0, 50).join('\n')}`
+              : `No matches found for "${query}".`,
           }
         }
 
@@ -613,6 +661,21 @@ export class AiToolExecutor {
         }
 
         case 'get_git_diff': {
+          if (typeof window !== 'undefined' && window.electronAPI?.git?.diff) {
+            const diffText = await window.electronAPI.git.diff({
+              staged: Boolean(call.arguments.stagedOnly),
+              filePath: typeof call.arguments.filePath === 'string' ? call.arguments.filePath : undefined,
+              cwd: context.workspaceRoot,
+            })
+            if (diffText && diffText.trim()) {
+              return {
+                toolCallId: call.id,
+                toolName: call.toolName,
+                success: true,
+                output: AiGuardrailService.sanitizeOutput(diffText.slice(0, 16000)),
+              }
+            }
+          }
           if (typeof window !== 'undefined' && window.electronAPI?.git?.getRepoStatus) {
             const status = await window.electronAPI.git.getRepoStatus(context.workspaceRoot)
             if (status && status.isRepo) {
@@ -757,15 +820,38 @@ export class AiToolExecutor {
             }
           }
 
+          const targetCwd = typeof call.arguments.cwd === 'string' && call.arguments.cwd.trim()
+            ? call.arguments.cwd.trim()
+            : context.workspaceRoot
+          const timeoutMs = call.arguments.timeoutMs ? Number(call.arguments.timeoutMs) : 60000
+
+          // Prefer direct Electron command execution with real exitCode + stdout/stderr + cwd + timeout
+          if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+            const execRes = await window.electronAPI.workspace.execCommand({
+              command: command.trim(),
+              cwd: targetCwd,
+              timeoutMs,
+            })
+            const combined = [execRes.stdout, execRes.stderr].filter(Boolean).join('\n').trim()
+            return {
+              toolCallId: call.id,
+              toolName: call.toolName,
+              success: execRes.exitCode === 0,
+              output: AiGuardrailService.sanitizeOutput(
+                combined || `Command exited with code ${execRes.exitCode} (${execRes.durationMs}ms)`
+              ),
+              error: execRes.exitCode === 0 ? undefined : `Command exited with code ${execRes.exitCode}`,
+            }
+          }
+
           let activeTab = terminalService.getActiveTab()
           if (!activeTab) {
-            activeTab = await terminalService.createTab()
+            activeTab = await terminalService.createTab({ cwd: targetCwd })
           }
 
           const beforeLen = activeTab.buffer.length
           await terminalService.write(activeTab.id, command.trim() + '\r\n')
 
-          // Capture output after brief execution pause
           await new Promise((r) => setTimeout(r, 800))
           const currentTab = terminalService.getTabs().find((t) => t.id === activeTab!.id)
           const newBuffer = currentTab ? currentTab.buffer.slice(beforeLen).join('\n') : ''
@@ -781,17 +867,27 @@ export class AiToolExecutor {
         case 'trigger_project_run': {
           const runService = RunService.getInstance()
           const profiles = runService.getProfiles()
-          const target = profiles[0]
+          const hint = String(call.arguments.targetLanguageOrId || call.arguments.language || call.arguments.profileId || '').trim().toLowerCase()
+          const target =
+            (hint
+              ? profiles.find((p) => p.id.toLowerCase() === hint || p.language.toLowerCase() === hint || p.name.toLowerCase().includes(hint))
+              : undefined) ||
+            (context.activeFileLanguage ? runService.getProfileForLanguage(context.activeFileLanguage) : undefined) ||
+            profiles[0]
+
           if (target) {
-            const resolved = runService.resolveRunCommand(target, {
+            const runCtx = {
               filePath: context.activeFileName,
               workspacePath: context.workspaceRoot,
-            })
+            }
+            const resolved = runService.resolveRunCommand(target, runCtx)
+            const executed = await runService.execute(target, runCtx)
             return {
               toolCallId: call.id,
               toolName: call.toolName,
-              success: true,
-              output: `Triggered Run Profile: "${target.name}" -> Command: ${resolved.command}`,
+              success: executed,
+              output: `Executed Run Profile "${target.name}" -> ${resolved.command}`,
+              error: executed ? undefined : `Failed to execute profile "${target.name}"`,
             }
           }
           return { toolCallId: call.id, toolName: call.toolName, success: false, output: '', error: 'No configured Run Profiles found' }

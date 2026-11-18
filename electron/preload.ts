@@ -65,6 +65,24 @@ export interface ElectronWorkspaceToolsAPI {
   readFileBinary: (filePath: string, maxBytes?: number) => Promise<Uint8Array>
 }
 
+export interface ElectronMcpStdioSpec {
+  id: string
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
+  timeoutMs?: number
+}
+
+export interface ElectronMcpAPI {
+  ping: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; latencyMs?: number; error?: string }>
+  listTools: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; tools: any[]; error?: string }>
+  listResources: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; resources: any[]; error?: string }>
+  listPrompts: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; prompts: any[]; error?: string }>
+  callTool: (spec: ElectronMcpStdioSpec, toolName: string, args?: Record<string, any>) => Promise<{ success: boolean; result?: any; error?: string }>
+  disconnect: (serverId: string) => Promise<boolean>
+}
+
 export interface ElectronAiAPI {
   listOllamaModels: (host?: string) => Promise<string[]>
   cancelStream: (requestId: string) => Promise<void>
@@ -283,6 +301,9 @@ export interface ElectronAPI {
   // Workspace CLI, search, bundle scan & binary read tools
   workspace: ElectronWorkspaceToolsAPI
 
+  // Real MCP JSON-RPC 2.0 stdio client operations
+  mcp: ElectronMcpAPI
+
   // Lifecycle notification
   notifyReady: () => Promise<void>
 }
@@ -329,6 +350,15 @@ const api: ElectronAPI = {
     searchText: (options) => ipcRenderer.invoke('workspace:searchText', options),
     scanBundle: (rootDir) => ipcRenderer.invoke('workspace:scanBundle', rootDir),
     readFileBinary: (filePath, maxBytes) => ipcRenderer.invoke('workspace:readFileBinary', filePath, maxBytes),
+  },
+
+  mcp: {
+    ping: (spec) => ipcRenderer.invoke('mcp:ping', spec),
+    listTools: (spec) => ipcRenderer.invoke('mcp:listTools', spec),
+    listResources: (spec) => ipcRenderer.invoke('mcp:listResources', spec),
+    listPrompts: (spec) => ipcRenderer.invoke('mcp:listPrompts', spec),
+    callTool: (spec, toolName, args) => ipcRenderer.invoke('mcp:callTool', spec, toolName, args),
+    disconnect: (serverId) => ipcRenderer.invoke('mcp:disconnect', serverId),
   },
 
   ai: {

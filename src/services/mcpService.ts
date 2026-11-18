@@ -527,8 +527,25 @@ export class McpService {
         return { success: ok, latencyMs: latency, error: server.lastError }
       }
 
-      // stdio server ping
-      await new Promise((r) => setTimeout(r, 80))
+      // Real stdio MCP server ping via Electron JSON-RPC 2.0 client
+      if (server.transport === 'stdio' && server.command && typeof window !== 'undefined' && window.electronAPI?.mcp?.ping) {
+        const res = await window.electronAPI.mcp.ping({
+          id: server.id,
+          command: server.command,
+          args: server.args,
+          env: server.env,
+          timeoutMs: server.timeoutMs,
+        })
+        const latency = res.latencyMs ?? (Date.now() - start)
+        server.status = res.success ? 'connected' : 'error'
+        server.latencyMs = latency
+        server.lastActiveAt = Date.now()
+        server.lastError = res.error
+        this.notifyServerListeners()
+        return { success: res.success, latencyMs: latency, error: res.error }
+      }
+
+      // Fallback when running in browser/unit-test without Electron stdio IPC
       const latency = Date.now() - start
       server.status = 'connected'
       server.latencyMs = latency
@@ -762,8 +779,33 @@ export class McpService {
     try {
       let responseText = ''
 
-      // Real JSON-RPC 2.0 `tools/call` dispatch for remote SSE / HTTP MCP servers
-      if (server.transport === 'sse' && server.url) {
+      // Real JSON-RPC 2.0 `tools/call` dispatch for local stdio MCP servers via Electron IPC
+      if (
+        server.transport === 'stdio' &&
+        server.command &&
+        !BUILTIN_SERVER_TOOLS[server.id] &&
+        typeof window !== 'undefined' &&
+        window.electronAPI?.mcp?.callTool
+      ) {
+        const res = await window.electronAPI.mcp.callTool(
+          {
+            id: server.id,
+            command: server.command,
+            args: server.args,
+            env: server.env,
+            timeoutMs: server.timeoutMs,
+          },
+          actualToolName,
+          args
+        )
+        if (!res.success) {
+          throw new Error(res.error || `Stdio MCP server "${server.name}" call failed`)
+        }
+        const contentBlocks = res.result?.content
+        responseText = Array.isArray(contentBlocks)
+          ? contentBlocks.map((c: any) => c.text || JSON.stringify(c)).join('\n')
+          : JSON.stringify(res.result ?? {}, null, 2)
+      } else if (server.transport === 'sse' && server.url) {
         try {
           const rpcRes = await fetch(server.url, {
             method: 'POST',
@@ -797,15 +839,25 @@ export class McpService {
           throw new Error(`SSE MCP server "${server.name}" call failed: ${sseErr?.message || String(sseErr)}`)
         }
       } else if (actualToolName === 'fetch_markdown') {
-        const url = String(args.url || '')
+        const url = String(args.url || '').trim()
         if (!url) throw new Error('Parameter "url" is required')
-        try {
-          const res = await fetch(url, { signal: AbortSignal.timeout(server.timeoutMs || 15000) })
-          const body = await res.text()
-          responseText = `Successfully fetched URL [${url}] (${body.length} bytes):\n\n${body.slice(0, 4000)}`
-        } catch {
-          responseText = `Simulated Markdown content for "${url}":\n# Documentation Overview\n- Endpoint: ${url}\n- Status: 200 OK\n- Protocol: MCP Web Fetcher v1.0`
+        if (!/^https?:\/\//i.test(url)) throw new Error('URL must begin with http:// or https://')
+        const res = await fetch(url, { signal: AbortSignal.timeout(server.timeoutMs || 15000) })
+        if (!res.ok) {
+          throw new Error(`Failed to fetch "${url}": HTTP ${res.status} ${res.statusText}`)
         }
+        const rawBody = await res.text()
+        const markdownBody = rawBody
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, lvl, txt) => `\n${'#'.repeat(Number(lvl))} ${txt.replace(/<[^>]+>/g, '').trim()}\n`)
+          .replace(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, txt) => `[${txt.replace(/<[^>]+>/g, '').trim()}](${href})`)
+          .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, txt) => `- ${txt.replace(/<[^>]+>/g, '').trim()}\n`)
+          .replace(/<\/(p|div|section|article|br)>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+        responseText = `Fetched [${url}] (${rawBody.length} bytes):\n\n${markdownBody.slice(0, 6000)}`
       } else if (actualToolName === 'search_gemini_docs') {
         const query = String(args.query || '')
         const lang = String(args.language || 'typescript')
@@ -820,28 +872,49 @@ export class McpService {
           `Use \`from google import genai\` or \`import { GoogleGenAI } from '@google/genai'\`.\n` +
           `Configure your API key using the \`GEMINI_API_KEY\` environment variable.`
       } else if (actualToolName === 'git_log_history') {
-        const max = Number(args.maxCount) || 5
-        let branchHint = 'master'
-        if (typeof window !== 'undefined' && window.electronAPI?.git?.getRepoStatus) {
-          try {
-            const st = await window.electronAPI.git.getRepoStatus()
-            if (st?.branch) branchHint = st.branch
-          } catch { /* fallback */ }
+        const max = Math.min(Math.max(Number(args.maxCount) || 10, 1), 100)
+        if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+          const execRes = await window.electronAPI.workspace.execCommand({
+            command: `git log -n ${max} --oneline --decorate`,
+            cwd: typeof args.cwd === 'string' ? args.cwd : undefined,
+          })
+          if (execRes.exitCode === 0 && execRes.stdout.trim()) {
+            responseText = `Git Log (last ${max} commits):\n${execRes.stdout.trim()}`
+          } else {
+            throw new Error(execRes.stderr.trim() || 'git log failed')
+          }
+        } else {
+          responseText = `Git Log requires desktop Git CLI environment.`
         }
-        responseText = `Git Log (last ${max} commits on ${branchHint}):\n` +
-          `* HEAD (${branchHint}) - Active working tree\n` +
-          `* Use get_git_status / get_git_diff for live unstaged and staged file changes.`
       } else if (actualToolName === 'git_show_commit') {
-        responseText = `Commit details for ${args.commitHash || 'HEAD'}:\nStatus: verified commit reference.`
-      } else if (actualToolName === 'git_branch_list') {
-        let activeBranch = 'master'
-        if (typeof window !== 'undefined' && window.electronAPI?.git?.getRepoStatus) {
-          try {
-            const st = await window.electronAPI.git.getRepoStatus()
-            if (st?.branch) activeBranch = st.branch
-          } catch { /* fallback */ }
+        const ref = String(args.commitHash || 'HEAD').replace(/[^a-zA-Z0-9._~^/-]/g, '')
+        if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+          const execRes = await window.electronAPI.workspace.execCommand({
+            command: `git show --stat ${ref}`,
+            cwd: typeof args.cwd === 'string' ? args.cwd : undefined,
+          })
+          if (execRes.exitCode === 0) {
+            responseText = execRes.stdout.trim().slice(0, 8000)
+          } else {
+            throw new Error(execRes.stderr.trim() || `git show ${ref} failed`)
+          }
+        } else {
+          responseText = `Commit details for ${ref} require desktop Git CLI environment.`
         }
-        responseText = `Branches:\n* ${activeBranch}\n  remotes/origin/${activeBranch}`
+      } else if (actualToolName === 'git_branch_list') {
+        if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+          const execRes = await window.electronAPI.workspace.execCommand({
+            command: 'git branch -a',
+            cwd: typeof args.cwd === 'string' ? args.cwd : undefined,
+          })
+          if (execRes.exitCode === 0) {
+            responseText = `Branches:\n${execRes.stdout.trim()}`
+          } else {
+            throw new Error(execRes.stderr.trim() || 'git branch failed')
+          }
+        } else {
+          responseText = `Branches listing requires desktop Git CLI environment.`
+        }
       } else if (actualToolName === 'read_file_content') {
         const filePath = String(args.path || '')
         const workspaceRoot = typeof args.workspaceRoot === 'string' ? args.workspaceRoot : undefined
@@ -878,12 +951,23 @@ export class McpService {
         }
       } else if (actualToolName === 'find_files_by_pattern') {
         const searchDir = String(args.directory || args.path || '.')
+        const pattern = String(args.pattern || '*')
         const workspaceRoot = typeof args.workspaceRoot === 'string' ? args.workspaceRoot : undefined
         const pathCheck = validateWorkspacePath(searchDir, workspaceRoot)
         if (!pathCheck.valid) {
           throw new Error(pathCheck.error || `Access to directory "${searchDir}" is blocked by security guardrails.`)
         }
-        responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
+        if (typeof window !== 'undefined' && window.electronAPI?.workspace?.findFiles) {
+          const files = await window.electronAPI.workspace.findFiles({ rootDir: pathCheck.resolvedPath, maxDepth: 8, maxFiles: 500 })
+          const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
+          const re = new RegExp(escaped, 'i')
+          const matched = files.filter((f) => re.test(f.relativePath) || re.test(f.name))
+          responseText = matched.length > 0
+            ? matched.slice(0, 100).map((f) => f.relativePath).join('\n')
+            : `No files matched pattern "${pattern}" in "${searchDir}".`
+        } else {
+          throw new Error(`Filesystem MCP search unavailable outside desktop environment.`)
+        }
       } else if (actualToolName === 'create_entities') {
         let items: McpMemoryEntity[] = []
         if (Array.isArray(args.entities)) {

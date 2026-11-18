@@ -14,6 +14,7 @@ import {
   applyGitPatch,
 } from './git-service'
 import { setupWorkspaceToolsIPC } from './workspace-tools-service'
+import { mcpClientManager, setupMcpClientIPC } from './mcp-client-service'
 import {
   setupIPC as setupAiIPC,
 } from './ai-service'
@@ -448,6 +449,11 @@ ipcMain.handle('git:applyPatch', async (_, patch: string, options?: { cached?: b
 setupWorkspaceToolsIPC(ipcMain)
 
 // ==========================================
+// Real MCP Stdio JSON-RPC 2.0 Client IPC
+// ==========================================
+setupMcpClientIPC(ipcMain)
+
+// ==========================================
 // AI Multi-Model Service IPC Handlers
 // ==========================================
 setupAiIPC(ipcMain)
@@ -503,6 +509,7 @@ app.on('second-instance', () => {
 app.on('before-quit', () => {
   try {
     terminalService.killAll()
+    mcpClientManager.disposeAll()
     void antigravityAcpClient.disconnect()
   } catch {}
 })
@@ -510,6 +517,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   try {
     terminalService.killAll()
+    mcpClientManager.disposeAll()
     void antigravityAcpClient.disconnect()
   } catch {}
 })
