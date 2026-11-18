@@ -504,7 +504,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
         )}
         {activeTab === 'ports' && <PortSentinelView />}
         {activeTab === 'redis' && <RedisStudioView />}
-        {activeTab === 'env' && <EnvVaultView />}
+        {activeTab === 'env' && <EnvVaultView workspaceRoot={workspaceRoot} />}
         {activeTab === 'mocklab' && (
           isUnlocked ? (
             <MockLabView />

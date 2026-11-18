@@ -17,7 +17,7 @@ import {
 import { cryptoDevToolsService, JwtDecoded, HashResult, EpochConverted, KeyPairResult } from '../../services/cryptoDevToolsService'
 import './CryptoDevToolsView.css'
 
-type CryptoTab = 'jwt' | 'hashes' | 'encoders' | 'generators' | 'epoch' | 'formats' | 'keypair'
+type CryptoTab = 'jwt' | 'hashes' | 'encoders' | 'generators' | 'epoch' | 'formats' | 'keypair' | 'totp' | 'x509' | 'aes'
 
 interface CryptoDevToolsViewProps {
   onClose?: () => void
@@ -32,6 +32,8 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   // 1. JWT State
   const [jwtInput, setJwtInput] = useState<string>('')
   const [decodedJwt, setDecodedJwt] = useState<JwtDecoded | null>(null)
+  const [jwtSecret, setJwtSecret] = useState<string>('my-256-bit-secret')
+  const [jwtVerifyResult, setJwtVerifyResult] = useState<{ valid: boolean; algorithm: string; reason?: string } | null>(null)
 
   // 2. Hash State
   const [hashInput, setHashInput] = useState<string>('Hello IndoctrinatedEdit')
@@ -73,6 +75,21 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
   // 7. KeyPair State
   const [keyPairType, setKeyPairType] = useState<KeyPairResult['keyType']>('RSA-2048')
   const [keyPairResult, setKeyPairResult] = useState<KeyPairResult | null>(null)
+  const [isGeneratingKey, setIsGeneratingKey] = useState<boolean>(false)
+
+  // 8. TOTP 2FA State (RFC 6238 Web Crypto HMAC-SHA1)
+  const [totpSecret, setTotpSecret] = useState<string>('JBSWY3DPEHPK3PXP')
+  const [totpData, setTotpData] = useState<{ code: string; remainingSeconds: number; uri: string } | null>(null)
+
+  // 9. X.509 Certificate Inspector State (ASN.1 DER)
+  const [x509Pem, setX509Pem] = useState<string>('')
+  const [x509Result, setX509Result] = useState<ReturnType<typeof cryptoDevToolsService.inspectCertificate> | null>(null)
+
+  // 10. AES-256-GCM Encrypt/Decrypt State
+  const [aesPassphrase, setAesPassphrase] = useState<string>('')
+  const [aesInput, setAesInput] = useState<string>('Top secret payload')
+  const [aesOutput, setAesOutput] = useState<string>('')
+  const [aesError, setAesError] = useState<string | null>(null)
 
   // Initialize defaults
   useEffect(() => {
@@ -86,7 +103,16 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
     handleConvertEpoch(epochInput)
     handleTransformFormat(formatInput, formatFrom, formatTo)
     handleGenerateKeyPair(keyPairType)
+    void cryptoDevToolsService.generateTotpAsync(totpSecret).then(setTotpData)
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'totp') return
+    const tick = () => void cryptoDevToolsService.generateTotpAsync(totpSecret).then(setTotpData)
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [activeTab, totpSecret])
 
   const copyToClipboard = (text: string, keyId: string) => {
     navigator.clipboard.writeText(text)
@@ -129,8 +155,14 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
     setFormatOutput(cryptoDevToolsService.transformFormat(input, from, to))
   }
 
-  const handleGenerateKeyPair = (type: KeyPairResult['keyType']) => {
-    setKeyPairResult(cryptoDevToolsService.generateKeyPair(type))
+  const handleGenerateKeyPair = async (type: KeyPairResult['keyType']) => {
+    setIsGeneratingKey(true)
+    try {
+      const kp = await cryptoDevToolsService.generateKeyPairAsync(type)
+      setKeyPairResult(kp)
+    } finally {
+      setIsGeneratingKey(false)
+    }
   }
 
   return (
@@ -197,6 +229,30 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
           <Key size={12} />
           <span>RSA / KeyPair</span>
         </button>
+
+        <button
+          className={`crypto-nav-btn glass-interactive ${activeTab === 'totp' ? 'active' : ''}`}
+          onClick={() => setActiveTab('totp')}
+        >
+          <Clock size={12} />
+          <span>TOTP 2FA</span>
+        </button>
+
+        <button
+          className={`crypto-nav-btn glass-interactive ${activeTab === 'x509' ? 'active' : ''}`}
+          onClick={() => setActiveTab('x509')}
+        >
+          <ShieldCheck size={12} />
+          <span>X.509 Cert</span>
+        </button>
+
+        <button
+          className={`crypto-nav-btn glass-interactive ${activeTab === 'aes' ? 'active' : ''}`}
+          onClick={() => setActiveTab('aes')}
+        >
+          <Lock size={12} />
+          <span>AES-GCM</span>
+        </button>
       </div>
 
       {/* Main Tab Viewport */}
@@ -220,10 +276,53 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
             <textarea
               className="crypto-textarea jwt-raw-input glass-panel"
               value={jwtInput}
-              onChange={(e) => handleJwtChange(e.target.value)}
+              onChange={(e) => {
+                handleJwtChange(e.target.value)
+                setJwtVerifyResult(null)
+              }}
               placeholder="Paste encoded JWT token (eyJhbGciOi...)"
               rows={3}
             />
+
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+              <input
+                type="password"
+                className="crypto-input glass-panel"
+                style={{ flex: 1, minWidth: 160, padding: '4px 8px', fontSize: 11 }}
+                placeholder="HMAC Secret for HS256/384/512 sign & verify..."
+                value={jwtSecret}
+                onChange={(e) => setJwtSecret(e.target.value)}
+              />
+              <button
+                className="section-action-btn glass-interactive"
+                onClick={async () => {
+                  const res = await cryptoDevToolsService.verifyJwtAsync(jwtInput, jwtSecret)
+                  setJwtVerifyResult(res)
+                }}
+              >
+                <ShieldCheck size={11} /> Verify Signature
+              </button>
+              <button
+                className="section-action-btn glass-interactive"
+                onClick={async () => {
+                  const payload = decodedJwt && !decodedJwt.error && Object.keys(decodedJwt.payload).length > 0
+                    ? decodedJwt.payload
+                    : { sub: 'usr_1', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }
+                  const signed = await cryptoDevToolsService.signJwtAsync(payload, jwtSecret, 'HS256')
+                  handleJwtChange(signed)
+                  setJwtVerifyResult({ valid: true, algorithm: 'HS256' })
+                }}
+              >
+                <Lock size={11} /> Sign HS256
+              </button>
+              {jwtVerifyResult && (
+                <span className={`jwt-badge ${jwtVerifyResult.valid ? 'valid' : 'expired'}`}>
+                  {jwtVerifyResult.valid
+                    ? `✔ Valid ${jwtVerifyResult.algorithm} Signature`
+                    : `✖ Invalid: ${jwtVerifyResult.reason || 'Mismatch'}`}
+                </span>
+              )}
+            </div>
 
             {decodedJwt && (
               <div className="jwt-analysis-grid">
@@ -588,8 +687,12 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
                   </button>
                 ))}
               </div>
-              <button className="section-action-btn glass-interactive" onClick={() => handleGenerateKeyPair(keyPairType)}>
-                <RefreshCw size={11} /> Generate Keypair
+              <button
+                className="section-action-btn glass-interactive"
+                disabled={isGeneratingKey}
+                onClick={() => void handleGenerateKeyPair(keyPairType)}
+              >
+                <RefreshCw size={11} className={isGeneratingKey ? 'animate-spin' : ''} /> {isGeneratingKey ? 'Generating...' : 'Generate Keypair'}
               </button>
             </div>
 
@@ -616,6 +719,130 @@ export const CryptoDevToolsView: React.FC<CryptoDevToolsViewProps> = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB 8: RFC 6238 TOTP 2FA AUTHENTICATOR */}
+        {activeTab === 'totp' && (
+          <div className="crypto-section" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <span className="section-label">RFC 6238 TOTP AUTHENTICATOR (WEB CRYPTO HMAC-SHA1)</span>
+            <input
+              type="text"
+              className="crypto-input glass-panel"
+              style={{ padding: '6px 10px', fontFamily: 'monospace' }}
+              value={totpSecret}
+              onChange={(e) => setTotpSecret(e.target.value)}
+              placeholder="Base32 Secret (e.g. JBSWY3DPEHPK3PXP)"
+            />
+            {totpData && (
+              <div className="glass-panel" style={{ padding: 14, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '0.18em', fontFamily: 'monospace', color: '#30D158' }}>
+                    {totpData.code.slice(0, 3)} {totpData.code.slice(3)}
+                  </div>
+                  <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>
+                    Refreshes in {totpData.remainingSeconds}s • 30s period • SHA-1
+                  </div>
+                </div>
+                <button className="section-action-btn glass-interactive" onClick={() => copyToClipboard(totpData.code, 'totp')}>
+                  {copiedKey === 'totp' ? <Check size={12} /> : <Copy size={12} />} Copy Code
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 9: X.509 ASN.1 DER CERTIFICATE INSPECTOR */}
+        {activeTab === 'x509' && (
+          <div className="crypto-section" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="section-toolbar">
+              <span className="section-label">X.509 CERTIFICATE INSPECTOR (ASN.1 DER)</span>
+              <button
+                className="section-action-btn glass-interactive"
+                onClick={() => setX509Result(cryptoDevToolsService.inspectCertificate(x509Pem))}
+              >
+                <ShieldCheck size={11} /> Inspect PEM
+              </button>
+            </div>
+            <textarea
+              className="crypto-textarea glass-panel"
+              rows={5}
+              placeholder="-----BEGIN CERTIFICATE-----&#10;MII...&#10;-----END CERTIFICATE-----"
+              value={x509Pem}
+              onChange={(e) => {
+                setX509Pem(e.target.value)
+                if (e.target.value.trim()) setX509Result(cryptoDevToolsService.inspectCertificate(e.target.value))
+              }}
+            />
+            {x509Result && (
+              <div className="glass-panel" style={{ padding: 10, borderRadius: 8, fontSize: 11, fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div><strong>Valid PEM:</strong> {x509Result.isValid ? 'Yes' : 'No'} | <strong>Expired:</strong> {x509Result.isExpired ? 'Yes' : `No (${x509Result.daysRemaining}d left)`}</div>
+                <div><strong>Subject:</strong> {JSON.stringify(x509Result.subject)}</div>
+                <div><strong>Issuer:</strong> {JSON.stringify(x509Result.issuer)}</div>
+                <div><strong>Validity:</strong> {x509Result.validFrom} → {x509Result.validTo}</div>
+                <div><strong>Algorithm:</strong> {x509Result.algorithm}</div>
+                <div><strong>Serial:</strong> {x509Result.serialNumber}</div>
+                <div><strong>SANs:</strong> {x509Result.san.join(', ') || 'None'}</div>
+                <div style={{ wordBreak: 'break-all' }}><strong>SHA-256:</strong> {x509Result.fingerprintSha256}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 10: AES-256-GCM ENCRYPT / DECRYPT */}
+        {activeTab === 'aes' && (
+          <div className="crypto-section" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className="section-label">AES-256-GCM AUTHENTICATED ENCRYPTION (PBKDF2-SHA256)</span>
+            <input
+              type="password"
+              className="crypto-input glass-panel"
+              style={{ padding: '6px 10px' }}
+              placeholder="Master Passphrase..."
+              value={aesPassphrase}
+              onChange={(e) => setAesPassphrase(e.target.value)}
+            />
+            <textarea
+              className="crypto-textarea glass-panel"
+              rows={4}
+              placeholder="Plaintext (for Encrypt) or Base64 Ciphertext (for Decrypt)..."
+              value={aesInput}
+              onChange={(e) => setAesInput(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="section-action-btn glass-interactive"
+                onClick={async () => {
+                  try {
+                    setAesError(null)
+                    setAesOutput(await cryptoDevToolsService.aesEncryptAsync(aesInput, aesPassphrase))
+                  } catch (err: any) {
+                    setAesError(err?.message || 'Encryption failed')
+                  }
+                }}
+              >
+                <Lock size={11} /> Encrypt
+              </button>
+              <button
+                className="section-action-btn glass-interactive"
+                onClick={async () => {
+                  try {
+                    setAesError(null)
+                    setAesOutput(await cryptoDevToolsService.aesDecryptAsync(aesInput, aesPassphrase))
+                  } catch (err: any) {
+                    setAesError(err?.message || 'Decryption failed (wrong passphrase or corrupted ciphertext)')
+                  }
+                }}
+              >
+                <Unlock size={11} /> Decrypt
+              </button>
+              {aesOutput && (
+                <button className="section-action-btn glass-interactive" onClick={() => copyToClipboard(aesOutput, 'aes-out')}>
+                  {copiedKey === 'aes-out' ? <Check size={11} /> : <Copy size={11} />} Copy Result
+                </button>
+              )}
+            </div>
+            {aesError && <div style={{ color: '#FF453A', fontSize: 11 }}>{aesError}</div>}
+            <textarea className="crypto-textarea glass-panel output" rows={4} value={aesOutput} readOnly />
           </div>
         )}
       </div>

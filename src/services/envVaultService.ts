@@ -188,6 +188,90 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
     return Object.keys(this.sampleEnvFiles)
   }
 
+  /**
+   * Load real `.env*` files from the workspace root via Electron IPC.
+   */
+  public async loadWorkspaceEnvFilesAsync(workspaceRoot: string): Promise<Record<string, string>> {
+    const loaded: Record<string, string> = {}
+    if (!workspaceRoot || typeof window === 'undefined' || !window.electronAPI?.readFile) {
+      return loaded
+    }
+    const root = workspaceRoot.replace(/[\\/]+$/, '')
+    const candidates = new Set(['.env', '.env.local', '.env.development', '.env.staging', '.env.production', '.env.example'])
+
+    if (window.electronAPI.readFolder) {
+      try {
+        const res = await window.electronAPI.readFolder(root)
+        const entries = Array.isArray(res) ? res : (res?.files || [])
+        for (const e of entries) {
+          if (!e.isDirectory && (e.name === '.env' || e.name.startsWith('.env.'))) {
+            candidates.add(e.name)
+          }
+        }
+      } catch {
+        // fallback to default candidates
+      }
+    }
+
+    for (const name of candidates) {
+      try {
+        const text = await window.electronAPI.readFile(`${root}/${name}`)
+        loaded[name] = text
+      } catch {
+        // file does not exist
+      }
+    }
+    return loaded
+  }
+
+  /**
+   * Persist an `.env*` file to the workspace root while preserving comment lines when updating keys.
+   */
+  public async saveWorkspaceEnvFileAsync(workspaceRoot: string, fileName: string, content: string): Promise<boolean> {
+    if (!workspaceRoot || typeof window === 'undefined' || !window.electronAPI?.saveFile) {
+      return false
+    }
+    const root = workspaceRoot.replace(/[\\/]+$/, '')
+    await window.electronAPI.saveFile(`${root}/${fileName}`, content)
+    return true
+  }
+
+  /**
+   * Merge updated EnvVariable[] back into original raw .env content while preserving comments and blank lines.
+   */
+  public mergeVariablesPreservingComments(originalRaw: string, variables: EnvVariable[]): string {
+    const varMap = new Map(variables.map((v) => [v.key, v]))
+    const emitted = new Set<string>()
+    const formatLine = (v: EnvVariable) => {
+      let val = v.value
+      if (val.includes(' ') || val.includes('\n') || val.includes('#')) val = `"${val}"`
+      return `${v.key}=${val}${v.comment ? ` # ${v.comment}` : ''}`
+    }
+
+    const outLines: string[] = []
+    for (const line of originalRaw.split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/)
+      if (!m) {
+        outLines.push(line)
+        continue
+      }
+      const key = m[1]
+      const updated = varMap.get(key)
+      if (updated) {
+        outLines.push(formatLine(updated))
+        emitted.add(key)
+      }
+      // If key was deleted, omit the line
+    }
+
+    for (const v of variables) {
+      if (!emitted.has(v.key)) {
+        outLines.push(formatLine(v))
+      }
+    }
+    return outLines.join('\n')
+  }
+
   public scanSecretLeaks(variables: EnvVariable[]): SecretLeakFinding[] {
     const findings: SecretLeakFinding[] = []
 

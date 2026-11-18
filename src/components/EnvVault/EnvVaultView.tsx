@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   KeyRound,
   Eye,
@@ -15,64 +15,134 @@ import {
   Columns3,
   ShieldAlert,
   Lock,
+  Unlock,
+  Save,
+  RefreshCw,
   Zap,
 } from 'lucide-react'
-import { envVaultService } from '../../services/envVaultService'
+import { envVaultService, EnvVariable } from '../../services/envVaultService'
 import './EnvVaultView.css'
 
 type EnvViewTab = 'table' | 'matrix' | 'security' | 'diff' | 'export'
 
-export const EnvVaultView: React.FC = () => {
+interface EnvVaultViewProps {
+  workspaceRoot?: string
+}
+
+export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => {
+  const [profileContents, setProfileContents] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    for (const name of envVaultService.getAvailableProfiles()) {
+      initial[name] = envVaultService.getSampleProfile(name).rawContent
+    }
+    return initial
+  })
+  const [isLiveWorkspace, setIsLiveWorkspace] = useState<boolean>(false)
   const [activeProfile, setActiveProfile] = useState<string>('.env')
   const [activeView, setActiveView] = useState<EnvViewTab>('table')
-  const [rawEnvContent, setRawEnvContent] = useState<string>(() => {
-    return envVaultService.getSampleProfile('.env').rawContent
-  })
   const [revealAllSecrets, setRevealAllSecrets] = useState<boolean>(false)
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({})
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<string | null>(null)
   const [exportLang, setExportLang] = useState<'typescript' | 'python' | 'go' | 'docker' | 'k8s'>('typescript')
   const [vaultPassword, setVaultPassword] = useState<string>('')
+  const [decryptBundle, setDecryptBundle] = useState<string>('')
   const [vaultError, setVaultError] = useState<string | null>(null)
 
-  // Parse current variables from content
+  const loadFromDisk = useCallback(async () => {
+    if (!workspaceRoot) return
+    const diskFiles = await envVaultService.loadWorkspaceEnvFilesAsync(workspaceRoot)
+    const keys = Object.keys(diskFiles)
+    if (keys.length > 0) {
+      setProfileContents(diskFiles)
+      setIsLiveWorkspace(true)
+      setActiveProfile((prev) => (diskFiles[prev] !== undefined ? prev : keys[0]))
+    } else {
+      setIsLiveWorkspace(false)
+    }
+  }, [workspaceRoot])
+
+  useEffect(() => {
+    void loadFromDisk()
+  }, [loadFromDisk])
+
+  const profileNames = useMemo(() => Object.keys(profileContents), [profileContents])
+  const rawEnvContent = profileContents[activeProfile] ?? ''
+
+  const setRawEnvContent = (nextRaw: string) => {
+    setProfileContents((prev) => ({ ...prev, [activeProfile]: nextRaw }))
+  }
+
   const variables = useMemo(() => {
     return envVaultService.parseEnvContent(rawEnvContent)
   }, [rawEnvContent])
 
-  // Multi-Environment Matrix
+  // Live Multi-Environment Matrix computed from all current profile contents
   const matrixRows = useMemo(() => {
-    return envVaultService.compareMultiEnvironments()
-  }, [])
+    const parsed: Record<string, EnvVariable[]> = {}
+    for (const [name, content] of Object.entries(profileContents)) {
+      parsed[name] = envVaultService.parseEnvContent(content)
+    }
+    return envVaultService.compareMultiEnvironments(parsed)
+  }, [profileContents])
 
   // Security Leak Scanner
   const securityFindings = useMemo(() => {
     return envVaultService.scanSecretLeaks(variables)
   }, [variables])
 
-  // Diff comparison against .env.example
+  // Diff comparison against .env.example (live workspace .env.example if present)
   const diffReport = useMemo(() => {
+    const exampleRaw = profileContents['.env.example']
+    if (exampleRaw !== undefined) {
+      const exampleVars = envVaultService.parseEnvContent(exampleRaw)
+      const activeKeySet = new Set(variables.map((v) => v.key))
+      const exampleKeySet = new Set(exampleVars.map((v) => v.key))
+      const seen = new Set<string>()
+      const duplicates: string[] = []
+      for (const v of variables) {
+        if (seen.has(v.key)) duplicates.push(v.key)
+        seen.add(v.key)
+      }
+      return {
+        missingInActive: Array.from(exampleKeySet).filter((k) => !activeKeySet.has(k)),
+        missingInExample: Array.from(activeKeySet).filter((k) => !exampleKeySet.has(k)),
+        duplicateKeys: duplicates,
+      }
+    }
     return envVaultService.compareWithExample(variables, '.env.example')
-  }, [variables])
+  }, [variables, profileContents])
+
+  const handleSaveToDisk = async () => {
+    if (!workspaceRoot) return
+    const ok = await envVaultService.saveWorkspaceEnvFileAsync(workspaceRoot, activeProfile, rawEnvContent)
+    setSaveStatus(ok ? `Saved ${activeProfile}` : 'Save unavailable')
+    setTimeout(() => setSaveStatus(null), 2000)
+  }
 
   const handleProfileChange = (profileName: string) => {
     setActiveProfile(profileName)
-    const profile = envVaultService.getSampleProfile(profileName)
-    setRawEnvContent(profile.rawContent)
   }
 
   const handleToggleMask = (key: string) => {
     setRevealedKeys((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const handleValueChange = (key: string, newVal: string) => {
-    const updated = variables.map((v) => (v.key === key ? { ...v, value: newVal } : v))
-    setRawEnvContent(envVaultService.formatVariablesToEnvString(updated))
+  const handleValueChange = (index: number, newVal: string) => {
+    const updated = variables.map((v, i) => (i === index ? { ...v, value: newVal } : v))
+    setRawEnvContent(envVaultService.mergeVariablesPreservingComments(rawEnvContent, updated))
   }
 
-  const handleDeleteVar = (key: string) => {
-    const filtered = variables.filter((v) => v.key !== key)
-    setRawEnvContent(envVaultService.formatVariablesToEnvString(filtered))
+  const handleKeyChange = (index: number, newKey: string) => {
+    const sanitized = newKey.replace(/[^A-Za-z0-9_]/g, '').toUpperCase()
+    if (!sanitized) return
+    const updated = variables.map((v, i) => (i === index ? { ...v, key: sanitized } : v))
+    setRawEnvContent(envVaultService.mergeVariablesPreservingComments(rawEnvContent, updated))
+  }
+
+  const handleDeleteVar = (index: number) => {
+    const filtered = variables.filter((_, i) => i !== index)
+    setRawEnvContent(envVaultService.mergeVariablesPreservingComments(rawEnvContent, filtered))
   }
 
   const handleAddVariable = () => {
@@ -87,7 +157,7 @@ export const EnvVaultView: React.FC = () => {
         category: 'general' as const,
       },
     ]
-    setRawEnvContent(envVaultService.formatVariablesToEnvString(updated))
+    setRawEnvContent(envVaultService.mergeVariablesPreservingComments(rawEnvContent, updated))
   }
 
   const handleGenerateExample = () => {
@@ -157,7 +227,7 @@ export const EnvVaultView: React.FC = () => {
           onClick={() => setActiveView('export')}
         >
           <Code2 size={12} />
-          <span>Code & Encrypt</span>
+          <span>Code &amp; Encrypt</span>
         </button>
       </div>
 
@@ -165,7 +235,7 @@ export const EnvVaultView: React.FC = () => {
       {activeView === 'table' && (
         <div className="profile-selector-bar">
           <div className="profile-chips">
-            {envVaultService.getAvailableProfiles().map((p) => (
+            {profileNames.map((p) => (
               <button
                 key={p}
                 className={`profile-chip glass-interactive ${activeProfile === p ? 'active' : ''}`}
@@ -178,6 +248,25 @@ export const EnvVaultView: React.FC = () => {
           </div>
 
           <div className="vault-actions-right">
+            {workspaceRoot && (
+              <>
+                <button
+                  className="toggle-mask-all-btn glass-interactive"
+                  onClick={() => void handleSaveToDisk()}
+                  title={`Save ${activeProfile} to Workspace Disk`}
+                >
+                  <Save size={11} />
+                  <span>{saveStatus || 'Save Disk'}</span>
+                </button>
+                <button
+                  className="add-var-btn glass-interactive"
+                  onClick={() => void loadFromDisk()}
+                  title="Reload .env* from Workspace Disk"
+                >
+                  <RefreshCw size={11} />
+                </button>
+              </>
+            )}
             <button
               className="toggle-mask-all-btn glass-interactive"
               onClick={() => setRevealAllSecrets(!revealAllSecrets)}
@@ -204,7 +293,10 @@ export const EnvVaultView: React.FC = () => {
         {activeView === 'table' && (
           <div className="variables-table-pane">
             <div className="var-count-label">
-              <span>{variables.length} environment variables in {activeProfile}</span>
+              <span>
+                {variables.length} environment variables in {activeProfile}{' '}
+                {isLiveWorkspace ? '(Workspace Disk)' : '(Sandbox Preview)'}
+              </span>
             </div>
 
             <div className="variables-list">
@@ -215,7 +307,14 @@ export const EnvVaultView: React.FC = () => {
                     <div className="card-top">
                       <div className="key-side">
                         <span className={`cat-pill ${v.category}`}>{v.category.replace('_', ' ')}</span>
-                        <span className="key-name">{v.key}</span>
+                        <input
+                          type="text"
+                          value={v.key}
+                          onChange={(e) => handleKeyChange(idx, e.target.value)}
+                          className="key-name"
+                          style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'monospace', fontWeight: 600, minWidth: 120 }}
+                          title="Edit variable key"
+                        />
                       </div>
                       <div className="card-actions">
                         {v.isSecret && (
@@ -235,7 +334,7 @@ export const EnvVaultView: React.FC = () => {
                         </button>
                         <button
                           className="action-icon-btn del glass-interactive"
-                          onClick={() => handleDeleteVar(v.key)}
+                          onClick={() => handleDeleteVar(idx)}
                           title="Delete Variable"
                         >
                           <Trash2 size={11} />
@@ -247,7 +346,7 @@ export const EnvVaultView: React.FC = () => {
                       <input
                         type={isMasked ? 'password' : 'text'}
                         value={v.value}
-                        onChange={(e) => handleValueChange(v.key, e.target.value)}
+                        onChange={(e) => handleValueChange(idx, e.target.value)}
                         className="var-value-input"
                       />
                     </div>
@@ -270,7 +369,7 @@ export const EnvVaultView: React.FC = () => {
                   <tr>
                     <th>Variable Key</th>
                     <th>Type</th>
-                    {envVaultService.getAvailableProfiles().map((p) => (
+                    {profileNames.map((p) => (
                       <th key={p}>{p}</th>
                     ))}
                   </tr>
@@ -282,7 +381,7 @@ export const EnvVaultView: React.FC = () => {
                       <td>
                         <span className={`cat-pill ${row.category}`}>{row.category}</span>
                       </td>
-                      {envVaultService.getAvailableProfiles().map((p) => {
+                      {profileNames.map((p) => {
                         const cell = row.values[p]
                         return (
                           <td key={p} className="val-cell">
@@ -310,7 +409,7 @@ export const EnvVaultView: React.FC = () => {
             <div className="sec-hero-card glass-panel">
               <div className="sec-hero-title">
                 <ShieldAlert size={14} className="accent-red" />
-                <span>Security & Credential Leak Scanner</span>
+                <span>Security &amp; Credential Leak Scanner</span>
               </div>
               <p className="sec-hero-desc">
                 Scans environment variables for live API keys, AWS credentials, unencrypted database passwords, and high-entropy secret patterns.
@@ -428,10 +527,10 @@ export const EnvVaultView: React.FC = () => {
               </pre>
             </div>
 
-            {/* Encrypted Vault Export */}
+            {/* Encrypted Vault Export & Decrypt Import */}
             <div className="vault-encrypt-box glass-panel">
               <div className="box-title">
-                <Lock size={12} /> ENCRYPTED VAULT BUNDLE EXPORT
+                <Lock size={12} /> AES-256-GCM VAULT ENCRYPT &amp; DECRYPT IMPORT
               </div>
               <div className="encrypt-controls">
                 <input
@@ -447,6 +546,7 @@ export const EnvVaultView: React.FC = () => {
                     try {
                       setVaultError(null)
                       const enc = await envVaultService.encryptVaultAsync(variables, vaultPassword)
+                      setDecryptBundle(enc)
                       copyToClipboard(enc, 'enc_vault_copy')
                     } catch (err: any) {
                       setVaultError(err?.message || 'Enter a master passphrase to encrypt.')
@@ -454,7 +554,33 @@ export const EnvVaultView: React.FC = () => {
                   }}
                 >
                   {copiedKey === 'enc_vault_copy' ? <Check size={11} color="#30D158" /> : <Lock size={11} />}
-                  <span>Copy AES-256-GCM Vault</span>
+                  <span>Encrypt &amp; Copy</span>
+                </button>
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <textarea
+                  rows={3}
+                  className="vault-pass-input"
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: 10.5 }}
+                  placeholder="Paste encrypted AES-256-GCM vault bundle here to decrypt & import into active profile..."
+                  value={decryptBundle}
+                  onChange={(e) => setDecryptBundle(e.target.value)}
+                />
+                <button
+                  className="encrypt-export-btn glass-interactive"
+                  onClick={async () => {
+                    try {
+                      setVaultError(null)
+                      const decrypted = await envVaultService.decryptVaultAsync(decryptBundle, vaultPassword)
+                      setRawEnvContent(envVaultService.formatVariablesToEnvString(decrypted))
+                      setActiveView('table')
+                    } catch (err: any) {
+                      setVaultError(err?.message || 'Decryption failed — check passphrase and vault bundle.')
+                    }
+                  }}
+                >
+                  <Unlock size={11} />
+                  <span>Decrypt &amp; Import into {activeProfile}</span>
                 </button>
               </div>
               {vaultError && (

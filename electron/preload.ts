@@ -68,6 +68,20 @@ export interface ElectronGitAPI {
   remoteInfo: (cwd?: string) => Promise<{ url: string; owner?: string; repo?: string }>
 }
 
+export interface ElectronJupyterAPI {
+  execute: (opts: { language: 'python' | 'javascript'; code: string; cwd?: string }) => Promise<{
+    ok: boolean
+    outputs: any[]
+    variables: Array<{ name: string; type: string; size: string; value: string }>
+    ramMb: number
+    durationMs: number
+    error?: string
+  }>
+  restart: (language?: 'python' | 'javascript') => Promise<boolean>
+  interrupt: () => Promise<boolean>
+  getEnvInfo: () => Promise<{ pythonVersion: string | null; nodeVersion: string; packages: Array<{ name: string; version: string }> }>
+}
+
 export interface ElectronLspAPI {
   syncDocument: (opts: { language: string; rootDir: string; filePath: string; content: string }) => Promise<{ available: boolean }>
   definition: (opts: { language: string; rootDir: string; filePath: string; line: number; character: number }) => Promise<{ filePath: string; lineNumber: number; column: number } | null>
@@ -425,6 +439,9 @@ export interface ElectronAPI {
   // Real Language Server Protocol (LSP) Client
   lsp: ElectronLspAPI
 
+  // Persistent Multi-Language Jupyter Kernel
+  jupyter: ElectronJupyterAPI
+
   // Lifecycle notification
   notifyReady: () => Promise<void>
 }
@@ -514,6 +531,13 @@ const api: ElectronAPI = {
       ipcRenderer.on('lsp:diagnostics', handler)
       return () => ipcRenderer.removeListener('lsp:diagnostics', handler)
     },
+  },
+
+  jupyter: {
+    execute: (opts) => ipcRenderer.invoke('jupyter:execute', opts),
+    restart: (language) => ipcRenderer.invoke('jupyter:restart', language),
+    interrupt: () => ipcRenderer.invoke('jupyter:interrupt'),
+    getEnvInfo: () => ipcRenderer.invoke('jupyter:getEnvInfo'),
   },
 
   workspace: {

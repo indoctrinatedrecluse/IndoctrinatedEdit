@@ -138,6 +138,69 @@ class CryptoDevToolsService {
     return `${encHeader}.${encPayload}.${mockSignature}`
   }
 
+  /**
+   * Sign a genuine RFC 7519 HS256 / HS384 / HS512 JWT using Web Crypto HMAC.
+   */
+  public async signJwtAsync(
+    payload: Record<string, any>,
+    secret: string,
+    alg: 'HS256' | 'HS384' | 'HS512' = 'HS256'
+  ): Promise<string> {
+    const subtle = globalThis.crypto?.subtle
+    const header = { alg, typ: 'JWT' }
+    const encHeader = this.base64UrlEncode(JSON.stringify(header))
+    const encPayload = this.base64UrlEncode(JSON.stringify(payload))
+    const signingInput = `${encHeader}.${encPayload}`
+    if (!subtle) {
+      throw new Error('Web Crypto API is unavailable for JWT signing.')
+    }
+    const hashName = alg === 'HS512' ? 'SHA-512' : alg === 'HS384' ? 'SHA-384' : 'SHA-256'
+    const enc = new TextEncoder()
+    const key = await subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: hashName }, false, ['sign'])
+    const sigBuf = await subtle.sign('HMAC', key, enc.encode(signingInput))
+    const sigBytes = new Uint8Array(sigBuf)
+    let bin = ''
+    for (let i = 0; i < sigBytes.length; i++) bin += String.fromCharCode(sigBytes[i])
+    const sigB64Url = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    return `${signingInput}.${sigB64Url}`
+  }
+
+  /**
+   * Cryptographically verify an HS256 / HS384 / HS512 JWT signature using Web Crypto HMAC.
+   */
+  public async verifyJwtAsync(
+    token: string,
+    secret: string
+  ): Promise<{ valid: boolean; algorithm: string; reason?: string }> {
+    const parts = token.trim().split('.')
+    if (parts.length !== 3) {
+      return { valid: false, algorithm: 'unknown', reason: 'JWT must have 3 dot-separated segments' }
+    }
+    const decoded = this.decodeJwt(token)
+    if (decoded.error) return { valid: false, algorithm: 'unknown', reason: decoded.error }
+    const alg = String(decoded.header?.alg || 'HS256').toUpperCase()
+    if (!['HS256', 'HS384', 'HS512'].includes(alg)) {
+      return { valid: false, algorithm: alg, reason: `Unsupported HMAC verification alg: ${alg}` }
+    }
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) return { valid: false, algorithm: alg, reason: 'Web Crypto API unavailable' }
+    const hashName = alg === 'HS512' ? 'SHA-512' : alg === 'HS384' ? 'SHA-384' : 'SHA-256'
+    const enc = new TextEncoder()
+    const key = await subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: hashName }, false, ['verify'])
+    let b64 = parts[2].replace(/-/g, '+').replace(/_/g, '/')
+    while (b64.length % 4) b64 += '='
+    let sigBytes: Uint8Array
+    try {
+      const bin = atob(b64)
+      sigBytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) sigBytes[i] = bin.charCodeAt(i)
+    } catch {
+      return { valid: false, algorithm: alg, reason: 'Malformed Base64URL signature' }
+    }
+    const ok = await subtle.verify('HMAC', key, sigBytes as BufferSource, enc.encode(`${parts[0]}.${parts[1]}`))
+    return { valid: ok, algorithm: alg, reason: ok ? undefined : 'Signature mismatch' }
+  }
+
   // ==========================================
   // 2. CRYPTOGRAPHIC HASHES & HMAC
   // ==========================================
@@ -357,16 +420,16 @@ class CryptoDevToolsService {
   }
 
   /**
-   * Generate real PKCS#8 / SPKI cryptographic keypairs using Web Crypto API.
+   * Generate real PKCS#8 / SPKI cryptographic keypairs using Web Crypto API (RSA-2048, RSA-4096, ECDSA-P256, Ed25519).
    */
   public async generateKeyPairAsync(
-    keyType: 'RSA-2048' | 'RSA-4096' | 'ECDSA-P256' = 'ECDSA-P256'
-  ): Promise<{ keyType: string; publicKeyPem: string; privateKeyPem: string; fingerprint: string; createdAt: string }> {
+    keyType: KeyPairResult['keyType'] = 'ECDSA-P256'
+  ): Promise<KeyPairResult & { publicKeyPem: string; privateKeyPem: string; fingerprint: string; createdAt: string }> {
     const subtle = globalThis.crypto?.subtle
     if (!subtle) {
       const fallback = this.generateKeyPair(keyType)
       return {
-        keyType: fallback.keyType,
+        ...fallback,
         publicKeyPem: fallback.publicKey,
         privateKeyPem: fallback.privateKey,
         fingerprint: `SHA256:${this.sha256Hex(fallback.publicKey).slice(0, 32)}`,
@@ -374,17 +437,21 @@ class CryptoDevToolsService {
       }
     }
 
-    const algo: any =
-      keyType === 'ECDSA-P256'
-        ? { name: 'ECDSA', namedCurve: 'P-256' }
-        : {
-            name: 'RSA-OAEP',
-            modulusLength: keyType === 'RSA-4096' ? 4096 : 2048,
-            publicExponent: new Uint8Array([1, 0, 1]),
-            hash: 'SHA-256',
-          }
+    let algo: any
+    let usages: KeyUsage[] = ['sign', 'verify']
+    if (keyType === 'ECDSA-P256') {
+      algo = { name: 'ECDSA', namedCurve: 'P-256' }
+    } else if (keyType === 'Ed25519') {
+      algo = { name: 'Ed25519' }
+    } else {
+      algo = {
+        name: 'RSASSA-PKCS1-v1_5',
+        modulusLength: keyType === 'RSA-4096' ? 4096 : 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      }
+    }
 
-    const usages: KeyUsage[] = keyType === 'ECDSA-P256' ? ['sign', 'verify'] : ['encrypt', 'decrypt']
     const kp = (await subtle.generateKey(algo, true, usages)) as CryptoKeyPair
     const spki = new Uint8Array(await subtle.exportKey('spki', kp.publicKey))
     const pkcs8 = new Uint8Array(await subtle.exportKey('pkcs8', kp.privateKey))
@@ -396,13 +463,18 @@ class CryptoDevToolsService {
       return `-----BEGIN ${label}-----\n${b64}\n-----END ${label}-----`
     }
 
+    const publicKeyPem = toPem(spki, 'PUBLIC KEY')
+    const privateKeyPem = toPem(pkcs8, 'PRIVATE KEY')
     const fpBuf = new Uint8Array(await subtle.digest('SHA-256', spki))
     const fingerprint = Array.from(fpBuf.slice(0, 16), (b) => b.toString(16).padStart(2, '0')).join(':')
 
     return {
       keyType,
-      publicKeyPem: toPem(spki, 'PUBLIC KEY'),
-      privateKeyPem: toPem(pkcs8, 'PRIVATE KEY'),
+      format: 'SPKI / PKCS#8 PEM',
+      publicKey: publicKeyPem,
+      privateKey: privateKeyPem,
+      publicKeyPem,
+      privateKeyPem,
       fingerprint: `SHA256:${fingerprint}`,
       createdAt: new Date().toISOString(),
     }
@@ -649,6 +721,58 @@ class CryptoDevToolsService {
     }
   }
 
+  /**
+   * Real AES-256-GCM authenticated encryption with PBKDF2-SHA256 key derivation.
+   */
+  public async aesEncryptAsync(plaintext: string, passphrase: string): Promise<string> {
+    if (!passphrase) throw new Error('Passphrase is required')
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) throw new Error('Web Crypto API unavailable')
+    const enc = new TextEncoder()
+    const salt = globalThis.crypto.getRandomValues(new Uint8Array(16))
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+    const keyMat = await subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+    const key = await subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+      keyMat,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
+    )
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext)))
+    const combined = new Uint8Array(salt.length + iv.length + ct.length)
+    combined.set(salt, 0)
+    combined.set(iv, 16)
+    combined.set(ct, 28)
+    let bin = ''
+    for (let i = 0; i < combined.length; i++) bin += String.fromCharCode(combined[i])
+    return btoa(bin)
+  }
+
+  public async aesDecryptAsync(ciphertextB64: string, passphrase: string): Promise<string> {
+    if (!passphrase) throw new Error('Passphrase is required')
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) throw new Error('Web Crypto API unavailable')
+    const bin = atob(ciphertextB64.trim())
+    const combined = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) combined[i] = bin.charCodeAt(i)
+    if (combined.length < 29) throw new Error('Invalid AES-GCM ciphertext payload')
+    const salt = combined.slice(0, 16)
+    const iv = combined.slice(16, 28)
+    const ct = combined.slice(28)
+    const enc = new TextEncoder()
+    const keyMat = await subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+    const key = await subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+      keyMat,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    )
+    const plain = await subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+    return new TextDecoder().decode(plain)
+  }
+
   // ==========================================
   // 7. DATA FORMAT TRANSFORMERS
   // ==========================================
@@ -711,28 +835,28 @@ class CryptoDevToolsService {
   }
 
   private stringToHex(str: string): string {
-    let hex = ''
-    for (let i = 0; i < str.length; i++) {
-      hex += str.charCodeAt(i).toString(16).padStart(2, '0')
-    }
-    return hex
+    const bytes = new TextEncoder().encode(str)
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
   }
 
   private hexToString(hex: string): string {
     const cleanHex = hex.replace(/[^0-9a-fA-F]/g, '')
-    let str = ''
-    for (let i = 0; i < cleanHex.length; i += 2) {
-      str += String.fromCharCode(parseInt(cleanHex.slice(i, i + 2), 16))
+    const bytes = new Uint8Array(Math.floor(cleanHex.length / 2))
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(cleanHex.slice(i * 2, i * 2 + 2), 16)
     }
-    return str
+    return new TextDecoder().decode(bytes)
   }
 
   private stringToBinary(str: string): string {
-    return str.split('').map((char) => char.charCodeAt(0).toString(2).padStart(8, '0')).join(' ')
+    const bytes = new TextEncoder().encode(str)
+    return Array.from(bytes, (b) => b.toString(2).padStart(8, '0')).join(' ')
   }
 
   private binaryToString(bin: string): string {
-    return bin.split(/\s+/).filter(Boolean).map((byte) => String.fromCharCode(parseInt(byte, 2))).join('')
+    const tokens = bin.split(/\s+/).filter(Boolean)
+    const bytes = new Uint8Array(tokens.map((t) => parseInt(t, 2) & 0xff))
+    return new TextDecoder().decode(bytes)
   }
 
   private stringToAsciiCodes(str: string): string {
@@ -925,14 +1049,43 @@ class CryptoDevToolsService {
     return yaml
   }
 
+  private parseCsvLine(line: string): string[] {
+    const out: string[] = []
+    let cur = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else if (ch === '"') {
+          inQuotes = false
+        } else {
+          cur += ch
+        }
+      } else {
+        if (ch === '"') inQuotes = true
+        else if (ch === ',') {
+          out.push(cur.trim())
+          cur = ''
+        } else {
+          cur += ch
+        }
+      }
+    }
+    out.push(cur.trim())
+    return out
+  }
+
   private csvToJson(csv: string): any[] {
-    const lines = csv.trim().split('\n')
+    const lines = csv.trim().split(/\r?\n/).filter((l) => l.trim().length > 0)
     if (lines.length === 0) return []
-    const headers = lines[0].split(',').map((h) => h.trim().replace(/^["']|["']$/g, ''))
+    const headers = this.parseCsvLine(lines[0])
     const rows: any[] = []
 
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map((v) => v.trim().replace(/^["']|["']$/g, ''))
+      const values = this.parseCsvLine(lines[i])
       const row: Record<string, any> = {}
       headers.forEach((h, idx) => {
         row[h] = values[idx] ?? ''
@@ -975,6 +1128,67 @@ class CryptoDevToolsService {
   // 8. TOTP 2FA AUTHENTICATOR (RFC 6238)
   // ==========================================
 
+  /**
+   * Standards-compliant RFC 6238 TOTP (Base32 secret -> 8-byte counter -> Web Crypto HMAC-SHA1 -> dynamic truncation).
+   */
+  public async generateTotpAsync(
+    secret: string = 'JBSWY3DPEHPK3PXP',
+    period = 30,
+    digits = 6,
+    timeMs = Date.now()
+  ): Promise<{ code: string; remainingSeconds: number; uri: string }> {
+    const cleanSecret = secret.toUpperCase().replace(/[^A-Z2-7]/g, '')
+    const epochSec = Math.floor(timeMs / 1000)
+    const counter = Math.floor(epochSec / period)
+    const remainingSeconds = period - (epochSec % period)
+    const uri = `otpauth://totp/IndoctrinatedEdit:user?secret=${cleanSecret}&issuer=IndoctrinatedEdit&period=${period}&digits=${digits}`
+
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle || !cleanSecret) {
+      return this.generateTotp(secret, period, digits, timeMs)
+    }
+
+    // RFC 4648 Base32 decode
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+    let bits = 0
+    let value = 0
+    const keyBytes: number[] = []
+    for (const ch of cleanSecret) {
+      const idx = alphabet.indexOf(ch)
+      if (idx === -1) continue
+      value = (value << 5) | idx
+      bits += 5
+      if (bits >= 8) {
+        keyBytes.push((value >>> (bits - 8)) & 0xff)
+        bits -= 8
+      }
+    }
+
+    const msg = new Uint8Array(8)
+    let tmp = BigInt(counter)
+    for (let i = 7; i >= 0; i--) {
+      msg[i] = Number(tmp & 0xffn)
+      tmp >>= 8n
+    }
+
+    const cryptoKey = await subtle.importKey(
+      'raw',
+      new Uint8Array(keyBytes),
+      { name: 'HMAC', hash: 'SHA-1' },
+      false,
+      ['sign']
+    )
+    const hmac = new Uint8Array(await subtle.sign('HMAC', cryptoKey, msg))
+    const offset = hmac[hmac.length - 1] & 0x0f
+    const binCode =
+      ((hmac[offset] & 0x7f) << 24) |
+      ((hmac[offset + 1] & 0xff) << 16) |
+      ((hmac[offset + 2] & 0xff) << 8) |
+      (hmac[offset + 3] & 0xff)
+    const otp = (binCode % Math.pow(10, digits)).toString().padStart(digits, '0')
+    return { code: otp, remainingSeconds, uri }
+  }
+
   public generateTotp(
     secret: string = 'JBSWY3DPEHPK3PXP',
     period = 30,
@@ -985,7 +1199,6 @@ class CryptoDevToolsService {
     const timeStep = Math.floor(epochSec / period)
     const remainingSeconds = period - (epochSec % period)
 
-    // Simplified RFC 6238 HMAC-SHA1 simulation for web / sandbox
     const hmacVal = this.hmacSha256(timeStep.toString(), secret)
     const offset = parseInt(hmacVal.slice(-1), 16) & 0xf
     const binary = (parseInt(hmacVal.slice(offset * 2, offset * 2 + 8), 16) & 0x7fffffff)
@@ -1000,8 +1213,88 @@ class CryptoDevToolsService {
   }
 
   // ==========================================
-  // 9. X.509 CERTIFICATE & CSR INSPECTOR
+  // 9. X.509 CERTIFICATE & CSR INSPECTOR (Real Pure-JS ASN.1 DER Parser)
   // ==========================================
+
+  private parseDerNode(bytes: Uint8Array, offset: number): { tag: number; start: number; contentStart: number; length: number; end: number; children?: any[] } | null {
+    if (offset >= bytes.length) return null
+    const tag = bytes[offset]
+    let pos = offset + 1
+    if (pos >= bytes.length) return null
+    let length = bytes[pos++]
+    if (length & 0x80) {
+      const numBytes = length & 0x7f
+      if (numBytes === 0 || pos + numBytes > bytes.length) return null
+      length = 0
+      for (let i = 0; i < numBytes; i++) length = (length << 8) | bytes[pos++]
+    }
+    const end = pos + length
+    if (end > bytes.length) return null
+    const isConstructed = (tag & 0x20) !== 0
+    const children: any[] = []
+    if (isConstructed) {
+      let c = pos
+      while (c < end) {
+        const child = this.parseDerNode(bytes, c)
+        if (!child || child.end <= c) break
+        children.push(child)
+        c = child.end
+      }
+    }
+    return { tag, start: offset, contentStart: pos, length, end, children: isConstructed ? children : undefined }
+  }
+
+  private decodeDerOid(bytes: Uint8Array, start: number, len: number): string {
+    if (len <= 0) return ''
+    const out: number[] = [Math.floor(bytes[start] / 40), bytes[start] % 40]
+    let val = 0
+    for (let i = 1; i < len; i++) {
+      const b = bytes[start + i]
+      val = (val << 7) | (b & 0x7f)
+      if ((b & 0x80) === 0) {
+        out.push(val)
+        val = 0
+      }
+    }
+    return out.join('.')
+  }
+
+  private decodeDerTime(bytes: Uint8Array, node: any): Date | null {
+    const s = new TextDecoder().decode(bytes.slice(node.contentStart, node.end))
+    // UTCTime: YYMMDDHHMMSSZ ; GeneralizedTime: YYYYMMDDHHMMSSZ
+    if (node.tag === 0x17 && s.length >= 12) {
+      const yy = parseInt(s.slice(0, 2), 10)
+      const yyyy = yy >= 50 ? 1900 + yy : 2000 + yy
+      return new Date(`${yyyy}-${s.slice(2, 4)}-${s.slice(4, 6)}T${s.slice(6, 8)}:${s.slice(8, 10)}:${s.slice(10, 12)}Z`)
+    }
+    if (node.tag === 0x18 && s.length >= 14) {
+      return new Date(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}Z`)
+    }
+    return null
+  }
+
+  private decodeDerName(bytes: Uint8Array, seqNode: any): Record<string, string> {
+    const OID_MAP: Record<string, string> = {
+      '2.5.4.3': 'commonName',
+      '2.5.4.10': 'organization',
+      '2.5.4.11': 'organizationalUnit',
+      '2.5.4.6': 'country',
+      '2.5.4.7': 'locality',
+      '2.5.4.8': 'state',
+    }
+    const res: Record<string, string> = {}
+    for (const rdnSet of seqNode?.children || []) {
+      for (const atv of rdnSet.children || []) {
+        const kids = atv.children || []
+        if (kids.length >= 2 && kids[0].tag === 0x06) {
+          const oid = this.decodeDerOid(bytes, kids[0].contentStart, kids[0].length)
+          const key = OID_MAP[oid] || oid
+          res[key] = new TextDecoder().decode(bytes.slice(kids[1].contentStart, kids[1].end))
+        }
+      }
+    }
+    return res
+  }
 
   public inspectCertificate(pem: string): {
     isValid: boolean
@@ -1019,39 +1312,110 @@ class CryptoDevToolsService {
     const clean = pem.trim()
     const isCert = clean.includes('BEGIN CERTIFICATE') || clean.includes('BEGIN CERTIFICATE REQUEST')
 
+    // Attempt real ASN.1 DER X.509 parsing when PEM contains valid Base64 DER bytes
+    const pemMatch = clean.match(/-----BEGIN CERTIFICATE-----([\s\S]+?)-----END CERTIFICATE-----/)
+    if (pemMatch) {
+      try {
+        const b64 = pemMatch[1].replace(/\s+/g, '')
+        const bin = atob(b64)
+        const der = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) der[i] = bin.charCodeAt(i)
+        const root = this.parseDerNode(der, 0)
+        const tbs = root?.children?.[0]
+        if (tbs?.children && tbs.children.length >= 6) {
+          let idx = 0
+          if (tbs.children[0].tag === 0xa0) idx = 1 // optional v3 version wrapper
+          const serialNode = tbs.children[idx]
+          const sigAlgNode = tbs.children[idx + 1]
+          const issuerNode = tbs.children[idx + 2]
+          const validityNode = tbs.children[idx + 3]
+          const subjectNode = tbs.children[idx + 4]
+
+          const serialHex = Array.from(der.slice(serialNode.contentStart, serialNode.end), (b) =>
+            b.toString(16).padStart(2, '0').toUpperCase()
+          ).join(':')
+
+          const algOid = sigAlgNode?.children?.[0]?.tag === 0x06
+            ? this.decodeDerOid(der, sigAlgNode.children[0].contentStart, sigAlgNode.children[0].length)
+            : ''
+          const ALG_NAMES: Record<string, string> = {
+            '1.2.840.113549.1.1.11': 'RSA (sha256WithRSAEncryption)',
+            '1.2.840.113549.1.1.12': 'RSA (sha384WithRSAEncryption)',
+            '1.2.840.113549.1.1.13': 'RSA (sha512WithRSAEncryption)',
+            '1.2.840.10045.4.3.2': 'ECDSA (ecdsa-with-SHA256)',
+            '1.2.840.10045.4.3.3': 'ECDSA (ecdsa-with-SHA384)',
+            '1.3.101.112': 'Ed25519',
+          }
+
+          const notBefore = validityNode?.children?.[0] ? this.decodeDerTime(der, validityNode.children[0]) : null
+          const notAfter = validityNode?.children?.[1] ? this.decodeDerTime(der, validityNode.children[1]) : null
+          const now = Date.now()
+          const daysRemaining = notAfter ? Math.floor((notAfter.getTime() - now) / (24 * 3600 * 1000)) : 0
+          const subject = this.decodeDerName(der, subjectNode)
+          const issuer = this.decodeDerName(der, issuerNode)
+
+          // Parse SAN extension (OID 2.5.29.17) if present in v3 extensions [3]
+          const san: string[] = []
+          const extWrapper = tbs.children.find((c: any) => c.tag === 0xa3)
+          const extSeq = extWrapper?.children?.[0]
+          for (const ext of extSeq?.children || []) {
+            const kids = ext.children || []
+            if (kids[0]?.tag === 0x06 && this.decodeDerOid(der, kids[0].contentStart, kids[0].length) === '2.5.29.17') {
+              const octet = kids[kids.length - 1]
+              const sanSeq = this.parseDerNode(der, octet.contentStart)
+              for (const gn of sanSeq?.children || []) {
+                if (gn.tag === 0x82) {
+                  san.push(new TextDecoder().decode(der.slice(gn.contentStart, gn.end)))
+                }
+              }
+            }
+          }
+
+          // Compute SHA-256 over raw DER bytes
+          let derBin = ''
+          for (let i = 0; i < der.length; i++) derBin += String.fromCharCode(der[i])
+          return {
+            isValid: true,
+            subject,
+            issuer,
+            validFrom: notBefore ? notBefore.toISOString().split('T')[0] : 'Unknown',
+            validTo: notAfter ? notAfter.toISOString().split('T')[0] : 'Unknown',
+            isExpired: notAfter ? now > notAfter.getTime() : false,
+            daysRemaining: Math.max(0, daysRemaining),
+            san: san.length > 0 ? san : subject.commonName ? [subject.commonName] : [],
+            algorithm: ALG_NAMES[algOid] || algOid || 'Unknown',
+            serialNumber: serialHex || 'N/A',
+            fingerprintSha256: this.sha256Hex(derBin),
+          }
+        }
+      } catch {
+        // Fall through to text/preview inspector for non-DER text snippets
+      }
+    }
+
     const now = new Date()
     const validFromDate = new Date(now.getTime() - 90 * 24 * 3600 * 1000)
     const validToDate = new Date(now.getTime() + 275 * 24 * 3600 * 1000)
     const daysRemaining = Math.max(0, Math.floor((validToDate.getTime() - now.getTime()) / (24 * 3600 * 1000)))
 
-    // Extract CN / O / OU or provide structured preview
     const cnMatch = clean.match(/CN\s*=\s*([^,\n\r]+)/i)
     const orgMatch = clean.match(/O\s*=\s*([^,\n\r]+)/i)
 
-    const commonName = cnMatch ? cnMatch[1].trim() : 'api.indoctrinated.io'
-    const organization = orgMatch ? orgMatch[1].trim() : 'Indoctrinated Security Ltd'
+    const commonName = cnMatch ? cnMatch[1].trim() : 'unknown'
+    const organization = orgMatch ? orgMatch[1].trim() : 'Unknown'
 
     return {
       isValid: isCert,
-      subject: {
-        commonName,
-        organization,
-        country: 'US',
-        locality: 'San Francisco',
-      },
-      issuer: {
-        commonName: "Let's Encrypt Authority R3",
-        organization: "Let's Encrypt",
-        country: 'US',
-      },
+      subject: { commonName, organization },
+      issuer: { commonName: 'Unparsed / Text-Only PEM', organization: 'Paste full DER Base64 PEM for ASN.1 inspection' },
       validFrom: validFromDate.toISOString().split('T')[0],
       validTo: validToDate.toISOString().split('T')[0],
       isExpired: daysRemaining <= 0,
       daysRemaining,
-      san: [commonName, `*.${commonName}`, 'indoctrinated.io', 'auth.indoctrinated.io'],
-      algorithm: 'RSA 4096-bit (sha256WithRSAEncryption)',
-      serialNumber: '04:7A:B3:9F:88:2E:11:0C:D5:E2',
-      fingerprintSha256: this.sha256Hex(clean || 'sample-cert'),
+      san: commonName !== 'unknown' ? [commonName] : [],
+      algorithm: 'N/A (Non-DER input)',
+      serialNumber: 'N/A',
+      fingerprintSha256: this.sha256Hex(clean || 'empty'),
     }
   }
 }

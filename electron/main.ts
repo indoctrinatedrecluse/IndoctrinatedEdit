@@ -32,6 +32,7 @@ import {
 } from './git-service'
 import { setupDebugIPC, disposeDebugSessions } from './debug-adapter-service'
 import { setupLspIPC, disposeLspClients } from './lsp-client-service'
+import { setupJupyterIPC, disposeJupyterKernels } from './jupyter-kernel-service'
 import { setupWorkspaceToolsIPC } from './workspace-tools-service'
 import { mcpClientManager, setupMcpClientIPC } from './mcp-client-service'
 import { infraSocketManager, setupInfraIPC } from './infra-ipc-service'
@@ -263,6 +264,9 @@ function disposeAllSubsystems() {
   } catch {}
   try {
     disposeLspClients()
+  } catch {}
+  try {
+    disposeJupyterKernels()
   } catch {}
   try {
     updateService.triggerPendingInstallOnQuit()
@@ -567,6 +571,11 @@ setupDebugIPC(ipcMain, () => win)
 // Real Language Server Protocol (LSP) Client
 // ==========================================
 setupLspIPC(ipcMain, () => win)
+
+// ==========================================
+// Persistent Jupyter Kernel (Python & Node.js)
+// ==========================================
+setupJupyterIPC(ipcMain)
 
 // ==========================================
 // Workspace CLI, Bundle, Search & Binary IPC

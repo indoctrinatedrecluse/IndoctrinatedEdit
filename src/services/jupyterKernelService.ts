@@ -82,6 +82,43 @@ class JupyterKernelService {
   private kernelStatus: 'idle' | 'busy' | 'restarting' = 'idle'
   private activeKernelId = 'python-3.12-local'
   private listeners: Set<() => void> = new Set()
+  private liveRamMb: number | null = null
+  private livePackages: Array<{ name: string; version: string; desc: string }> = []
+
+  public getInstalledPackages(): Array<{ name: string; version: string; desc: string }> {
+    return this.livePackages
+  }
+
+  public async loadEnvInfoAsync(): Promise<void> {
+    if (typeof window === 'undefined' || !window.electronAPI?.jupyter?.getEnvInfo) return
+    try {
+      const info = await window.electronAPI.jupyter.getEnvInfo()
+      if (info.pythonVersion) {
+        const pyK = this.availableKernels.find((k) => k.id === 'python-3.12-local')
+        if (pyK) {
+          pyK.version = info.pythonVersion
+          pyK.displayName = `Python ${info.pythonVersion} (Persistent Local Kernel)`
+        }
+      }
+      if (info.nodeVersion) {
+        const nodeK = this.availableKernels.find((k) => k.id === 'nodejs-v8-kernel')
+        if (nodeK) {
+          nodeK.version = info.nodeVersion
+          nodeK.displayName = `Node.js ${info.nodeVersion} (Persistent V8 Kernel)`
+        }
+      }
+      if (Array.isArray(info.packages) && info.packages.length > 0) {
+        this.livePackages = info.packages.map((p) => ({
+          name: p.name,
+          version: p.version,
+          desc: 'Installed in local Python environment',
+        }))
+      }
+      this.notify()
+    } catch {
+      // ignore env discovery failures
+    }
+  }
 
   private availableKernels: JupyterKernelInfo[] = [
     {
@@ -458,6 +495,9 @@ class JupyterKernelService {
 
     cell.isExecuting = true
     this.kernelStatus = 'busy'
+    const activeK = this.getActiveKernel()
+    activeK.status = 'busy'
+    activeK.activeExecutions += 1
     this.notify()
 
     const startTime = performance.now()
@@ -467,7 +507,28 @@ class JupyterKernelService {
       const count = this.executionCounter++
       cell.execution_count = count
 
-      // Real local Python execution in Electron desktop mode
+      // Preferred: Real Persistent Python / Node.js Kernel via Electron IPC
+      if (code && typeof window !== 'undefined' && window.electronAPI?.jupyter?.execute) {
+        const lang: 'python' | 'javascript' =
+          activeK.language === 'javascript' ? 'javascript' : 'python'
+        const execRes = await window.electronAPI.jupyter.execute({ language: lang, code })
+        const outputs: JupyterOutput[] = (execRes.outputs || []).map((o: any) => ({
+          ...o,
+          execution_count: o.output_type === 'execute_result' ? count : o.execution_count,
+        }))
+        if (Array.isArray(execRes.variables)) {
+          this.inMemoryVariables.clear()
+          for (const v of execRes.variables) {
+            this.inMemoryVariables.set(v.name, v)
+          }
+        }
+        if (execRes.ramMb > 0) this.liveRamMb = execRes.ramMb
+        cell.outputs = outputs
+        cell.executionDurationMs = execRes.durationMs
+        return outputs
+      }
+
+      // Fallback real local Python one-shot if workspace CLI is present without jupyter IPC
       if (
         code &&
         typeof window !== 'undefined' &&
@@ -600,6 +661,9 @@ class JupyterKernelService {
     } finally {
       cell.isExecuting = false
       this.kernelStatus = 'idle'
+      const curK = this.getActiveKernel()
+      curK.status = 'idle'
+      curK.activeExecutions = Math.max(0, curK.activeExecutions - 1)
       this.notify()
     }
   }
@@ -648,19 +712,36 @@ class JupyterKernelService {
 
   public restartKernel() {
     this.kernelStatus = 'restarting'
+    const activeK = this.getActiveKernel()
+    activeK.status = 'restarting'
     this.executionCounter = 1
     this.inMemoryVariables.clear()
+    if (typeof window !== 'undefined' && window.electronAPI?.jupyter?.restart) {
+      void window.electronAPI.jupyter.restart(activeK.language === 'javascript' ? 'javascript' : 'python').then(() => {
+        this.kernelStatus = 'idle'
+        activeK.status = 'idle'
+        this.liveRamMb = null
+        this.notify()
+      })
+      this.notify()
+      return
+    }
     this.seedDefaultVariables()
     this.notify()
 
     setTimeout(() => {
       this.kernelStatus = 'idle'
+      activeK.status = 'idle'
       this.notify()
     }, 600)
   }
 
   public interruptKernel() {
+    if (typeof window !== 'undefined' && window.electronAPI?.jupyter?.interrupt) {
+      void window.electronAPI.jupyter.interrupt()
+    }
     this.kernelStatus = 'idle'
+    this.getActiveKernel().status = 'idle'
     this.notify()
   }
 
@@ -725,6 +806,9 @@ class JupyterKernelService {
   }
 
   public getEstimatedMemoryUsage(): string {
+    if (this.liveRamMb !== null && this.liveRamMb > 0) {
+      return `${this.liveRamMb.toFixed(1)} MB / 4.0 GB`
+    }
     const baseMB = 34.2
     const varCount = this.inMemoryVariables.size
     const total = (baseMB + varCount * 1.8).toFixed(1)

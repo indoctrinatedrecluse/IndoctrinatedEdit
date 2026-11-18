@@ -37,11 +37,15 @@ export const JupyterStudioView: React.FC<JupyterStudioViewProps> = ({ onCreateNo
   const [copiedPkg, setCopiedPkg] = useState<string | null>(null)
   const [isRestarting, setIsRestarting] = useState<boolean>(false)
 
+  const [livePackages, setLivePackages] = useState(() => jupyterKernelService.getInstalledPackages())
+
   useEffect(() => {
+    void jupyterKernelService.loadEnvInfoAsync()
     const unsub = jupyterKernelService.subscribe(() => {
       setKernels(jupyterKernelService.getAvailableKernels())
       setActiveKernelId(jupyterKernelService.getActiveKernel().id)
       setVariables(jupyterKernelService.getVariables())
+      setLivePackages(jupyterKernelService.getInstalledPackages())
     })
     return unsub
   }, [])
@@ -57,7 +61,7 @@ export const JupyterStudioView: React.FC<JupyterStudioViewProps> = ({ onCreateNo
     setTimeout(() => setIsRestarting(false), 800)
   }
 
-  const packages = [
+  const defaultPackages = [
     { name: 'numpy', version: '1.26.4', desc: 'High-performance multidimensional arrays & math' },
     { name: 'pandas', version: '2.2.2', desc: 'DataFrame data manipulation & tabular analysis' },
     { name: 'matplotlib', version: '3.9.0', desc: 'Publication quality plotting & data charts' },
@@ -67,6 +71,7 @@ export const JupyterStudioView: React.FC<JupyterStudioViewProps> = ({ onCreateNo
     { name: 'seaborn', version: '0.13.2', desc: 'Statistical data visualization built on Matplotlib' },
     { name: 'polars', version: '1.2.1', desc: 'Blazing fast multi-threaded Rust DataFrame engine' },
   ]
+  const packages = livePackages.length > 0 ? livePackages : defaultPackages
 
   const estimatedRam = jupyterKernelService.getEstimatedMemoryUsage()
   const activeKernel = kernels.find((k) => k.id === activeKernelId) || kernels[0]
@@ -250,7 +255,7 @@ export const JupyterStudioView: React.FC<JupyterStudioViewProps> = ({ onCreateNo
                       </div>
                       <div className="stat-pill">
                         <Activity size={10} />
-                        <span>0 Active Tasks</span>
+                        <span>{k.activeExecutions} Active Task{k.activeExecutions === 1 ? '' : 's'}</span>
                       </div>
                     </div>
                   </div>
