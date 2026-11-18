@@ -24,6 +24,7 @@ import {
   ArchitectureGraph,
   DependencyNode,
 } from '../../services/architectureGraphService'
+import { sanitizeSvg } from '../../utils/security'
 
 interface DiagramStudioViewProps {
   activeFileName?: string
@@ -249,7 +250,7 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
                   <div
                     className="rendered-svg-stage"
                     style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }}
-                    dangerouslySetInnerHTML={{ __html: diagramSvg }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeSvg(diagramSvg) }}
                   />
                 ) : (
                   <div className="empty-state">Loading visual architecture diagram...</div>

@@ -32,6 +32,7 @@ import {
   JupyterNotebook,
   JupyterCell,
 } from '../../services/jupyterKernelService'
+import { sanitizeHtml, sanitizeSvg } from '../../utils/security'
 
 interface NotebookEditorProps {
   content: string
@@ -362,9 +363,19 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     notifyChange(notebook)
   }
 
-  // GLOBAL KEYBOARD SHORTCUTS MANAGER (Jupyter Command Mode & Execution)
+  // SCOPED KEYBOARD SHORTCUTS MANAGER (Jupyter Command Mode & Execution)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Only intercept shortcuts when focus or event target is inside this NotebookEditor
+      const rootEl = editorRootRef.current
+      if (!rootEl) return
+      const targetNode = e.target as Node | null
+      const activeEl = document.activeElement
+      const isInsideNotebook =
+        (targetNode && rootEl.contains(targetNode)) ||
+        (activeEl && rootEl.contains(activeEl))
+      if (!isInsideNotebook) return
+
       // Don't intercept when focusing inside input/textarea outside command mode
       const isTextarea = (e.target as HTMLElement)?.tagName === 'TEXTAREA' || (e.target as HTMLElement)?.tagName === 'INPUT'
 
@@ -459,11 +470,21 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
           return
         }
 
-        // V: Paste cell below
+        // V: Paste copied cell below currently selected cell
         if (e.key === 'v' || e.key === 'V') {
           e.preventDefault()
-          if (copiedCell && selectedCellId) {
-            handleDuplicateCell(selectedCellId)
+          if (copiedCell) {
+            const idx = selectedCellId ? notebook.cells.findIndex((c) => c.id === selectedCellId) : notebook.cells.length - 1
+            const pasted: JupyterCell = {
+              ...JSON.parse(JSON.stringify(copiedCell)),
+              id: `cell-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              execution_count: null,
+            }
+            const nextCells = [...notebook.cells]
+            nextCells.splice(idx >= 0 ? idx + 1 : nextCells.length, 0, pasted)
+            const nextNotebook: JupyterNotebook = { ...notebook, cells: nextCells }
+            setSelectedCellId(pasted.id)
+            notifyChange(nextNotebook)
           }
           return
         }
@@ -685,7 +706,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
                   <div
                     key={idx}
                     className="output-html-container"
-                    dangerouslySetInnerHTML={{ __html: html }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
                   />
                 )
               }
@@ -740,7 +761,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
 
             <div
               className="output-svg-container"
-              dangerouslySetInnerHTML={{ __html: jupyterKernelService.generateChartSvg(activeChart) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeSvg(jupyterKernelService.generateChartSvg(activeChart)) }}
             />
           </div>
         )}
@@ -793,7 +814,7 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
   }
 
   return (
-    <div className="notebook-editor-root" ref={editorRootRef}>
+    <div className="notebook-editor-root" ref={editorRootRef} tabIndex={-1}>
       {/* RUN ALL PROGRESS BAR */}
       {runAllProgress && (
         <div className="run-all-progress-strip">

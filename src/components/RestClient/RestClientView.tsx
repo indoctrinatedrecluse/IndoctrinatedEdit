@@ -491,12 +491,17 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
                     <select
                       className="auth-type-select"
                       value={request.auth.type}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const nextType = e.target.value as AuthType
                         setRequest((prev) => ({
                           ...prev,
-                          auth: { ...prev.auth, type: e.target.value as AuthType },
+                          auth: {
+                            ...prev.auth,
+                            type: nextType,
+                            ...(nextType === 'apiKey' && !prev.auth.apiKeyLocation ? { apiKeyLocation: 'header' } : {}),
+                          },
                         }))
-                      }
+                      }}
                     >
                       <option value="none">No Auth</option>
                       <option value="bearer">Bearer Token</option>
@@ -556,7 +561,21 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
 
                   {request.auth.type === 'apiKey' && (
                     <div className="auth-fields">
-                      <label className="field-label">Key Name</label>
+                      <label className="field-label">Add To</label>
+                      <select
+                        className="auth-type-select"
+                        value={request.auth.apiKeyLocation || 'header'}
+                        onChange={(e) =>
+                          setRequest((prev) => ({
+                            ...prev,
+                            auth: { ...prev.auth, apiKeyLocation: e.target.value as 'header' | 'query' },
+                          }))
+                        }
+                      >
+                        <option value="header">Header</option>
+                        <option value="query">Query Params</option>
+                      </select>
+                      <label className="field-label" style={{ marginTop: 6 }}>Key Name</label>
                       <input
                         type="text"
                         className="auth-input"

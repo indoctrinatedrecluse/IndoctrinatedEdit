@@ -11,6 +11,7 @@ import {
   svgStudioService,
   SvgOptimizationResult,
 } from '../../services/svgStudioService'
+import { sanitizeSvg } from '../../utils/security'
 
 export const SvgStudioView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'canvas' | 'optimize' | 'export'>('canvas')
@@ -101,7 +102,7 @@ export const SvgStudioView: React.FC = () => {
           <div className="svg-preview-stage">
             <div
               className="svg-mount-node"
-              dangerouslySetInnerHTML={{ __html: displaySvg }}
+              dangerouslySetInnerHTML={{ __html: sanitizeSvg(displaySvg) }}
             />
           </div>
 

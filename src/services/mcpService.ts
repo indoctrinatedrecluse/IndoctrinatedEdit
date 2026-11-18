@@ -6,6 +6,7 @@
 
 import { dynamicTool, jsonSchema } from 'ai'
 import { z } from 'zod'
+import { validateWorkspacePath } from '../utils/security'
 
 export type McpTransportType = 'stdio' | 'sse' | 'builtin'
 
@@ -843,29 +844,45 @@ export class McpService {
         responseText = `Branches:\n* ${activeBranch}\n  remotes/origin/${activeBranch}`
       } else if (actualToolName === 'read_file_content') {
         const filePath = String(args.path || '')
-        if (filePath && typeof window !== 'undefined' && window.electronAPI?.readFile) {
+        const workspaceRoot = typeof args.workspaceRoot === 'string' ? args.workspaceRoot : undefined
+        const pathCheck = validateWorkspacePath(filePath, workspaceRoot)
+        if (!pathCheck.valid) {
+          throw new Error(pathCheck.error || `Access to path "${filePath}" is blocked by security guardrails.`)
+        }
+        if (typeof window !== 'undefined' && window.electronAPI?.readFile) {
           try {
-            const fileContent = await window.electronAPI.readFile(filePath)
+            const fileContent = await window.electronAPI.readFile(pathCheck.resolvedPath)
             responseText = `// MCP Filesystem Read: ${filePath}\n${fileContent.slice(0, 12000)}`
           } catch (readErr: any) {
             throw new Error(`Failed to read "${filePath}": ${readErr?.message || String(readErr)}`)
           }
         } else {
-          responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
+          throw new Error(`Filesystem MCP read unavailable outside desktop environment for "${filePath}".`)
         }
       } else if (actualToolName === 'list_directory_tree') {
         const dirPath = String(args.directory || '')
-        if (dirPath && typeof window !== 'undefined' && window.electronAPI?.readFolder) {
-          const res = await window.electronAPI.readFolder(dirPath)
+        const workspaceRoot = typeof args.workspaceRoot === 'string' ? args.workspaceRoot : undefined
+        const pathCheck = validateWorkspacePath(dirPath, workspaceRoot)
+        if (!pathCheck.valid) {
+          throw new Error(pathCheck.error || `Access to directory "${dirPath}" is blocked by security guardrails.`)
+        }
+        if (typeof window !== 'undefined' && window.electronAPI?.readFolder) {
+          const res = await window.electronAPI.readFolder(pathCheck.resolvedPath)
           if (res?.files) {
             responseText = res.files.map((f) => `${f.isDirectory ? '📁' : '📄'} ${f.name}`).join('\n')
           } else {
             responseText = `Directory "${dirPath}" is empty or unavailable.`
           }
         } else {
-          responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
+          throw new Error(`Filesystem MCP directory listing unavailable outside desktop environment for "${dirPath}".`)
         }
       } else if (actualToolName === 'find_files_by_pattern') {
+        const searchDir = String(args.directory || args.path || '.')
+        const workspaceRoot = typeof args.workspaceRoot === 'string' ? args.workspaceRoot : undefined
+        const pathCheck = validateWorkspacePath(searchDir, workspaceRoot)
+        if (!pathCheck.valid) {
+          throw new Error(pathCheck.error || `Access to directory "${searchDir}" is blocked by security guardrails.`)
+        }
         responseText = `Filesystem MCP result for "${actualToolName}" with args: ${JSON.stringify(args, null, 2)}`
       } else if (actualToolName === 'create_entities') {
         let items: McpMemoryEntity[] = []

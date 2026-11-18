@@ -11,6 +11,8 @@
  * - Data Format Transformers (JSON, YAML, TOML, XML, CSV)
  */
 
+import { utf8ToBase64, base64ToUtf8 } from '../utils/security'
+
 export interface JwtDecoded {
   header: Record<string, any>
   payload: Record<string, any>
@@ -236,7 +238,11 @@ class CryptoDevToolsService {
       case 'hex':
         return this.hexToString(input)
       case 'url':
-        return decodeURIComponent(input)
+        try {
+          return decodeURIComponent(input)
+        } catch {
+          return input
+        }
       case 'html':
         return this.htmlDecode(input)
       case 'binary':
@@ -256,22 +262,47 @@ class CryptoDevToolsService {
   // 4. IDENTIFIER & TOKEN GENERATION (UUID/ULID)
   // ==========================================
 
+  private getRandomBytes(count: number): Uint8Array {
+    const buf = new Uint8Array(count)
+    if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.getRandomValues === 'function') {
+      globalThis.crypto.getRandomValues(buf)
+      return buf
+    }
+    throw new Error('Cryptographically secure random number generator (crypto.getRandomValues) is unavailable.')
+  }
+
+  private getSecureRandomInt(maxExclusive: number): number {
+    if (maxExclusive <= 1) return 0
+    // Rejection sampling eliminates modulo bias
+    const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive
+    const arr = new Uint32Array(1)
+    while (true) {
+      globalThis.crypto.getRandomValues(arr)
+      if (arr[0] < limit) {
+        return arr[0] % maxExclusive
+      }
+    }
+  }
+
   public generateUuidV4(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0
-      const v = c === 'x' ? r : (r & 0x3) | 0x8
-      return v.toString(16)
-    })
+    if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
+      return globalThis.crypto.randomUUID()
+    }
+    const bytes = this.getRandomBytes(16)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
   }
 
   public generateUuidV7(): string {
     const timestamp = Date.now()
     const timeHex = timestamp.toString(16).padStart(12, '0')
-    const randA = Math.floor(Math.random() * 0x1000).toString(16).padStart(3, '0')
-    const randB = ((Math.random() * 0x4000) | 0x8000).toString(16).padStart(4, '0')
-    const randC = Math.floor(Math.random() * 0x1000000000000).toString(16).padStart(12, '0')
-
-    return `${timeHex.substring(0, 8)}-${timeHex.substring(8, 12)}-7${randA}-${randB}-${randC}`
+    const bytes = this.getRandomBytes(10)
+    bytes[0] = (bytes[0] & 0x0f) | 0x70
+    bytes[2] = (bytes[2] & 0x3f) | 0x80
+    const randHex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return `${timeHex.slice(0, 8)}-${timeHex.slice(8, 12)}-${randHex.slice(0, 4)}-${randHex.slice(4, 8)}-${randHex.slice(8, 20)}`
   }
 
   public generateUlid(): string {
@@ -285,9 +316,10 @@ class CryptoDevToolsService {
     }
     timeChars = timeChars.padStart(10, '0')
 
+    const randBytes = this.getRandomBytes(16)
     let randChars = ''
     for (let i = 0; i < 16; i++) {
-      randChars += ENCODING.charAt(Math.floor(Math.random() * 32))
+      randChars += ENCODING.charAt(randBytes[i] & 31)
     }
 
     return timeChars + randChars
@@ -297,7 +329,7 @@ class CryptoDevToolsService {
     const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let result = prefix
     for (let i = 0; i < length; i++) {
-      result += charset.charAt(Math.floor(Math.random() * charset.length))
+      result += charset.charAt(this.getSecureRandomInt(charset.length))
     }
     return result
   }
@@ -309,17 +341,26 @@ class CryptoDevToolsService {
     const special = includeSpecial ? '!@#$%^&*()_+-=[]{}|;:,.<>?' : ''
     const all = lower + upper + digits + special
 
-    let pwd = ''
-    pwd += lower[Math.floor(Math.random() * lower.length)]
-    pwd += upper[Math.floor(Math.random() * upper.length)]
-    pwd += digits[Math.floor(Math.random() * digits.length)]
-    if (includeSpecial) pwd += special[Math.floor(Math.random() * special.length)]
+    const chars: string[] = [
+      lower[this.getSecureRandomInt(lower.length)],
+      upper[this.getSecureRandomInt(upper.length)],
+      digits[this.getSecureRandomInt(digits.length)],
+    ]
+    if (includeSpecial) chars.push(special[this.getSecureRandomInt(special.length)])
 
-    for (let i = pwd.length; i < length; i++) {
-      pwd += all[Math.floor(Math.random() * all.length)]
+    while (chars.length < length) {
+      chars.push(all[this.getSecureRandomInt(all.length)])
     }
 
-    return pwd.split('').sort(() => 0.5 - Math.random()).join('')
+    // Unbiased CSPRNG Fisher-Yates shuffle
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = this.getSecureRandomInt(i + 1)
+      const tmp = chars[i]
+      chars[i] = chars[j]
+      chars[j] = tmp
+    }
+
+    return chars.join('')
   }
 
   // ==========================================
@@ -328,26 +369,37 @@ class CryptoDevToolsService {
 
   public convertEpoch(inputEpoch: number | string): EpochConverted {
     let num = typeof inputEpoch === 'string' ? parseFloat(inputEpoch) : inputEpoch
-    if (isNaN(num)) num = Date.now()
+    if (!Number.isFinite(num)) num = Date.now()
 
     // Detect if seconds vs milliseconds vs microseconds vs nanoseconds
     let date: Date
-    if (num < 10000000000) {
-      // Seconds
+    const absNum = Math.abs(num)
+    if (absNum < 10000000000) {
       date = new Date(num * 1000)
-    } else if (num < 10000000000000) {
-      // Milliseconds
+    } else if (absNum < 10000000000000) {
       date = new Date(num)
-    } else if (num < 10000000000000000) {
-      // Microseconds
+    } else if (absNum < 10000000000000000) {
       date = new Date(num / 1000)
     } else {
-      // Nanoseconds
       date = new Date(num / 1000000)
     }
 
+    const timeMs = date.getTime()
+    if (!Number.isFinite(timeMs)) {
+      return {
+        seconds: 0,
+        milliseconds: 0,
+        microseconds: 0,
+        nanoseconds: '0',
+        iso8601: 'Invalid Date (out of range)',
+        utcString: 'Invalid Date',
+        localString: 'Invalid Date',
+        relativeTime: 'Out of supported Date range',
+      }
+    }
+
     const now = Date.now()
-    const diffMs = now - date.getTime()
+    const diffMs = now - timeMs
     const diffSec = Math.floor(Math.abs(diffMs) / 1000)
     const suffix = diffMs >= 0 ? 'ago' : 'from now'
 
@@ -358,10 +410,10 @@ class CryptoDevToolsService {
     else relative = `${Math.floor(diffSec / 86400)} days ${suffix}`
 
     return {
-      seconds: Math.floor(date.getTime() / 1000),
-      milliseconds: date.getTime(),
-      microseconds: date.getTime() * 1000,
-      nanoseconds: (BigInt(date.getTime()) * BigInt(1000000)).toString(),
+      seconds: Math.floor(timeMs / 1000),
+      milliseconds: timeMs,
+      microseconds: timeMs * 1000,
+      nanoseconds: (BigInt(Math.trunc(timeMs)) * BigInt(1000000)).toString(),
       iso8601: date.toISOString(),
       utcString: date.toUTCString(),
       localString: date.toLocaleString(),
@@ -427,18 +479,14 @@ class CryptoDevToolsService {
   // ==========================================
 
   private base64Encode(str: string): string {
-    try {
-      return btoa(unescape(encodeURIComponent(str)))
-    } catch {
-      return Buffer.from(str, 'utf-8').toString('base64')
-    }
+    return utf8ToBase64(str)
   }
 
   private base64Decode(str: string): string {
     try {
-      return decodeURIComponent(escape(atob(str.trim())))
+      return base64ToUtf8(str)
     } catch {
-      return Buffer.from(str.trim(), 'base64').toString('utf-8')
+      return 'Invalid Base64 input'
     }
   }
 
@@ -543,7 +591,13 @@ class CryptoDevToolsService {
 
   // --- HASH ALGORITHMS (Deterministic JavaScript implementations) ---
 
-  private sha256Hex(ascii: string): string {
+  private sha256Hex(input: string): string {
+    // Convert UTF-8 string to raw byte sequence so non-ASCII inputs produce RFC 6234 compliant digests
+    const utf8Bytes = new TextEncoder().encode(input)
+    let ascii = ''
+    for (let idx = 0; idx < utf8Bytes.length; idx++) {
+      ascii += String.fromCharCode(utf8Bytes[idx])
+    }
     const mathPow = Math.pow
     const maxWord = mathPow(2, 32)
     const lengthProperty = 'length'

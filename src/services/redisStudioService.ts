@@ -3,6 +3,8 @@
  * In-memory Redis client engine with multi-type key inspector (String, Hash, List, Set, ZSet), TTL manager, command REPL, and Pub/Sub stream monitor.
  */
 
+import { globToSafeRegex } from '../utils/security'
+
 export type RedisValueType = 'string' | 'hash' | 'list' | 'set' | 'zset' | 'json'
 
 export interface RedisKeyEntry {
@@ -185,8 +187,13 @@ class RedisStudioService {
     const all = Array.from(this.databaseStore.values())
     if (!pattern || pattern === '*') return all
 
-    const regexPattern = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i')
-    return all.filter((entry) => regexPattern.test(entry.key))
+    try {
+      const regexPattern = globToSafeRegex(pattern, 'i')
+      return all.filter((entry) => regexPattern.test(entry.key))
+    } catch {
+      const lower = pattern.toLowerCase()
+      return all.filter((entry) => entry.key.toLowerCase().includes(lower))
+    }
   }
 
   public getKey(key: string): RedisKeyEntry | undefined {

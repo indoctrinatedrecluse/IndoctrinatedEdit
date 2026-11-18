@@ -28,9 +28,11 @@ export const EnvVaultView: React.FC = () => {
     return envVaultService.getSampleProfile('.env').rawContent
   })
   const [revealAllSecrets, setRevealAllSecrets] = useState<boolean>(false)
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({})
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [exportLang, setExportLang] = useState<'typescript' | 'python' | 'go' | 'docker' | 'k8s'>('typescript')
-  const [vaultPassword, setVaultPassword] = useState<string>('master_key_99')
+  const [vaultPassword, setVaultPassword] = useState<string>('')
+  const [vaultError, setVaultError] = useState<string | null>(null)
 
   // Parse current variables from content
   const variables = useMemo(() => {
@@ -59,8 +61,7 @@ export const EnvVaultView: React.FC = () => {
   }
 
   const handleToggleMask = (key: string) => {
-    const updated = variables.map((v) => (v.key === key ? { ...v, isMasked: !v.isMasked } : v))
-    setRawEnvContent(envVaultService.formatVariablesToEnvString(updated))
+    setRevealedKeys((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
   const handleValueChange = (key: string, newVal: string) => {
@@ -206,10 +207,10 @@ export const EnvVaultView: React.FC = () => {
             </div>
 
             <div className="variables-list">
-              {variables.map((v) => {
-                const isMasked = !revealAllSecrets && v.isSecret
+              {variables.map((v, idx) => {
+                const isMasked = v.isSecret && !revealAllSecrets && !revealedKeys[v.key]
                 return (
-                  <div key={v.key} className={`variable-card glass-panel ${v.hasError ? 'error' : ''}`}>
+                  <div key={`${v.key}-${idx}`} className={`variable-card glass-panel ${v.hasError ? 'error' : ''}`}>
                     <div className="card-top">
                       <div className="key-side">
                         <span className={`cat-pill ${v.category}`}>{v.category.replace('_', ' ')}</span>
@@ -441,15 +442,23 @@ export const EnvVaultView: React.FC = () => {
                 />
                 <button
                   className="encrypt-export-btn glass-interactive"
-                  onClick={() => {
-                    const enc = envVaultService.exportEncryptedVault(variables, vaultPassword)
-                    copyToClipboard(enc, 'enc_vault_copy')
+                  onClick={async () => {
+                    try {
+                      setVaultError(null)
+                      const enc = await envVaultService.encryptVaultAsync(variables, vaultPassword)
+                      copyToClipboard(enc, 'enc_vault_copy')
+                    } catch (err: any) {
+                      setVaultError(err?.message || 'Enter a master passphrase to encrypt.')
+                    }
                   }}
                 >
                   {copiedKey === 'enc_vault_copy' ? <Check size={11} color="#30D158" /> : <Lock size={11} />}
-                  <span>Copy Encrypted Vault</span>
+                  <span>Copy AES-256-GCM Vault</span>
                 </button>
               </div>
+              {vaultError && (
+                <div style={{ color: '#FF453A', fontSize: '11px', marginTop: '6px' }}>{vaultError}</div>
+              )}
             </div>
           </div>
         )}

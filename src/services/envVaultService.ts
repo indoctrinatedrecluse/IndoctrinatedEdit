@@ -4,6 +4,8 @@
  * secret leak scanner, AES vault encryptor, and multi-environment comparison matrix.
  */
 
+import { utf8ToBase64, base64ToUtf8 } from '../utils/security'
+
 export interface EnvVariable {
   key: string
   value: string
@@ -335,14 +337,100 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
       .join('\n')
   }
 
-  public exportEncryptedVault(variables: EnvVariable[], pass: string): string {
-    const jsonStr = JSON.stringify(variables, null, 2)
-    // Simple XOR/base64 demonstration cipher for client-side storage
-    let enc = ''
-    for (let i = 0; i < jsonStr.length; i++) {
-      enc += String.fromCharCode(jsonStr.charCodeAt(i) ^ pass.charCodeAt(i % pass.length))
+  /**
+   * Real AES-256-GCM + PBKDF2-SHA256 authenticated vault encryption using Web Crypto API.
+   * Output format: JSON envelope encoded as UTF-8 Base64 containing salt, iv, and ciphertext.
+   */
+  public async encryptVaultAsync(variables: EnvVariable[], pass: string): Promise<string> {
+    if (!pass || !pass.trim()) {
+      throw new Error('A non-empty master passphrase is required to encrypt the vault.')
     }
-    return btoa(enc)
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) {
+      throw new Error('Web Crypto API (crypto.subtle) is unavailable in this environment.')
+    }
+    const enc = new TextEncoder()
+    const salt = globalThis.crypto.getRandomValues(new Uint8Array(16))
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+
+    const keyMaterial = await subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey'])
+    const aesKey = await subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
+    )
+
+    const plaintext = enc.encode(JSON.stringify(variables))
+    const cipherBuf = await subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, plaintext)
+    const toB64 = (bytes: Uint8Array) => {
+      let bin = ''
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+      return btoa(bin)
+    }
+
+    const envelope = {
+      v: 2,
+      alg: 'AES-256-GCM',
+      kdf: 'PBKDF2-SHA256',
+      iter: 120000,
+      salt: toB64(salt),
+      iv: toB64(iv),
+      ct: toB64(new Uint8Array(cipherBuf)),
+    }
+    return utf8ToBase64(JSON.stringify(envelope))
+  }
+
+  public async decryptVaultAsync(bundleBase64: string, pass: string): Promise<EnvVariable[]> {
+    if (!pass || !pass.trim()) {
+      throw new Error('A non-empty master passphrase is required to decrypt the vault.')
+    }
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) {
+      throw new Error('Web Crypto API (crypto.subtle) is unavailable in this environment.')
+    }
+    const envelope = JSON.parse(base64ToUtf8(bundleBase64))
+    if (envelope?.v !== 2 || envelope?.alg !== 'AES-256-GCM') {
+      throw new Error('Unsupported or legacy vault format.')
+    }
+    const fromB64 = (s: string) => {
+      const bin = atob(s)
+      const out = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+      return out
+    }
+    const enc = new TextEncoder()
+    const salt = fromB64(envelope.salt)
+    const iv = fromB64(envelope.iv)
+    const ct = fromB64(envelope.ct)
+
+    const keyMaterial = await subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey'])
+    const aesKey = await subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: Number(envelope.iter) || 120000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    )
+
+    const plainBuf = await subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ct)
+    return JSON.parse(new TextDecoder().decode(plainBuf))
+  }
+
+  public exportEncryptedVault(variables: EnvVariable[], pass: string): string {
+    if (!pass || !pass.trim()) {
+      throw new Error('Master passphrase cannot be empty.')
+    }
+    const dataBytes = new TextEncoder().encode(JSON.stringify(variables, null, 2))
+    const keyBytes = new TextEncoder().encode(pass)
+    const out = new Uint8Array(dataBytes.length)
+    for (let i = 0; i < dataBytes.length; i++) {
+      out[i] = dataBytes[i] ^ keyBytes[i % keyBytes.length]
+    }
+    let bin = ''
+    for (let i = 0; i < out.length; i++) bin += String.fromCharCode(out[i])
+    return btoa(bin)
   }
 
   public exportCodeSnippet(variables: EnvVariable[], language: 'typescript' | 'python' | 'go' | 'docker' | 'k8s'): string {

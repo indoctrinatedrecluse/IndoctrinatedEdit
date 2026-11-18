@@ -4,6 +4,8 @@
  * cURL command generation, and execution history.
  */
 
+import { utf8ToBase64 } from '../utils/security'
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 export type BodyType = 'none' | 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' | 'graphql'
 export type AuthType = 'none' | 'bearer' | 'basic' | 'apiKey'
@@ -333,18 +335,28 @@ export class RestClientService {
    * Build query parameters onto the URL.
    */
   public buildFullUrl(request: ApiRequest, env?: ApiEnvironment | string): string {
-    let rawUrl = this.interpolate(request.url, env)
+    let rawUrl = this.interpolate(request.url, env).trim()
+    if (!rawUrl) return ''
     const activeParams = request.params.filter((p) => p.enabled && p.key.trim())
 
     if (activeParams.length > 0) {
-      const urlObj = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`)
-      activeParams.forEach((p) => {
-        urlObj.searchParams.append(
-          this.interpolate(p.key, env),
-          this.interpolate(p.value, env)
-        )
-      })
-      rawUrl = urlObj.toString()
+      try {
+        const candidate = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
+        const urlObj = new URL(candidate)
+        activeParams.forEach((p) => {
+          urlObj.searchParams.append(
+            this.interpolate(p.key, env),
+            this.interpolate(p.value, env)
+          )
+        })
+        rawUrl = urlObj.toString()
+      } catch {
+        // Fallback manual query concatenation for partially typed URLs or unresolved {{vars}}
+        const qs = activeParams
+          .map((p) => `${encodeURIComponent(this.interpolate(p.key, env))}=${encodeURIComponent(this.interpolate(p.value, env))}`)
+          .join('&')
+        rawUrl += `${rawUrl.includes('?') ? '&' : '?'}${qs}`
+      }
     }
 
     // Add API key query param if configured
@@ -395,8 +407,12 @@ export class RestClientService {
       headers['Authorization'] = `Bearer ${this.interpolate(request.auth.bearerToken, env)}`
     } else if (request.auth.type === 'basic') {
       const creds = `${this.interpolate(request.auth.basicUsername || '', env)}:${this.interpolate(request.auth.basicPassword || '', env)}`
-      headers['Authorization'] = `Basic ${btoa(creds)}`
-    } else if (request.auth.type === 'apiKey' && request.auth.apiKeyLocation === 'header' && request.auth.apiKeyName) {
+      headers['Authorization'] = `Basic ${utf8ToBase64(creds)}`
+    } else if (
+      request.auth.type === 'apiKey' &&
+      (request.auth.apiKeyLocation || 'header') === 'header' &&
+      request.auth.apiKeyName
+    ) {
       headers[this.interpolate(request.auth.apiKeyName, env)] = this.interpolate(request.auth.apiKeyValue || '', env)
     }
 

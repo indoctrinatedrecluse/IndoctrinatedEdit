@@ -14,6 +14,7 @@ import { DiagnosticsService } from './diagnosticsService'
 import { terminalService } from './terminalService'
 import { RunService } from './runService'
 import { McpService } from './mcpService'
+import { validateWorkspacePath } from '../utils/security'
 
 /* =========================================================================
  * 🛡️ Security Guardrails Service
@@ -32,32 +33,6 @@ export interface CommandValidationResult {
 }
 
 export class AiGuardrailService {
-  // Sensitive OS system directories that AI agents are forbidden to access
-  private static readonly BLOCKED_PATH_PATTERNS = [
-    // Windows sensitive system paths
-    /^[a-z]:\\windows/i,
-    /^[a-z]:\\system32/i,
-    /^[a-z]:\\program files\\windows/i,
-    /^[a-z]:\\recovery/i,
-    /^[a-z]:\\boot/i,
-    /\\(sam|system|security|software)$/i,
-    // Unix sensitive system paths
-    /^\/(etc|boot|sys|proc|dev|root)/i,
-    /\/etc\/(passwd|shadow|sudoers)/i,
-  ]
-
-  // Sensitive credential, secret, and repository internals that AI agents cannot inspect or alter
-  private static readonly PROTECTED_SECRET_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-    { pattern: /(^|[\\/])\.env(\.[a-zA-Z0-9_-]+)?$/i, reason: 'Environment variables and API secrets (.env*) are protected' },
-    { pattern: /(^|[\\/])\.git[\\/](config|credentials|HEAD|hooks|objects)/i, reason: 'Internal Git repository metadata and credentials are protected' },
-    { pattern: /(^|[\\/])\.ssh[\\/]/i, reason: 'SSH private keys and configuration are protected' },
-    { pattern: /(^|[\\/])\.(npmrc|pypirc|netrc|dockercfg)/i, reason: 'Package manager and registry authentication tokens are protected' },
-    { pattern: /\.(pem|key|pkcs12|pfx|p12|kdbx)$/i, reason: 'Cryptographic private keys and certificates are protected' },
-    { pattern: /(^|[\\/])(id_rsa|id_ed25519|id_ecdsa)($|\.)/i, reason: 'Private key files are protected' },
-    { pattern: /(^|[\\/])\.aws[\\/](credentials|config)/i, reason: 'AWS cloud credentials are protected' },
-    { pattern: /(^|[\\/])\.gnupg[\\/]/i, reason: 'GPG keys and keyring are protected' },
-  ]
-
   // Destructive / Malicious command patterns
   private static readonly BLOCKED_COMMAND_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     { pattern: /rm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+|\s+-r[a-zA-Z]*\s+)?(\/|\\\*|\/\*|\*|\~)/i, reason: 'Recursive root/wildcard deletion is prohibited' },
@@ -113,54 +88,7 @@ export class AiGuardrailService {
    * Validates and sanitizes a target file/folder path against directory traversal and sensitive OS roots.
    */
   static validatePath(targetPath: string, workspaceRoot?: string): PathValidationResult {
-    if (!targetPath || typeof targetPath !== 'string' || !targetPath.trim()) {
-      return { valid: false, resolvedPath: '', error: 'Path cannot be empty' }
-    }
-
-    const trimmed = targetPath.trim()
-
-    // Normalize forward/back slashes
-    const normalized = trimmed.replace(/\\/g, '/')
-
-    // Check for obvious traversal escape attempts
-    if (normalized.includes('/../') || normalized.startsWith('../') || normalized.endsWith('/..') || normalized === '..') {
-      // If no workspaceRoot is provided, flag suspicious traversal
-      if (!workspaceRoot) {
-        return { valid: false, resolvedPath: trimmed, error: 'Path traversal (..) is not allowed without an explicit workspace root' }
-      }
-    }
-
-    // Check against forbidden system roots
-    for (const regex of this.BLOCKED_PATH_PATTERNS) {
-      if (regex.test(trimmed) || regex.test(normalized)) {
-        return {
-          valid: false,
-          resolvedPath: trimmed,
-          error: `Security Guardrail: Access to sensitive OS directory "${trimmed}" is blocked.`,
-        }
-      }
-    }
-
-    // Check against protected sensitive secrets and credentials (.env, .git/config, .ssh, private keys)
-    for (const check of this.PROTECTED_SECRET_PATTERNS) {
-      if (check.pattern.test(trimmed) || check.pattern.test(normalized)) {
-        return {
-          valid: false,
-          resolvedPath: trimmed,
-          error: `Security Guardrail: Access to sensitive credential / secret file "${trimmed}" is blocked. (${check.reason})`,
-        }
-      }
-    }
-
-    // Resolve relative path against workspace root if applicable
-    let resolved = trimmed
-    if (workspaceRoot && !trimmed.match(/^[a-zA-Z]:[\\/]/) && !trimmed.startsWith('/')) {
-      const cleanRoot = workspaceRoot.replace(/[\\/]+$/, '')
-      const cleanTarget = trimmed.replace(/^[\\/]+/, '')
-      resolved = `${cleanRoot}/${cleanTarget}`
-    }
-
-    return { valid: true, resolvedPath: resolved }
+    return validateWorkspacePath(targetPath, workspaceRoot)
   }
 
   /**
@@ -520,10 +448,14 @@ export class AiToolExecutor {
             }
           }
 
-          let content = ''
+          let content: string | null = null
           // Check if it's the active file or an open file in editor
-          if (context.activeFileName && (filePath.endsWith(context.activeFileName) || context.activeFileName.endsWith(filePath))) {
-            content = context.activeFileContent || ''
+          if (
+            context.activeFileName &&
+            context.activeFileContent !== undefined &&
+            (filePath.endsWith(context.activeFileName) || context.activeFileName.endsWith(filePath))
+          ) {
+            content = context.activeFileContent
           } else if (context.openFiles) {
             const found = context.openFiles.find((f) => f.path === pathCheck.resolvedPath || f.path.endsWith(filePath))
             if (found && found.content !== undefined) {
@@ -531,7 +463,7 @@ export class AiToolExecutor {
             }
           }
 
-          if (!content && typeof window !== 'undefined' && window.electronAPI?.readFile) {
+          if (content === null && typeof window !== 'undefined' && window.electronAPI?.readFile) {
             try {
               content = await window.electronAPI.readFile(pathCheck.resolvedPath)
             } catch (err: any) {
@@ -545,7 +477,7 @@ export class AiToolExecutor {
             }
           }
 
-          if (!content && !context.activeFileContent) {
+          if (content === null) {
             return {
               toolCallId: call.id,
               toolName: call.toolName,
@@ -604,15 +536,20 @@ export class AiToolExecutor {
           }
 
           const matches: string[] = []
-          const openFiles = context.openFiles || []
-          if (context.activeFileName && context.activeFileContent) {
+          const openFiles = [...(context.openFiles || [])]
+          if (
+            context.activeFileName &&
+            context.activeFileContent !== undefined &&
+            !openFiles.some((f) => f.name === context.activeFileName || f.path === context.activeFileName)
+          ) {
             openFiles.push({ path: context.activeFileName, name: context.activeFileName, content: context.activeFileContent })
           }
 
           const isRegex = !!call.arguments.isRegex
           let re: RegExp
           try {
-            re = isRegex ? new RegExp(query, 'g') : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+            // Do NOT use the 'g' flag with RegExp.test() in a loop (stateful lastIndex skips alternating matches)
+            re = isRegex ? new RegExp(query) : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
           } catch (e: any) {
             return { toolCallId: call.id, toolName: call.toolName, success: false, output: '', error: `Invalid regex: ${e.message}` }
           }
@@ -760,8 +697,8 @@ export class AiToolExecutor {
             }
           }
 
-          let computedFullContent = fullContent
-          if (!computedFullContent && originalSnippet && newSnippet) {
+          let computedFullContent: string | undefined = typeof fullContent === 'string' ? fullContent : undefined
+          if (computedFullContent === undefined && typeof originalSnippet === 'string' && originalSnippet.length > 0 && typeof newSnippet === 'string') {
             if (existingContent !== null) {
               if (existingContent.includes(originalSnippet)) {
                 // Function replacer avoids $1, $2 token corruption
@@ -788,7 +725,7 @@ export class AiToolExecutor {
             }
           }
 
-          if (!computedFullContent && newSnippet) {
+          if (computedFullContent === undefined && typeof newSnippet === 'string') {
             computedFullContent = newSnippet
           }
 

@@ -1,4 +1,5 @@
 import * as mammoth from 'mammoth'
+import { sanitizeHtml, escapeHtml as safeEscapeHtml } from '../utils/security'
 
 export type DocumentPreviewType = 'markdown' | 'html' | 'svg' | 'pdf' | 'docx' | 'unsupported'
 
@@ -73,7 +74,14 @@ class PreviewService {
     let diagrams: MermaidDiagram[] = []
     let diagramCounter = 0
 
-    // Extract and replace Mermaid blocks with placeholders
+    // Extract and replace Mermaid & fenced code blocks FIRST using placeholders
+    // so headings, LaTeX, bold/italic, links, and paragraphs never corrupt code blocks.
+    const protectedBlocks: string[] = []
+    const stashBlock = (htmlBlock: string): string => {
+      const idx = protectedBlocks.push(htmlBlock) - 1
+      return `@@PROTECTED_BLOCK_${idx}@@`
+    }
+
     let processed = markdown.replace(/```mermaid\s*([\s\S]*?)```/gi, (_, code) => {
       const id = `mermaid-diagram-${++diagramCounter}`
       const trimmedCode = code.trim()
@@ -83,7 +91,8 @@ class PreviewService {
         code: trimmedCode,
         type: diagramType,
       })
-      return `<div class="mermaid-diagram-container glass-panel" id="${id}" data-type="${diagramType}" data-code="${encodeURIComponent(trimmedCode)}">
+      return stashBlock(
+        `<div class="mermaid-diagram-container glass-panel" id="${id}" data-type="${diagramType}" data-code="${encodeURIComponent(trimmedCode)}">
         <div class="mermaid-diagram-header">
           <span class="diagram-badge ${diagramType}">📊 MERMAID: ${diagramType.toUpperCase()}</span>
         </div>
@@ -91,6 +100,23 @@ class PreviewService {
           ${this.generateMermaidSvg(trimmedCode, diagramType)}
         </div>
       </div>`
+      )
+    })
+
+    // Fenced code blocks with syntax badge
+    processed = processed.replace(/```([a-zA-Z0-9_-]*)\s*\n?([\s\S]*?)```/g, (_, lang, code) => {
+      const safeLang = safeEscapeHtml(lang || 'code')
+      return stashBlock(
+        `<div class="code-block-wrapper glass-panel">
+        <div class="code-lang-tag">${safeLang}</div>
+        <pre class="preview-pre"><code class="language-${safeLang}">${this.escapeHtml(code.trim())}</code></pre>
+      </div>`
+      )
+    })
+
+    // Inline code (also protected from subsequent emphasis/math replacements)
+    processed = processed.replace(/`([^`\n]+)`/g, (_, code) => {
+      return stashBlock(`<code class="preview-inline-code">${this.escapeHtml(code)}</code>`)
     })
 
     // Metadata counters
@@ -98,19 +124,25 @@ class PreviewService {
     const chars = markdown.length
     const headings = (markdown.match(/^#{1,6}\s+/gm) || []).length
 
-    // Headers with click-to-pin navigation anchors
-    processed = processed.replace(/^######\s+(.*$)/gm, '<h6 class="preview-h6 preview-heading" data-heading="$1" id="heading-$1">$1</h6>')
-    processed = processed.replace(/^#####\s+(.*$)/gm, '<h5 class="preview-h5 preview-heading" data-heading="$1" id="heading-$1">$1</h5>')
-    processed = processed.replace(/^####\s+(.*$)/gm, '<h4 class="preview-h4 preview-heading" data-heading="$1" id="heading-$1">$1</h4>')
-    processed = processed.replace(/^###\s+(.*$)/gm, '<h3 class="preview-h3 preview-heading" data-heading="$1" id="heading-$1">$1</h3>')
-    processed = processed.replace(/^##\s+(.*$)/gm, '<h2 class="preview-h2 preview-heading" data-heading="$1" id="heading-$1">$1</h2>')
-    processed = processed.replace(/^#\s+(.*$)/gm, '<h1 class="preview-h1 preview-heading" data-heading="$1" id="heading-$1">$1</h1>')
+    // Headers with safely escaped click-to-pin navigation anchors
+    const makeHeading = (level: number, text: string) => {
+      const escapedAttr = safeEscapeHtml(text.trim())
+      return `<h${level} class="preview-h${level} preview-heading" data-heading="${escapedAttr}" id="heading-${escapedAttr}">${text}</h${level}>`
+    }
+    processed = processed.replace(/^######\s+(.*$)/gm, (_, t) => makeHeading(6, t))
+    processed = processed.replace(/^#####\s+(.*$)/gm, (_, t) => makeHeading(5, t))
+    processed = processed.replace(/^####\s+(.*$)/gm, (_, t) => makeHeading(4, t))
+    processed = processed.replace(/^###\s+(.*$)/gm, (_, t) => makeHeading(3, t))
+    processed = processed.replace(/^##\s+(.*$)/gm, (_, t) => makeHeading(2, t))
+    processed = processed.replace(/^#\s+(.*$)/gm, (_, t) => makeHeading(1, t))
 
     // LaTeX Math Formula Rendering ($$...$$ and $...$)
     processed = processed.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
-      return `<div class="latex-math-block glass-panel"><span class="math-tex-display">$$ ${this.escapeHtml(math.trim())} $$</span></div>`
+      return stashBlock(`<div class="latex-math-block glass-panel"><span class="math-tex-display">$$ ${this.escapeHtml(math.trim())} $$</span></div>`)
     })
-    processed = processed.replace(/\$([^\$\n]+)\$/g, '<span class="latex-math-inline">$1</span>')
+    processed = processed.replace(/\$([^\$\n]+)\$/g, (_, math) => {
+      return stashBlock(`<span class="latex-math-inline">${this.escapeHtml(math)}</span>`)
+    })
 
     // Horizontal Rules
     processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="preview-hr" />')
@@ -118,17 +150,6 @@ class PreviewService {
     // Blockquotes & GitHub Alerts
     processed = processed.replace(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*$)/gm, '<div class="github-alert alert-$1 glass-panel"><div class="alert-title">$1</div><div class="alert-body">$2</div></div>')
     processed = processed.replace(/^>\s*(.*$)/gm, '<blockquote class="preview-blockquote">$1</blockquote>')
-
-    // Code blocks with syntax badge
-    processed = processed.replace(/```([a-zA-Z0-9_-]*)\s*([\s\S]*?)```/g, (_, lang, code) => {
-      return `<div class="code-block-wrapper glass-panel">
-        <div class="code-lang-tag">${lang || 'code'}</div>
-        <pre class="preview-pre"><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>
-      </div>`
-    })
-
-    // Inline code
-    processed = processed.replace(/`([^`]+)`/g, '<code class="preview-inline-code">$1</code>')
 
     // Bold & Italics
     processed = processed.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
@@ -144,9 +165,20 @@ class PreviewService {
     processed = processed.replace(/^[*-]\s+(.*$)/gm, '<li class="preview-li-bullet">$1</li>')
     processed = processed.replace(/^(\d+)\.\s+(.*$)/gm, '<li class="preview-li-num" value="$1">$2</li>')
 
-    // Links & Images
-    processed = processed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<div class="preview-img-box"><img src="$2" alt="$1" class="preview-img" /><span class="img-caption">$1</span></div>')
-    processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="preview-link">$1</a>')
+    // Links & Images (block javascript:/vbscript:/data:text/html URIs)
+    const sanitizeUrl = (rawUrl: string): string => {
+      const trimmed = rawUrl.trim()
+      if (/^(?:javascript|vbscript|data:\s*text\/html):/i.test(trimmed)) return '#'
+      return safeEscapeHtml(trimmed)
+    }
+    processed = processed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
+      const safeAlt = safeEscapeHtml(alt)
+      const safeSrc = sanitizeUrl(src)
+      return `<div class="preview-img-box"><img src="${safeSrc}" alt="${safeAlt}" class="preview-img" /><span class="img-caption">${safeAlt}</span></div>`
+    })
+    processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+      return `<a href="${sanitizeUrl(href)}" target="_blank" rel="noopener noreferrer" class="preview-link">${label}</a>`
+    })
 
     // Tables
     processed = this.renderMarkdownTables(processed)
@@ -154,8 +186,11 @@ class PreviewService {
     // Paragraph linebreaks
     processed = processed.replace(/\n{2,}/g, '<div class="preview-paragraph-spacing"></div>')
 
+    // Restore protected code, math, and Mermaid blocks
+    processed = processed.replace(/@@PROTECTED_BLOCK_(\d+)@@/g, (_, idx) => protectedBlocks[Number(idx)] ?? '')
+
     return {
-      html: processed,
+      html: sanitizeHtml(processed),
       diagrams,
       metadata: {
         type: 'markdown',

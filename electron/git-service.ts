@@ -4,15 +4,68 @@ import { GitCommit, GitFileChange, GitFileStatusCode, GitRepoStatus } from '../p
 
 const execFileAsync = promisify(execFile)
 
-async function runGit(args: string[], cwd: string): Promise<string> {
+async function runGitRaw(args: string[], cwd: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer: 10 * 1024 * 1024 })
-    return stdout.trim()
+    return stdout
   } catch (err: unknown) {
-    // If command exits with error, rethrow message or empty
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(message)
   }
+}
+
+async function runGit(args: string[], cwd: string): Promise<string> {
+  const stdout = await runGitRaw(args, cwd)
+  return stdout.trim()
+}
+
+/**
+ * Pure parser for `git status --porcelain=v1` output.
+ * Preserves leading spaces on the first line (e.g. ` M src/foo.ts`), handles renames (`R  old -> new`),
+ * and unquotes C-escaped Git paths.
+ */
+export function parsePorcelainStatus(rawOutput: string): {
+  staged: GitFileChange[]
+  working: GitFileChange[]
+} {
+  const staged: GitFileChange[] = []
+  const working: GitFileChange[] = []
+  if (!rawOutput) return { staged, working }
+
+  const lines = rawOutput.split(/\r?\n/)
+  for (const line of lines) {
+    if (!line || line.length < 4) continue
+    const indexStatus = line[0]
+    const workStatus = line[1]
+    let rawPath = line.substring(3).trim()
+
+    // Handle renames/copies: "old/path -> new/path"
+    if ((indexStatus === 'R' || indexStatus === 'C' || workStatus === 'R' || workStatus === 'C') && rawPath.includes(' -> ')) {
+      const arrowIdx = rawPath.lastIndexOf(' -> ')
+      rawPath = rawPath.substring(arrowIdx + 4).trim()
+    }
+
+    const filePath = rawPath.replace(/^"|"$/g, '')
+    if (!filePath) continue
+
+    if (indexStatus !== ' ' && indexStatus !== '?') {
+      staged.push({
+        path: filePath,
+        status: (indexStatus as GitFileStatusCode) || 'M',
+        isStaged: true,
+      })
+    }
+
+    if (workStatus !== ' ' || indexStatus === '?') {
+      working.push({
+        path: filePath,
+        status: (workStatus === '?' || indexStatus === '?' ? '?' : (workStatus as GitFileStatusCode)) || 'M',
+        isStaged: false,
+      })
+    }
+  }
+
+  return { staged, working }
 }
 
 export async function isGitRepo(cwd: string): Promise<boolean> {
@@ -62,36 +115,15 @@ export async function getRepoStatus(cwd: string): Promise<GitRepoStatus> {
   }
 
   // 3. Staged & Working Tree Changes
-  const staged: GitFileChange[] = []
-  const working: GitFileChange[] = []
+  let staged: GitFileChange[] = []
+  let working: GitFileChange[] = []
 
   try {
-    const statusOut = await runGit(['status', '--porcelain=v1'], cwd)
-    if (statusOut) {
-      const lines = statusOut.split('\n')
-      for (const line of lines) {
-        if (!line || line.length < 3) continue
-        const indexStatus = line[0]
-        const workStatus = line[1]
-        const filePath = line.substring(3).trim().replace(/^"|"$/g, '')
-
-        if (indexStatus !== ' ' && indexStatus !== '?') {
-          staged.push({
-            path: filePath,
-            status: (indexStatus as GitFileStatusCode) || 'M',
-            isStaged: true,
-          })
-        }
-
-        if (workStatus !== ' ' || indexStatus === '?') {
-          working.push({
-            path: filePath,
-            status: (workStatus === '?' || indexStatus === '?' ? '?' : workStatus as GitFileStatusCode) || 'M',
-            isStaged: false,
-          })
-        }
-      }
-    }
+    // CRITICAL: Use runGitRaw (NOT .trim()) so leading space on line 1 (" M file.ts") is never stripped!
+    const statusOut = await runGitRaw(['status', '--porcelain=v1'], cwd)
+    const parsed = parsePorcelainStatus(statusOut)
+    staged = parsed.staged
+    working = parsed.working
   } catch (err) {
     console.warn('Failed to parse git status:', err)
   }
@@ -200,10 +232,16 @@ export async function stageFile(cwd: string, filePath: string): Promise<boolean>
 
 export async function unstageFile(cwd: string, filePath: string): Promise<boolean> {
   try {
-    await runGit(['restore', '--staged', filePath], cwd)
+    await runGit(['restore', '--staged', '--', filePath], cwd)
     return true
   } catch {
-    return false
+    // Unborn branch (no HEAD commit yet): fall back to git rm --cached
+    try {
+      await runGit(['rm', '--cached', '--', filePath], cwd)
+      return true
+    } catch {
+      return false
+    }
   }
 }
 

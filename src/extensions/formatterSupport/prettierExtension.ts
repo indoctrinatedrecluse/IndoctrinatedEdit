@@ -20,7 +20,7 @@ export const prettierExtensionManifest: ExtensionManifest = {
   category: 'Tools',
   iconName: 'Sparkles',
   status: 'Active',
-  snippetsCount: 12,
+  snippetsCount: 1,
   languages: [
     { id: 'typescript', extensions: ['.ts', '.tsx'], aliases: ['TypeScript', 'TS', 'TSX'] },
     { id: 'javascript', extensions: ['.js', '.jsx', '.mjs', '.cjs'], aliases: ['JavaScript', 'JS', 'JSX'] },
@@ -53,7 +53,12 @@ const SUPPORTED_LANGUAGES = [
   'xml',
 ]
 
+let isRegistered = false
+
 export function registerPrettierExtension(monacoInstance: typeof monaco): void {
+  if (isRegistered) return
+  isRegistered = true
+
   for (const lang of SUPPORTED_LANGUAGES) {
     try {
       // 1. Document Formatting Edit Provider
@@ -73,7 +78,7 @@ export function registerPrettierExtension(monacoInstance: typeof monaco): void {
         },
       })
 
-      // 2. Document Range Formatting Edit Provider
+      // 2. Document Range Formatting Edit Provider (scoped strictly to selected lines)
       monacoInstance.languages.registerDocumentRangeFormattingEditProvider(lang, {
         async provideDocumentRangeFormattingEdits(model, range) {
           const text = model.getValue()
@@ -85,11 +90,22 @@ export function registerPrettierExtension(monacoInstance: typeof monaco): void {
           )
           if (!result.hasChanges) return []
 
-          const fullRange = model.getFullModelRange()
+          const startLine = Math.max(1, range.startLineNumber)
+          const endLine = Math.min(model.getLineCount(), range.endLineNumber)
+          const allFormattedLines = result.formatted.split(/\r?\n/)
+          const originalLineCount = model.getLineCount()
+          const delta = allFormattedLines.length - originalLineCount
+          const replacementLines = allFormattedLines.slice(startLine - 1, endLine + delta)
+
           return [
             {
-              range: fullRange,
-              text: result.formatted,
+              range: {
+                startLineNumber: startLine,
+                startColumn: 1,
+                endLineNumber: endLine,
+                endColumn: model.getLineMaxColumn(endLine),
+              },
+              text: replacementLines.join('\n'),
             },
           ]
         },

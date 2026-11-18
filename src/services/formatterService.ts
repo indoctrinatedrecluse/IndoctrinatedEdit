@@ -176,7 +176,7 @@ class FormatterService {
   }
 
   /**
-   * Format a specific range/selection
+   * Format a specific range/selection while preserving its base indentation.
    */
   public async formatRange(
     code: string,
@@ -188,11 +188,36 @@ class FormatterService {
     const lines = code.split(/\r?\n/)
     const startIdx = Math.max(0, startLine - 1)
     const endIdx = Math.min(lines.length, endLine)
+    const slice = lines.slice(startIdx, endIdx)
 
-    const targetSection = lines.slice(startIdx, endIdx).join('\n')
+    // Measure minimum leading whitespace of non-empty lines so range formatting preserves nesting
+    let minIndent = Infinity
+    let baseIndentStr = ''
+    for (const l of slice) {
+      if (!l.trim()) continue
+      const match = l.match(/^([ \t]*)/)
+      const ws = match ? match[1] : ''
+      if (ws.length < minIndent) {
+        minIndent = ws.length
+        baseIndentStr = ws
+      }
+    }
+    if (!Number.isFinite(minIndent)) baseIndentStr = ''
+
+    const targetSection = slice.join('\n')
     const result = await this.formatDocument(targetSection, language, customOptions)
+    if (result.errors && result.errors.length > 0) {
+      return {
+        formatted: code,
+        hasChanges: false,
+        language,
+        durationMs: result.durationMs,
+        errors: result.errors,
+      }
+    }
 
-    const formattedLines = result.formatted.split(/\r?\n/)
+    const rawFormatted = result.formatted.replace(/\n$/, '')
+    const formattedLines = rawFormatted.split(/\r?\n/).map((l) => (l.trim() ? baseIndentStr + l : ''))
     const mergedLines = [
       ...lines.slice(0, startIdx),
       ...formattedLines,
@@ -218,15 +243,117 @@ class FormatterService {
     return ' '.repeat(Math.max(0, level * opts.tabWidth))
   }
 
+  /**
+   * Strip strings, template literals, and comments so bracket counting never misfires.
+   */
+  private stripStringsAndComments(line: string, inBlockComment: boolean): { cleaned: string; inBlockComment: boolean } {
+    let out = ''
+    let i = 0
+    let block = inBlockComment
+    let quote: string | null = null
+
+    while (i < line.length) {
+      const ch = line[i]
+      const next = line[i + 1]
+
+      if (block) {
+        if (ch === '*' && next === '/') {
+          block = false
+          i += 2
+        } else {
+          i++
+        }
+        continue
+      }
+
+      if (quote) {
+        if (ch === '\\') {
+          i += 2
+          continue
+        }
+        if (ch === quote) {
+          quote = null
+        }
+        i++
+        continue
+      }
+
+      if (ch === '/' && next === '/') {
+        break
+      }
+      if (ch === '/' && next === '*') {
+        block = true
+        i += 2
+        continue
+      }
+      if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch
+        i++
+        continue
+      }
+
+      out += ch
+      i++
+    }
+
+    return { cleaned: out, inBlockComment: block }
+  }
+
   private formatJson(code: string, opts: FormatterOptions): string {
+    // Support JSONC files containing // or /* */ comments without crashing or destroying comments
+    const hasComments = /(^|[^:"'])\/\/|\/\*/.test(code)
+    if (hasComments) {
+      return this.formatBraceLanguage(code, opts)
+    }
     const parsed = JSON.parse(code)
     const indent = opts.useTabs ? '\t' : opts.tabWidth
     return JSON.stringify(parsed, null, indent) + '\n'
   }
 
+  /**
+   * Safe indentation formatter for brace-delimited languages (JS/TS/JSX/Rust/Go/JSONC).
+   * Never mutates string literals, JSX attributes, Rust lifetimes, or injects bogus semicolons.
+   */
+  private formatBraceLanguage(code: string, opts: FormatterOptions): string {
+    const lines = code.split(/\r?\n/)
+    let indentLevel = 0
+    let inBlockComment = false
+    const result: string[] = []
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) {
+        result.push('')
+        continue
+      }
+
+      const { cleaned, inBlockComment: nextBlock } = this.stripStringsAndComments(line, inBlockComment)
+
+      // Leading closing braces/brackets/parens decrease indent for the current line
+      const leadingCloseMatch = cleaned.match(/^[}\])]+/)
+      const leadingCloses = leadingCloseMatch ? leadingCloseMatch[0].length : 0
+      if (leadingCloses > 0) {
+        indentLevel = Math.max(0, indentLevel - leadingCloses)
+      }
+
+      const indentation = this.getIndentString(opts, indentLevel)
+      result.push(indentation + line)
+
+      // Adjust indent for subsequent lines based on net remaining brackets outside strings/comments
+      const rest = cleaned.slice(leadingCloses)
+      const openBrackets = (rest.match(/[{[(]/g) || []).length
+      const closeBrackets = (rest.match(/[}\])]/g) || []).length
+      indentLevel = Math.max(0, indentLevel + (openBrackets - closeBrackets))
+      inBlockComment = nextBlock
+    }
+
+    return result.join('\n').trimEnd() + '\n'
+  }
+
   private formatJavaScriptTypeScript(code: string, opts: FormatterOptions): string {
     const lines = code.split(/\r?\n/)
     let indentLevel = 0
+    let inBlockComment = false
     const result: string[] = []
 
     for (let i = 0; i < lines.length; i++) {
@@ -236,24 +363,30 @@ class FormatterService {
         continue
       }
 
-      // Check closing bracket decrease
-      if (/^[}\])]/.test(line) || /^\);?$/.test(line)) {
-        indentLevel = Math.max(0, indentLevel - 1)
+      const { cleaned, inBlockComment: nextBlock } = this.stripStringsAndComments(line, inBlockComment)
+
+      const leadingCloseMatch = cleaned.match(/^[}\])]+/)
+      const leadingCloses = leadingCloseMatch ? leadingCloseMatch[0].length : 0
+      if (leadingCloses > 0) {
+        indentLevel = Math.max(0, indentLevel - leadingCloses)
       }
 
-      // Apply quote normalization if requested (ignoring template literals)
-      if (opts.singleQuote && !line.includes('`')) {
+      const isComment = inBlockComment || line.startsWith('//') || line.startsWith('/*') || line.startsWith('*')
+      const looksLikeJsx = /<\/?[A-Za-z][\w.-]*(?:\s|>|\/|$)/.test(line)
+
+      // Apply singleQuote ONLY on non-JSX, non-comment, non-template lines
+      if (opts.singleQuote && !isComment && !looksLikeJsx && !line.includes('`')) {
         line = line.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (m, content) => {
-          if (!content.includes("'")) {
-            return `'${content}'`
-          }
-          return m
+          return content.includes("'") ? m : `'${content}'`
         })
       }
 
-      // Apply semicolon normalization on statements
-      if (opts.semi) {
+      // Apply semicolons ONLY on clear complete single-line statements (never on JSX, comments, or open expressions)
+      if (opts.semi && !isComment && !looksLikeJsx) {
+        const netBrackets =
+          (cleaned.match(/[{[(]/g) || []).length - (cleaned.match(/[}\])]/g) || []).length
         if (
+          netBrackets === 0 &&
           !line.endsWith(';') &&
           !line.endsWith('{') &&
           !line.endsWith('}') &&
@@ -261,14 +394,11 @@ class FormatterService {
           !line.endsWith(':') &&
           !line.endsWith('(') &&
           !line.endsWith('[') &&
-          !line.startsWith('//') &&
-          !line.startsWith('/*') &&
-          !line.startsWith('*') &&
-          !/^(if|for|while|switch|catch|function|class|interface|type|export\s+default\s+function|export\s+function|export\s+class)/.test(line)
+          !line.endsWith('=>') &&
+          !/^(if|for|while|switch|catch|function|class|interface|type|export\s+default\s+function|export\s+function|export\s+class)\b/.test(line)
         ) {
           if (
-            /^(const|let|var|return|import|export|throw|break|continue|debugger|yield|await|console)/.test(line) ||
-            line.includes('=') ||
+            /^(const|let|var|return|import|export|throw|break|continue|debugger|yield|await|console)\b/.test(line) ||
             line.endsWith(')')
           ) {
             line += ';'
@@ -276,29 +406,34 @@ class FormatterService {
         }
       }
 
-      // Space padding around operators and keywords
-      line = line.replace(/\s*=>\s*/g, ' => ')
-      line = line.replace(/(\bif|\bfor|\bwhile|\bswitch|\bcatch)\s*\(/g, '$1 (')
-
       const indentation = this.getIndentString(opts, indentLevel)
       result.push(indentation + line)
 
-      // Check opening bracket increase
-      const openBrackets = (line.match(/[{[(]/g) || []).length
-      const closeBrackets = (line.match(/[}\])]/g) || []).length
-      const net = openBrackets - closeBrackets
-
-      if (net > 0 && !line.startsWith('//')) {
-        indentLevel += net
-      }
+      const rest = cleaned.slice(leadingCloses)
+      const openBrackets = (rest.match(/[{[(]/g) || []).length
+      const closeBrackets = (rest.match(/[}\])]/g) || []).length
+      indentLevel = Math.max(0, indentLevel + (openBrackets - closeBrackets))
+      inBlockComment = nextBlock
     }
 
-    return result.join('\n').trim() + '\n'
+    return result.join('\n').trimEnd() + '\n'
   }
 
   private formatCss(code: string, opts: FormatterOptions): string {
-    // Normalize condensed CSS into distinct lines first
-    const normalized = code
+    // Protect url(...) and quoted strings so data:image/svg+xml;base64,... is NEVER split on ';' or '{'
+    const protectedLiterals: string[] = []
+    const stash = (m: string) => {
+      const idx = protectedLiterals.push(m) - 1
+      return `__CSS_LITERAL_${idx}__`
+    }
+
+    const shielded = code
+      .replace(/url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\)/gi, stash)
+      .replace(/"(?:\\.|[^"\\])*"/g, stash)
+      .replace(/'(?:\\.|[^'\\])*'/g, stash)
+      .replace(/\/\*[\s\S]*?\*\//g, stash)
+
+    const normalized = shielded
       .replace(/\{/g, ' {\n')
       .replace(/\}/g, '\n}\n')
       .replace(/;/g, ';\n')
@@ -317,11 +452,11 @@ class FormatterService {
         indentLevel = Math.max(0, indentLevel - 1)
       }
 
-      // Property colon spacing
-      if (line.includes(':') && !line.startsWith('@') && !line.includes('{')) {
-        const parts = line.split(':')
-        const prop = parts[0].trim()
-        const val = parts.slice(1).join(':').trim()
+      // Property colon spacing (skip selectors, at-rules, and stashed comments)
+      if (line.includes(':') && !line.startsWith('@') && !line.includes('{') && !line.startsWith('__CSS_LITERAL_')) {
+        const colonIdx = line.indexOf(':')
+        const prop = line.slice(0, colonIdx).trim()
+        const val = line.slice(colonIdx + 1).trim()
         line = `${prop}: ${val}`
         if (!line.endsWith(';') && !line.endsWith('}')) {
           line += ';'
@@ -336,7 +471,11 @@ class FormatterService {
       }
     }
 
-    return result.join('\n').trim() + '\n'
+    const restored = result
+      .join('\n')
+      .replace(/__CSS_LITERAL_(\d+)__/g, (_, idx) => protectedLiterals[Number(idx)] ?? '')
+
+    return restored.trimEnd() + '\n'
   }
 
   private formatHtml(code: string, opts: FormatterOptions): string {
@@ -410,39 +549,78 @@ class FormatterService {
   }
 
   private formatPython(code: string, opts: FormatterOptions): string {
+    // Python indentation is semantically significant (blocks are defined by dedentation).
     const lines = code.split(/\r?\n/)
+    const tabWidth = Math.max(1, opts.tabWidth || 4)
+
+    // Check whether the file already carries semantic indentation
+    const hasExistingIndent = lines.some((l) => /^[ \t]+\S/.test(l))
+
+    if (hasExistingIndent) {
+      let detectedUnit = tabWidth
+      for (const rawLine of lines) {
+        const m = rawLine.match(/^( +)\S/)
+        if (m && m[1].length > 0 && m[1].length < detectedUnit) {
+          detectedUnit = m[1].length
+        }
+      }
+
+      const result: string[] = []
+      for (let i = 0; i < lines.length; i++) {
+        const trimmedEnd = lines[i].replace(/[ \t]+$/, '')
+        if (!trimmedEnd) {
+          result.push('')
+          continue
+        }
+        const leadingMatch = trimmedEnd.match(/^([ \t]*)/)
+        const leading = leadingMatch ? leadingMatch[1] : ''
+        const body = trimmedEnd.slice(leading.length)
+
+        const expandedSpaces = leading.replace(/\t/g, ' '.repeat(detectedUnit)).length
+        const level = Math.floor(expandedSpaces / detectedUnit)
+        const remainder = expandedSpaces % detectedUnit
+        const normalizedIndent = this.getIndentString(opts, level) + (remainder > 0 ? ' '.repeat(remainder) : '')
+        result.push(normalizedIndent + body)
+      }
+
+      return result.join('\n').trimEnd() + '\n'
+    }
+
+    // Flat unindented snippet: infer block nesting AND dedent properly on control-flow exits/clauses
     let indentLevel = 0
     const result: string[] = []
-
     for (let i = 0; i < lines.length; i++) {
-      const rawLine = lines[i]
-      const trimmed = rawLine.trim()
+      const trimmed = lines[i].trim()
       if (!trimmed) {
         result.push('')
         continue
       }
 
-      if (trimmed.startsWith('elif ') || trimmed.startsWith('else:') || trimmed.startsWith('except') || trimmed.startsWith('finally:')) {
+      if (/^(elif\b|else\s*:|except\b|finally\s*:)/.test(trimmed)) {
         indentLevel = Math.max(0, indentLevel - 1)
       }
 
-      const indentation = this.getIndentString(opts, indentLevel)
-      result.push(indentation + trimmed)
+      result.push(this.getIndentString(opts, indentLevel) + trimmed)
 
-      if (trimmed.endsWith(':')) {
+      if (trimmed.endsWith(':') && !trimmed.startsWith('#')) {
         indentLevel++
+      } else if (/^(return\b|break\b|continue\b|pass\b|raise\b)/.test(trimmed)) {
+        const nextNonEmpty = lines.slice(i + 1).find((l) => l.trim().length > 0)?.trim() || ''
+        if (!/^(elif\b|else\s*:|except\b|finally\s*:)/.test(nextNonEmpty)) {
+          indentLevel = Math.max(0, indentLevel - 1)
+        }
       }
     }
 
-    return result.join('\n').trim() + '\n'
+    return result.join('\n').trimEnd() + '\n'
   }
 
   private formatRust(code: string, opts: FormatterOptions): string {
-    return this.formatJavaScriptTypeScript(code, { ...opts, semi: true })
+    return this.formatBraceLanguage(code, { ...opts, tabWidth: opts.tabWidth || 4 })
   }
 
   private formatGo(code: string, opts: FormatterOptions): string {
-    return this.formatJavaScriptTypeScript(code, { ...opts, useTabs: true, semi: false })
+    return this.formatBraceLanguage(code, { ...opts, useTabs: true })
   }
 
   private formatSql(code: string, opts: FormatterOptions): string {

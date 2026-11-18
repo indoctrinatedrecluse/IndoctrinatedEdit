@@ -17,6 +17,7 @@ import {
   Star,
   Lock,
 } from 'lucide-react'
+import { utf8ToBase64 } from '../../utils/security'
 
 export type RemoteStudioTab = 'ssh' | 'sftp' | 'smtp' | 'telnet'
 
@@ -319,7 +320,7 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
         ...prev,
         { type: 'client', text: `STARTTLS`, time: now() },
         { type: 'server', text: `220 2.0.0 Ready to start TLS (TLSv1.3, TLS_AES_256_GCM_SHA384)`, time: now() },
-        { type: 'client', text: `AUTH LOGIN ${btoa(smtpUser)}`, time: now() },
+        { type: 'client', text: `AUTH LOGIN ${utf8ToBase64(smtpUser || '')}`, time: now() },
         { type: 'server', text: `235 2.7.0 Authentication successful`, time: now() },
       ])
     }, 800)

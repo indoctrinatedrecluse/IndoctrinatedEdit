@@ -18,6 +18,7 @@ import {
   Type,
 } from 'lucide-react'
 import { previewService, PreviewMetadata, DocumentPreviewType } from '../../services/previewService'
+import { sanitizeHtml, sanitizeSvg, escapeHtml } from '../../utils/security'
 
 interface LivePreviewViewProps {
   activeFileName?: string
@@ -78,7 +79,7 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
         })
         .catch((err) => {
           if (!isCancelled) {
-            setRenderedHtml(`<div class="docx-error glass-panel"><p>Error reading Word document: ${String(err)}</p></div>`)
+            setRenderedHtml(`<div class="docx-error glass-panel"><p>Error reading Word document: ${escapeHtml(String(err))}</p></div>`)
           }
         })
     } else if (type === 'html') {
@@ -93,8 +94,8 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
         headingsCount: 0,
       })
     } else if (type === 'svg') {
-      const content = activeFileContent || sampleHtml
-      setRenderedHtml(content)
+      const content = activeFileContent || '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120"><rect width="240" height="120" rx="12" fill="#0f172a"/><text x="120" y="65" text-anchor="middle" fill="#94a3b8" font-size="13">Empty SVG Document</text></svg>'
+      setRenderedHtml(sanitizeSvg(content))
       setMetadata({
         type: 'svg',
         title: activeFileName,
@@ -407,7 +408,7 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           >
             <div
               className="docx-page-sheet"
-              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderedHtml) }}
             />
           </div>
         )}
@@ -430,7 +431,9 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
           <div className="preview-viewport-wrapper" style={{ width: getViewportWidth() }}>
             <div
               className="markdown-rendered-view glass-panel"
-              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              dangerouslySetInnerHTML={{
+                __html: previewType === 'svg' ? sanitizeSvg(renderedHtml) : sanitizeHtml(renderedHtml),
+              }}
             />
           </div>
         )}

@@ -70,8 +70,31 @@ class HexInspectorService {
    */
   public inspectByteAtOffset(data: Uint8Array | string, offset: number): ByteInspection {
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+    if (bytes.length === 0) {
+      return {
+        offset: 0,
+        byteHex: '00',
+        binaryBits: '00000000',
+        int8: 0,
+        uint8: 0,
+        int16LE: 0,
+        int16BE: 0,
+        uint16LE: 0,
+        uint16BE: 0,
+        int32LE: 0,
+        int32BE: 0,
+        uint32LE: 0,
+        uint32BE: 0,
+        float32LE: 'N/A',
+        float32BE: 'N/A',
+        float64LE: 'N/A',
+        float64BE: 'N/A',
+        utf8Char: '·',
+      }
+    }
+
     const safeOffset = Math.max(0, Math.min(offset, bytes.length - 1))
-    const byteVal = bytes.length > 0 ? bytes[safeOffset] : 0
+    const byteVal = bytes[safeOffset]
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 
     const canRead2 = safeOffset + 2 <= bytes.length

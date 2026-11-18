@@ -71,7 +71,6 @@ export class GitWorkflowService {
   constructor() {
     this.initDefaultWorkflows()
     this.initDefaultRuns()
-    this.startSimulationClock()
   }
 
   private initDefaultWorkflows() {
@@ -291,11 +290,13 @@ export class GitWorkflowService {
   }
 
   private startSimulationClock() {
+    if (this.pollInterval) return
     this.pollInterval = setInterval(() => {
-      // Simulate live progress for any 'in_progress' runs
+      let hasActive = false
       let hasChange = false
       this.runs.forEach((r) => {
         if (r.status === 'in_progress') {
+          hasActive = true
           const inProgressJob = r.jobs.find((j) => j.status === 'in_progress')
           if (inProgressJob) {
             const currentStep = inProgressJob.steps.find((s) => s.status === 'in_progress')
@@ -323,6 +324,10 @@ export class GitWorkflowService {
         }
       })
       if (hasChange) this.notify()
+      if (!hasActive && this.pollInterval) {
+        clearInterval(this.pollInterval)
+        this.pollInterval = null
+      }
     }, 4000)
   }
 
@@ -410,6 +415,7 @@ export class GitWorkflowService {
     this.runs.unshift(newRun)
     this.selectedRunId = newRun.id
     this.selectedJobId = newRun.jobs[0].id
+    this.startSimulationClock()
     this.notify()
     return newRun
   }
