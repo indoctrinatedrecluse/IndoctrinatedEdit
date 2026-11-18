@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Container,
   Play,
@@ -34,16 +34,27 @@ import {
 } from '../../services/dockerService'
 import './DockerStudioView.css'
 
-export const DockerStudioView: React.FC = () => {
+interface DockerStudioViewProps {
+  workspaceRoot?: string
+}
+
+export const DockerStudioView: React.FC<DockerStudioViewProps> = ({ workspaceRoot }) => {
   // Main Studio Mode: Docker or Kubernetes
   const [engineMode, setEngineMode] = useState<'docker' | 'kubernetes'>('kubernetes')
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [dockerLive, setDockerLive] = useState(false)
+  const [k8sLive, setK8sLive] = useState(false)
+  const [actionBanner, setActionBanner] = useState<string | null>(null)
+  const [execCmd, setExecCmd] = useState('ls -la')
+  const [execOutput, setExecOutput] = useState<string | null>(null)
 
   // Docker Tabs
-  const [dockerTab, setDockerTab] = useState<'containers' | 'images' | 'volumes' | 'compose'>('containers')
+  const [dockerTab, setDockerTab] = useState<'containers' | 'images' | 'volumes' | 'compose' | 'linter'>('containers')
   const [containers, setContainers] = useState<DockerContainer[]>(() => dockerService.getContainers())
   const [images, setImages] = useState<DockerImage[]>(() => dockerService.getImages())
-  const [volumes] = useState<DockerVolume[]>(() => dockerService.getVolumes())
+  const [volumes, setVolumes] = useState<DockerVolume[]>(() => dockerService.getVolumes())
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(containers[0]?.id || null)
+  const [dockerfileInput, setDockerfileInput] = useState('FROM node:22-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nUSER node\nCMD ["node", "dist/index.js"]')
 
   // Kubernetes Tabs
   const [k8sTab, setK8sTab] = useState<'deployments' | 'pods' | 'services' | 'nodes' | 'logs' | 'manifests'>('deployments')
@@ -51,61 +62,103 @@ export const DockerStudioView: React.FC = () => {
   const [k8sSearch, setK8sSearch] = useState('')
   const [pods, setPods] = useState<K8sPod[]>(() => dockerService.getPods())
   const [deployments, setDeployments] = useState<K8sDeployment[]>(() => dockerService.getDeployments())
-  const [services] = useState<K8sService[]>(() => dockerService.getServices())
-  const [ingresses] = useState<K8sIngress[]>(() => dockerService.getIngresses())
-  const [nodes] = useState<K8sNode[]>(() => dockerService.getNodes())
+  const [services, setServices] = useState<K8sService[]>(() => dockerService.getServices())
+  const [ingresses, setIngresses] = useState<K8sIngress[]>(() => dockerService.getIngresses())
+  const [nodes, setNodes] = useState<K8sNode[]>(() => dockerService.getNodes())
   const [selectedPodId, setSelectedPodId] = useState<string | null>(pods[0]?.id || null)
   const [copied, setCopied] = useState(false)
   const [logFilter, setLogFilter] = useState('')
 
   // Manifest Generator State
+  const [manifestKind, setManifestKind] = useState<'deployment' | 'ingress'>('deployment')
   const [manifestAppName, setManifestAppName] = useState('indoctrinated-gateway')
   const [manifestImage, setManifestImage] = useState('indoctrinated/gateway:v4.2.0')
+  const [manifestHost, setManifestHost] = useState('api.example.com')
   const [manifestPort, setManifestPort] = useState(8080)
   const [manifestReplicas, setManifestReplicas] = useState(3)
+
+  const syncAllLive = useCallback(async () => {
+    setIsSyncing(true)
+    setActionBanner(null)
+    try {
+      const [dRes, kRes] = await Promise.all([
+        dockerService.refreshContainersFromDaemon(),
+        dockerService.refreshKubernetesFromCluster(),
+      ])
+      setDockerLive(dRes.live)
+      setK8sLive(kRes.live)
+      setContainers(dockerService.getContainers())
+      setImages(dockerService.getImages())
+      setVolumes(dockerService.getVolumes())
+      setPods(dockerService.getPods(selectedNamespace))
+      setDeployments(dockerService.getDeployments(selectedNamespace))
+      setServices(dockerService.getServices(selectedNamespace))
+      setIngresses(dockerService.getIngresses(selectedNamespace))
+      setNodes(dockerService.getNodes())
+      if (dRes.live || kRes.live) {
+        setActionBanner(`Synced live: Docker=${dRes.live ? 'Connected' : 'Sandbox'}, K8s=${kRes.live ? 'Connected' : 'Sandbox'}`)
+      }
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [selectedNamespace])
+
+  useEffect(() => {
+    void syncAllLive()
+  }, [])
 
   const clusterSummary = dockerService.getClusterSummary()
   const namespaces = dockerService.getNamespaces()
 
-  // Docker Handlers
-  const handleStart = (id: string) => {
-    dockerService.startContainer(id)
+  // Docker Handlers (awaited against live daemon when connected)
+  const handleStart = async (id: string) => {
+    const res = await dockerService.containerActionAsync('start', id)
+    if (!res.ok && res.error) setActionBanner(res.error)
     setContainers(dockerService.getContainers())
   }
 
-  const handleStop = (id: string) => {
-    dockerService.stopContainer(id)
+  const handleStop = async (id: string) => {
+    const res = await dockerService.containerActionAsync('stop', id)
+    if (!res.ok && res.error) setActionBanner(res.error)
     setContainers(dockerService.getContainers())
   }
 
-  const handleRestart = (id: string) => {
-    dockerService.restartContainer(id)
+  const handleRestart = async (id: string) => {
+    const res = await dockerService.containerActionAsync('restart', id)
+    if (!res.ok && res.error) setActionBanner(res.error)
     setContainers(dockerService.getContainers())
   }
 
-  const handlePruneImages = () => {
-    dockerService.pruneDanglingImages()
+  const handlePruneImages = async () => {
+    const res = await dockerService.pruneDanglingImagesAsync()
     setImages(dockerService.getImages())
+    setActionBanner(res.output || `Pruned ${res.removed} dangling image(s).`)
   }
 
-  // Kubernetes Handlers
-  const handleScaleDeployment = (name: string, delta: number) => {
+  // Kubernetes Handlers (awaited against live kubectl when connected)
+  const handleScaleDeployment = async (name: string, delta: number) => {
     const dep = deployments.find((d) => d.name === name)
     if (dep) {
       const next = Math.max(0, dep.desiredReplicas + delta)
-      dockerService.scaleDeployment(name, next)
+      const res = await dockerService.scaleDeploymentAsync(name, dep.namespace, next)
+      if (!res.ok && res.error) setActionBanner(res.error)
       setDeployments(dockerService.getDeployments(selectedNamespace))
       setPods(dockerService.getPods(selectedNamespace))
     }
   }
 
-  const handleRestartPod = (id: string) => {
-    dockerService.restartPod(id)
-    setPods(dockerService.getPods(selectedNamespace))
+  const handleRestartPod = async (id: string) => {
+    if (k8sLive) {
+      await handleDeletePod(id)
+    } else {
+      dockerService.restartPod(id)
+      setPods(dockerService.getPods(selectedNamespace))
+    }
   }
 
-  const handleDeletePod = (id: string) => {
-    dockerService.deletePod(id)
+  const handleDeletePod = async (id: string) => {
+    const res = await dockerService.deletePodAsync(id)
+    if (!res.ok && res.error) setActionBanner(res.error)
     setPods(dockerService.getPods(selectedNamespace))
     if (selectedPodId === id) {
       setSelectedPodId(null)
@@ -116,10 +169,28 @@ export const DockerStudioView: React.FC = () => {
     setSelectedNamespace(ns)
     setPods(dockerService.getPods(ns))
     setDeployments(dockerService.getDeployments(ns))
+    setServices(dockerService.getServices(ns))
+    setIngresses(dockerService.getIngresses(ns))
   }
 
   const selectedContainer = containers.find((c) => c.id === selectedContainerId) || containers[0]
   const selectedPod = pods.find((p) => p.id === selectedPodId) || pods[0]
+
+  useEffect(() => {
+    if (k8sLive && k8sTab === 'logs' && selectedPod?.id) {
+      dockerService.fetchPodLogsAsync(selectedPod.id).then(() => {
+        setPods(dockerService.getPods(selectedNamespace))
+      })
+    }
+  }, [k8sLive, k8sTab, selectedPod?.id, selectedNamespace])
+
+  useEffect(() => {
+    if (dockerLive && engineMode === 'docker' && dockerTab === 'containers' && selectedContainer?.id) {
+      dockerService.fetchContainerLogsAsync(selectedContainer.id).then(() => {
+        setContainers(dockerService.getContainers())
+      })
+    }
+  }, [dockerLive, engineMode, dockerTab, selectedContainer?.id])
 
   const filteredPods = pods.filter((p) => {
     const matchesNs = selectedNamespace === 'all-namespaces' || p.namespace === selectedNamespace
@@ -139,6 +210,29 @@ export const DockerStudioView: React.FC = () => {
     return matchesNs && matchesSearch
   })
 
+  const filteredIngresses = ingresses.filter((ing) => {
+    const matchesNs = selectedNamespace === 'all-namespaces' || ing.namespace === selectedNamespace
+    const matchesSearch =
+      !k8sSearch ||
+      ing.host.toLowerCase().includes(k8sSearch.toLowerCase()) ||
+      ing.targetService.toLowerCase().includes(k8sSearch.toLowerCase())
+    return matchesNs && matchesSearch
+  })
+
+  const matchesLogFilter = (line: string): boolean => {
+    if (!logFilter.trim()) return true
+    try {
+      return new RegExp(logFilter, 'i').test(line)
+    } catch {
+      return line.toLowerCase().includes(logFilter.toLowerCase())
+    }
+  }
+
+  const generatedYaml =
+    manifestKind === 'ingress'
+      ? dockerService.generateKubernetesIngress(manifestAppName, manifestHost, manifestPort)
+      : dockerService.generateKubernetesManifest(manifestAppName, manifestImage, manifestPort, manifestReplicas)
+
   return (
     <div className="docker-studio-root">
       {/* TOP ENGINE SELECTOR */}
@@ -149,7 +243,7 @@ export const DockerStudioView: React.FC = () => {
         >
           <Radio size={14} className="engine-icon" />
           <span>Kubernetes (K8s)</span>
-          <span className="cluster-badge-healthy">{clusterSummary.status}</span>
+          <span className="cluster-badge-healthy">{k8sLive ? 'LIVE' : 'SANDBOX'} · {clusterSummary.status}</span>
         </button>
         <button
           className={`engine-mode-btn ${engineMode === 'docker' ? 'active' : ''}`}
@@ -157,9 +251,23 @@ export const DockerStudioView: React.FC = () => {
         >
           <Container size={14} className="engine-icon" />
           <span>Docker Engine</span>
-          <span className="counter-pill">{containers.filter((c) => c.status === 'running').length}/{containers.length}</span>
+          <span className="counter-pill">{dockerLive ? 'LIVE' : 'SANDBOX'} · {containers.filter((c) => c.status === 'running').length}/{containers.length}</span>
+        </button>
+        <button
+          className="log-action-btn"
+          onClick={() => void syncAllLive()}
+          disabled={isSyncing}
+          title="Sync live Docker daemon & kubectl cluster"
+          style={{ marginLeft: 'auto' }}
+        >
+          <RefreshCw size={12} className={isSyncing ? 'spin' : ''} /> {isSyncing ? 'Syncing...' : 'Sync Live'}
         </button>
       </div>
+      {actionBanner && (
+        <div style={{ padding: '4px 12px', fontSize: 11, color: '#7DD3FC', background: 'rgba(10,132,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          {actionBanner}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* KUBERNETES CLUSTER VISUALIZER VIEW */}
@@ -435,9 +543,9 @@ export const DockerStudioView: React.FC = () => {
                   ))}
                 </div>
 
-                <span className="section-title" style={{ marginTop: 16 }}>INGRESS ROUTING MAP</span>
+                <span className="section-title" style={{ marginTop: 16 }}>INGRESS ROUTING MAP ({filteredIngresses.length})</span>
                 <div className="ingress-grid">
-                  {ingresses.map((ing) => (
+                  {filteredIngresses.map((ing) => (
                     <div key={ing.id} className="ingress-card glass-panel">
                       <div className="ingress-header">
                         <Globe size={13} color="#0A84FF" />
@@ -546,7 +654,7 @@ export const DockerStudioView: React.FC = () => {
                 <div className="live-log-terminal glass-panel">
                   {selectedPod ? (
                     selectedPod.logs
-                      .filter((l) => !logFilter || l.toLowerCase().includes(logFilter.toLowerCase()))
+                      .filter(matchesLogFilter)
                       .map((log, i) => (
                         <div key={i} className="terminal-log-line">
                           <span className="log-index">{(i + 1).toString().padStart(3, '0')}</span>
@@ -557,6 +665,30 @@ export const DockerStudioView: React.FC = () => {
                     <div className="empty-logs">Select a pod to view its container logs.</div>
                   )}
                 </div>
+
+                {selectedPod && (
+                  <div className="log-controls-bar" style={{ marginTop: 8 }}>
+                    <input
+                      type="text"
+                      className="log-filter-input"
+                      value={execCmd}
+                      onChange={(e) => setExecCmd(e.target.value)}
+                      placeholder="kubectl exec command (e.g. env, ls -la)..."
+                    />
+                    <button
+                      className="log-action-btn"
+                      onClick={async () => {
+                        const res = await dockerService.execInPodAsync(selectedPod.id, execCmd)
+                        setExecOutput(res.output)
+                      }}
+                    >
+                      <Terminal size={11} /> Exec in Pod
+                    </button>
+                  </div>
+                )}
+                {execOutput && (
+                  <pre className="yaml-preview-box" style={{ maxHeight: 150, marginTop: 6 }}>{execOutput}</pre>
+                )}
               </div>
             )}
 
@@ -565,6 +697,13 @@ export const DockerStudioView: React.FC = () => {
               <div className="k8s-section manifest-lab">
                 <div className="manifest-inputs-bar glass-panel">
                   <div className="input-group">
+                    <label>Kind</label>
+                    <select value={manifestKind} onChange={(e) => setManifestKind(e.target.value as 'deployment' | 'ingress')}>
+                      <option value="deployment">Deployment + Service</option>
+                      <option value="ingress">TLS Ingress</option>
+                    </select>
+                  </div>
+                  <div className="input-group">
                     <label>App Name</label>
                     <input
                       type="text"
@@ -572,14 +711,25 @@ export const DockerStudioView: React.FC = () => {
                       onChange={(e) => setManifestAppName(e.target.value)}
                     />
                   </div>
-                  <div className="input-group">
-                    <label>Container Image</label>
-                    <input
-                      type="text"
-                      value={manifestImage}
-                      onChange={(e) => setManifestImage(e.target.value)}
-                    />
-                  </div>
+                  {manifestKind === 'deployment' ? (
+                    <div className="input-group">
+                      <label>Container Image</label>
+                      <input
+                        type="text"
+                        value={manifestImage}
+                        onChange={(e) => setManifestImage(e.target.value)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="input-group">
+                      <label>Ingress Host</label>
+                      <input
+                        type="text"
+                        value={manifestHost}
+                        onChange={(e) => setManifestHost(e.target.value)}
+                      />
+                    </div>
+                  )}
                   <div className="input-group">
                     <label>Port</label>
                     <input
@@ -588,30 +738,41 @@ export const DockerStudioView: React.FC = () => {
                       onChange={(e) => setManifestPort(+e.target.value)}
                     />
                   </div>
-                  <div className="input-group">
-                    <label>Replicas</label>
-                    <input
-                      type="number"
-                      value={manifestReplicas}
-                      onChange={(e) => setManifestReplicas(+e.target.value)}
-                    />
-                  </div>
+                  {manifestKind === 'deployment' && (
+                    <div className="input-group">
+                      <label>Replicas</label>
+                      <input
+                        type="number"
+                        value={manifestReplicas}
+                        onChange={(e) => setManifestReplicas(+e.target.value)}
+                      />
+                    </div>
+                  )}
                   <button
                     className="copy-yaml-btn glass-interactive"
                     onClick={() => {
-                      navigator.clipboard.writeText(
-                        dockerService.generateKubernetesManifest(manifestAppName, manifestImage, manifestPort, manifestReplicas)
-                      )
+                      navigator.clipboard.writeText(generatedYaml)
                       setCopied(true)
                       setTimeout(() => setCopied(false), 1800)
                     }}
                   >
-                    {copied ? <Check size={12} color="#30D158" /> : <Copy size={12} />} Copy K8s YAML
+                    {copied ? <Check size={12} color="#30D158" /> : <Copy size={12} />} Copy YAML
+                  </button>
+                  <button
+                    className="copy-yaml-btn glass-interactive"
+                    onClick={async () => {
+                      const res = await dockerService.applyKubernetesYamlAsync(generatedYaml)
+                      setActionBanner(res.output || (res.ok ? 'Applied manifest to cluster' : 'kubectl apply failed'))
+                      setDeployments(dockerService.getDeployments(selectedNamespace))
+                      setPods(dockerService.getPods(selectedNamespace))
+                    }}
+                  >
+                    <Play size={12} /> Apply (kubectl)
                   </button>
                 </div>
 
                 <pre className="yaml-preview-box">
-                  {dockerService.generateKubernetesManifest(manifestAppName, manifestImage, manifestPort, manifestReplicas)}
+                  {generatedYaml}
                 </pre>
               </div>
             )}
@@ -660,7 +821,15 @@ export const DockerStudioView: React.FC = () => {
               onClick={() => setDockerTab('compose')}
             >
               <Plus size={12} />
-              <span>Compose Template</span>
+              <span>Compose</span>
+            </button>
+
+            <button
+              className={`docker-nav-btn glass-interactive ${dockerTab === 'linter' ? 'active' : ''}`}
+              onClick={() => setDockerTab('linter')}
+            >
+              <FileCode size={12} />
+              <span>Dockerfile Linter</span>
             </button>
           </div>
 
@@ -810,26 +979,79 @@ export const DockerStudioView: React.FC = () => {
               </div>
             )}
 
-            {/* TAB 4: COMPOSE TEMPLATE */}
+            {/* TAB 4: COMPOSE TEMPLATE & RUNNER */}
             {dockerTab === 'compose' && (
               <div className="docker-section compose-section">
                 <div className="section-toolbar">
-                  <span className="section-label">DOCKER COMPOSE GENERATOR</span>
-                  <button
-                    className="section-action-btn glass-interactive"
-                    onClick={() => {
-                      navigator.clipboard.writeText(dockerService.generateComposeTemplate())
-                      setCopied(true)
-                      setTimeout(() => setCopied(false), 1800)
-                    }}
-                  >
-                    {copied ? <Check size={11} color="#30D158" /> : <Copy size={11} />} Copy Compose
-                  </button>
+                  <span className="section-label">DOCKER COMPOSE WORKBENCH</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      className="section-action-btn glass-interactive"
+                      onClick={async () => {
+                        const res = await dockerService.runComposeAsync('up', workspaceRoot)
+                        setActionBanner(res.output || (res.ok ? 'docker compose up -d succeeded' : 'docker compose up failed'))
+                        setContainers(dockerService.getContainers())
+                      }}
+                    >
+                      <Play size={11} /> Compose Up
+                    </button>
+                    <button
+                      className="section-action-btn glass-interactive"
+                      onClick={async () => {
+                        const res = await dockerService.runComposeAsync('down', workspaceRoot)
+                        setActionBanner(res.output || (res.ok ? 'docker compose down succeeded' : 'docker compose down failed'))
+                        setContainers(dockerService.getContainers())
+                      }}
+                    >
+                      <Square size={11} /> Compose Down
+                    </button>
+                    <button
+                      className="section-action-btn glass-interactive"
+                      onClick={() => {
+                        navigator.clipboard.writeText(dockerService.generateComposeTemplate())
+                        setCopied(true)
+                        setTimeout(() => setCopied(false), 1800)
+                      }}
+                    >
+                      {copied ? <Check size={11} color="#30D158" /> : <Copy size={11} />} Copy
+                    </button>
+                  </div>
                 </div>
 
                 <pre className="compose-pre">
                   {dockerService.generateComposeTemplate()}
                 </pre>
+              </div>
+            )}
+
+            {/* TAB 5: DOCKERFILE LINTER */}
+            {dockerTab === 'linter' && (
+              <div className="docker-section compose-section">
+                <div className="section-toolbar">
+                  <span className="section-label">DOCKERFILE SECURITY &amp; BEST-PRACTICE LINTER</span>
+                </div>
+                <textarea
+                  value={dockerfileInput}
+                  onChange={(e) => setDockerfileInput(e.target.value)}
+                  rows={7}
+                  style={{ width: '100%', background: 'rgba(0,0,0,0.35)', color: '#E2E8F0', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: 8, fontFamily: 'monospace', fontSize: 12 }}
+                />
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(() => {
+                    const issues = dockerService.lintDockerfile(dockerfileInput)
+                    if (issues.length === 0) {
+                      return <div style={{ color: '#30D158', fontSize: 12 }}>✓ No Dockerfile security or layer-caching issues detected.</div>
+                    }
+                    return issues.map((iss, idx) => (
+                      <div key={idx} className="image-card glass-panel" style={{ padding: '6px 10px' }}>
+                        <strong style={{ color: iss.severity === 'error' ? '#FF453A' : iss.severity === 'warning' ? '#FFD60A' : '#64D2FF' }}>
+                          Line {iss.line} [{iss.severity.toUpperCase()}]:
+                        </strong>{' '}
+                        <span>{iss.message}</span>
+                      </div>
+                    ))
+                  })()}
+                </div>
               </div>
             )}
           </div>

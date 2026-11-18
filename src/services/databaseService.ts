@@ -34,6 +34,9 @@ export interface DatabaseSchema {
   dialect: 'sqlite' | 'postgres' | 'mysql' | 'duckdb'
   description: string
   tables: Record<string, DatabaseTable>
+  sqliteSessionId?: string
+  filePath?: string
+  isLiveSqlite?: boolean
 }
 
 export interface QueryResult {
@@ -289,6 +292,166 @@ export class DatabaseService {
 
   public clearHistory() {
     this.history = []
+    this.notifyListeners()
+  }
+
+  private convertIntrospectedTables(rawTables: Record<string, any> = {}): Record<string, DatabaseTable> {
+    const out: Record<string, DatabaseTable> = {}
+    for (const [name, meta] of Object.entries<any>(rawTables)) {
+      const cols: DatabaseColumn[] = Array.isArray(meta.columns)
+        ? meta.columns.map((c: any) => {
+            const refParts = typeof c.references === 'string' ? c.references.split('.') : []
+            return {
+              name: String(c.name),
+              type: String(c.type || 'TEXT'),
+              isPrimaryKey: Boolean(c.isPrimaryKey),
+              isForeignKey: Boolean(c.isForeignKey),
+              foreignKeyRef: refParts.length >= 2 ? { table: refParts[0], column: refParts[1] } : undefined,
+              isNullable: c.nullable !== undefined ? Boolean(c.nullable) : true,
+              defaultValue: c.defaultValue,
+            }
+          })
+        : []
+      const indexes: DatabaseIndex[] = Array.isArray(meta.indexes)
+        ? meta.indexes.map((idx: any) =>
+            typeof idx === 'string' ? { name: idx, columns: [] } : idx
+          )
+        : []
+      out[name] = {
+        name,
+        columns: cols,
+        data: [],
+        rowCount: Number(meta.rowCount || 0),
+        indexes,
+      }
+    }
+    return out
+  }
+
+  public async openSqliteFileAsync(filePath?: string): Promise<{ ok: boolean; db?: DatabaseSchema; canceled?: boolean; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.dbOpenSqlite) {
+      return { ok: false, error: 'Opening local SQLite files requires the Electron desktop app.' }
+    }
+    const res = await infra.dbOpenSqlite(filePath)
+    if (!res?.ok || !res.dbId) {
+      return { ok: false, canceled: res?.canceled, error: res?.error }
+    }
+    const schema: DatabaseSchema = {
+      id: res.dbId,
+      name: `${res.name} (Live SQLite)`,
+      dialect: 'sqlite',
+      description: res.filePath || 'Local SQLite database',
+      tables: this.convertIntrospectedTables(res.tables),
+      sqliteSessionId: res.dbId,
+      filePath: res.filePath,
+      isLiveSqlite: true,
+    }
+    this.databases.set(schema.id, schema)
+    this.activeDatabaseId = schema.id
+    this.notifyListeners()
+    return { ok: true, db: schema }
+  }
+
+  public async createSqliteDbAsync(name = 'workspace.sqlite', seedSql?: string): Promise<{ ok: boolean; db?: DatabaseSchema; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.dbCreateSqlite) {
+      return { ok: false, error: 'Creating SQLite WASM databases requires the Electron desktop app.' }
+    }
+    const defaultSeed =
+      seedSql ??
+      `CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by sql.js WASM — supports JOIN, CTEs, GROUP BY, PRAGMA, and disk Save/Open.');`
+    const res = await infra.dbCreateSqlite(name, defaultSeed)
+    if (!res?.ok || !res.dbId) {
+      return { ok: false, error: res?.error || 'Failed to create SQLite database' }
+    }
+    const schema: DatabaseSchema = {
+      id: res.dbId,
+      name: `${res.name} (Live SQLite)`,
+      dialect: 'sqlite',
+      description: 'In-memory SQLite 3 WASM database (use Save to write to disk)',
+      tables: this.convertIntrospectedTables(res.tables),
+      sqliteSessionId: res.dbId,
+      isLiveSqlite: true,
+    }
+    this.databases.set(schema.id, schema)
+    this.activeDatabaseId = schema.id
+    this.notifyListeners()
+    return { ok: true, db: schema }
+  }
+
+  public async saveSqliteFileAsync(targetPath?: string): Promise<{ ok: boolean; filePath?: string; canceled?: boolean; error?: string }> {
+    const active = this.getActiveDatabase()
+    if (!active.sqliteSessionId) {
+      return { ok: false, error: 'Active database is not a live SQLite session.' }
+    }
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.dbSaveSqlite) {
+      return { ok: false, error: 'Saving SQLite files requires the Electron desktop app.' }
+    }
+    const res = await infra.dbSaveSqlite(active.sqliteSessionId, targetPath)
+    if (res?.ok && res.filePath) {
+      active.filePath = res.filePath
+      active.description = res.filePath
+      const base = res.filePath.split(/[/\\]/).pop() || active.name
+      active.name = `${base} (Live SQLite)`
+      this.notifyListeners()
+    }
+    return res
+  }
+
+  /**
+   * Execute SQL asynchronously: routes live SQLite WASM sessions through Electron sql.js IPC,
+   * and falls back to synchronous in-memory execution for sandbox databases.
+   */
+  public async executeQueryAsync(rawQuery: string): Promise<QueryResult> {
+    const trimmed = rawQuery.trim()
+    const nowIso = new Date().toISOString()
+    if (!trimmed) {
+      return {
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        executionTimeMs: 0,
+        error: 'Empty SQL query.',
+        query: rawQuery,
+        timestamp: nowIso,
+      }
+    }
+
+    const activeDb = this.getActiveDatabase()
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (activeDb.sqliteSessionId && infra?.dbExecSqlite) {
+      const res = await infra.dbExecSqlite(activeDb.sqliteSessionId, trimmed)
+      if (res.tables) {
+        activeDb.tables = this.convertIntrospectedTables(res.tables)
+      }
+      const queryResult: QueryResult = {
+        columns: res.columns || [],
+        rows: res.rows || [],
+        rowCount: res.rowCount || 0,
+        affectedRows: res.affectedRows,
+        executionTimeMs: res.executionTimeMs || 0,
+        error: res.ok ? undefined : (res.error || 'SQLite execution failed'),
+        query: trimmed,
+        timestamp: nowIso,
+      }
+      this.history.unshift({
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        query: trimmed,
+        timestamp: nowIso,
+        executionTimeMs: queryResult.executionTimeMs,
+        rowCount: queryResult.rowCount,
+        success: !queryResult.error,
+        error: queryResult.error,
+      })
+      if (this.history.length > 50) this.history.pop()
+      this.notifyListeners()
+      return queryResult
+    }
+
+    return this.executeQuery(rawQuery)
   }
 
   /**

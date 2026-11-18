@@ -1,8 +1,9 @@
 import http from 'node:http'
 import net from 'node:net'
 import tls from 'node:tls'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import { sqliteWasmService } from './sqlite-wasm-service'
 import type { BrowserWindow, IpcMain } from 'electron'
 import WebSocket from 'ws'
 import * as grpc from '@grpc/grpc-js'
@@ -508,16 +509,64 @@ export async function executeRedisRespCommand(options: {
 }
 
 // =========================================================================
-// 5. DOCKER & KUBERNETES CLI EXECUTOR
+// 5. DOCKER & KUBERNETES CLI EXECUTOR (with optional cwd & stdin piping)
 // =========================================================================
+export interface InfraCliOptions {
+  timeoutMs?: number
+  cwd?: string
+  stdin?: string
+}
+
 export async function execInfraCli(
   tool: 'docker' | 'kubectl',
   args: string[],
-  timeoutMs = 15000
+  timeoutOrOpts: number | InfraCliOptions = 15000
 ): Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }> {
+  const opts: InfraCliOptions = typeof timeoutOrOpts === 'number' ? { timeoutMs: timeoutOrOpts } : timeoutOrOpts || {}
+  const timeoutMs = Math.min(Math.max(opts.timeoutMs ?? 15000, 1000), 120000)
+
+  if (opts.stdin !== undefined) {
+    return new Promise((resolve) => {
+      let stdout = ''
+      let stderr = ''
+      let settled = false
+      const child = spawn(tool, args, {
+        cwd: opts.cwd || undefined,
+        windowsHide: true,
+      })
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        try { child.kill('SIGKILL') } catch {}
+        resolve({ ok: false, stdout, stderr: stderr || `${tool} timed out after ${timeoutMs}ms`, exitCode: 124 })
+      }, timeoutMs)
+
+      child.stdout?.on('data', (chunk) => { stdout += chunk.toString() })
+      child.stderr?.on('data', (chunk) => { stderr += chunk.toString() })
+      child.on('error', (err) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve({ ok: false, stdout, stderr: err.message || `${tool} unavailable`, exitCode: 1 })
+      })
+      child.on('close', (code) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        const exitCode = typeof code === 'number' ? code : 1
+        resolve({ ok: exitCode === 0, stdout, stderr, exitCode })
+      })
+      if (child.stdin) {
+        child.stdin.write(opts.stdin)
+        child.stdin.end()
+      }
+    })
+  }
+
   try {
     const { stdout, stderr } = await execFileAsync(tool, args, {
-      timeout: Math.min(Math.max(timeoutMs, 1000), 60000),
+      timeout: timeoutMs,
+      cwd: opts.cwd || undefined,
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true,
     })
@@ -944,8 +993,15 @@ export function setupInfraIPC(ipcMain: IpcMain, getWin: () => BrowserWindow | nu
 
   ipcMain.handle('infra:redisExec', (_, options) => executeRedisRespCommand(options))
 
-  ipcMain.handle('infra:dockerExec', (_, args: string[], timeoutMs?: number) => execInfraCli('docker', args, timeoutMs))
-  ipcMain.handle('infra:k8sExec', (_, args: string[], timeoutMs?: number) => execInfraCli('kubectl', args, timeoutMs))
+  ipcMain.handle('infra:dockerExec', (_, args: string[], timeoutOrOpts?: number | InfraCliOptions) =>
+    execInfraCli('docker', args, timeoutOrOpts)
+  )
+  ipcMain.handle('infra:k8sExec', (_, args: string[], timeoutOrOpts?: number | InfraCliOptions) =>
+    execInfraCli('kubectl', args, timeoutOrOpts)
+  )
+
+  // Real SQLite WASM (sql.js) & external SQL CLI IPC
+  sqliteWasmService.setupIPC(ipcMain, getWin)
 
   ipcMain.handle('infra:grpcInspectProto', (_, protoPath: string) => inspectGrpcProto(protoPath))
   ipcMain.handle('infra:grpcInvoke', (_, options) => invokeGrpcUnary(options))

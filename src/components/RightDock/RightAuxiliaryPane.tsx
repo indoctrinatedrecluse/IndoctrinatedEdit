@@ -589,7 +589,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         {activeTab === 'docker' && (
           isUnlocked ? (
-            <DockerStudioView />
+            <DockerStudioView workspaceRoot={workspaceRoot} />
           ) : (
             <LockedExtensionView
               extensionName="Docker & Container Studio"

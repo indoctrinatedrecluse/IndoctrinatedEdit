@@ -573,21 +573,70 @@ class DockerService {
     return [...this.volumes]
   }
 
+  private dockerLive = false
+  private k8sLive = false
+  private clusterName = 'indoctrinated-k8s-production'
+  private serverVersion = 'v1.31.1+k8s'
+
+  public isDockerLive(): boolean {
+    return this.dockerLive
+  }
+
+  public isK8sLive(): boolean {
+    return this.k8sLive
+  }
+
+  private parseSizeMb(raw: string): number {
+    const m = String(raw || '').match(/([\d.]+)\s*(B|kB|KB|MB|MiB|GB|GiB)/i)
+    if (!m) return 0
+    const val = parseFloat(m[1])
+    const unit = m[2].toLowerCase()
+    if (unit === 'gb' || unit === 'gib') return Math.round(val * 1024)
+    if (unit === 'mb' || unit === 'mib') return Math.round(val)
+    if (unit === 'kb') return Math.round((val / 1024) * 10) / 10
+    return 0
+  }
+
   /**
-   * Fetch live containers from the local Docker daemon via Electron IPC (`docker ps -a --format json`).
+   * Fetch live containers, stats, images, and volumes from the local Docker daemon via Electron IPC.
    */
   public async refreshContainersFromDaemon(): Promise<{ live: boolean; containers: DockerContainer[]; error?: string }> {
     if (typeof window === 'undefined' || !window.electronAPI?.infra?.dockerExec) {
+      this.dockerLive = false
       return { live: false, containers: this.getContainers() }
     }
     const res = await window.electronAPI.infra.dockerExec(['ps', '-a', '--format', '{{json .}}'])
     if (!res.ok) {
+      this.dockerLive = false
       return { live: false, containers: this.getContainers(), error: res.stderr || 'Docker daemon unavailable' }
     }
+
+    // Fetch live CPU/Mem stats in parallel (best-effort)
+    const statsMap = new Map<string, { cpu: number; memMb: number; limitMb: number }>()
+    try {
+      const statsRes = await window.electronAPI.infra.dockerExec(['stats', '--no-stream', '--format', '{{json .}}'], 8000)
+      if (statsRes.ok) {
+        for (const line of statsRes.stdout.split(/\r?\n/).filter(Boolean)) {
+          try {
+            const s = JSON.parse(line)
+            const id = String(s.ID || s.Container || '').slice(0, 12)
+            const cpu = parseFloat(String(s.CPUPerc || '0').replace('%', '')) || 0
+            const memParts = String(s.MemUsage || '0MiB / 512MiB').split('/')
+            statsMap.set(id, {
+              cpu: Math.round(cpu * 10) / 10,
+              memMb: this.parseSizeMb(memParts[0]),
+              limitMb: this.parseSizeMb(memParts[1]) || 512,
+            })
+          } catch {}
+        }
+      }
+    } catch {}
+
     const parsed: DockerContainer[] = []
     for (const line of res.stdout.split(/\r?\n/).filter(Boolean)) {
       try {
         const obj = JSON.parse(line)
+        const id = String(obj.ID || '').slice(0, 12)
         const stateStr = String(obj.State || obj.Status || '').toLowerCase()
         const status: DockerContainer['status'] = stateStr.includes('up') || stateStr === 'running'
           ? 'running'
@@ -596,24 +645,355 @@ class DockerService {
           : stateStr.includes('paused')
           ? 'paused'
           : 'stopped'
+        const st = statsMap.get(id)
+        const existing = this.containers.find((c) => c.id === id)
         parsed.push({
-          id: String(obj.ID || '').slice(0, 12),
+          id,
           name: String(obj.Names || 'container'),
           image: String(obj.Image || ''),
           status,
           ports: obj.Ports ? String(obj.Ports).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
-          cpuPercent: 0,
-          memoryUsageMb: 0,
-          memoryLimitMb: 512,
+          cpuPercent: st?.cpu ?? 0,
+          memoryUsageMb: st?.memMb ?? 0,
+          memoryLimitMb: st?.limitMb ?? 512,
           created: String(obj.RunningFor || obj.CreatedAt || ''),
-          logs: [],
+          logs: existing?.logs || [],
         })
       } catch {
         // skip non-JSON lines
       }
     }
     this.containers = parsed
+    this.dockerLive = true
+
+    // Refresh images & volumes in parallel
+    try {
+      const [imgRes, volRes] = await Promise.all([
+        window.electronAPI.infra.dockerExec(['images', '--format', '{{json .}}']),
+        window.electronAPI.infra.dockerExec(['volume', 'ls', '--format', '{{json .}}']),
+      ])
+      if (imgRes.ok) {
+        const inUseImages = new Set(parsed.map((c) => c.image))
+        const imgs: DockerImage[] = []
+        for (const line of imgRes.stdout.split(/\r?\n/).filter(Boolean)) {
+          try {
+            const obj = JSON.parse(line)
+            const repo = String(obj.Repository || '<none>')
+            const tag = String(obj.Tag || '<none>')
+            imgs.push({
+              id: String(obj.ID || '').slice(0, 12),
+              repository: repo,
+              tag,
+              sizeMb: this.parseSizeMb(obj.Size),
+              created: String(obj.CreatedSince || obj.CreatedAt || ''),
+              inUse: repo !== '<none>' && (inUseImages.has(`${repo}:${tag}`) || inUseImages.has(repo)),
+            })
+          } catch {}
+        }
+        this.images = imgs
+      }
+      if (volRes.ok) {
+        const vols: DockerVolume[] = []
+        for (const line of volRes.stdout.split(/\r?\n/).filter(Boolean)) {
+          try {
+            const obj = JSON.parse(line)
+            vols.push({
+              name: String(obj.Name || ''),
+              driver: String(obj.Driver || 'local'),
+              scope: String(obj.Scope || 'local'),
+              sizeMb: 0,
+              containers: [],
+            })
+          } catch {}
+        }
+        this.volumes = vols
+      }
+    } catch {}
+
     return { live: true, containers: [...this.containers] }
+  }
+
+  public async fetchContainerLogsAsync(id: string, tail = 200): Promise<string[]> {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.dockerExec && this.dockerLive) {
+      const res = await window.electronAPI.infra.dockerExec(['logs', '--tail', String(tail), id], 10000)
+      const combined = [res.stdout, res.stderr].filter(Boolean).join('\n').trim()
+      const lines = combined ? combined.split(/\r?\n/) : ['(No logs emitted yet)']
+      const target = this.containers.find((c) => c.id === id)
+      if (target) target.logs = lines
+      return lines
+    }
+    return this.containers.find((c) => c.id === id)?.logs || []
+  }
+
+  public async execInContainerAsync(id: string, command: string): Promise<{ ok: boolean; output: string }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.dockerExec) {
+      return { ok: false, output: 'Docker exec requires the Electron desktop app.' }
+    }
+    const res = await window.electronAPI.infra.dockerExec(['exec', id, 'sh', '-c', command], 20000)
+    return {
+      ok: res.ok,
+      output: [res.stdout, res.stderr].filter(Boolean).join('\n').trim() || (res.ok ? '(exit 0)' : `exit ${res.exitCode}`),
+    }
+  }
+
+  public async containerActionAsync(action: 'start' | 'stop' | 'restart' | 'rm', id: string): Promise<{ ok: boolean; error?: string }> {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.dockerExec && this.dockerLive) {
+      const args = action === 'rm' ? ['rm', '-f', id] : [action, id]
+      const res = await window.electronAPI.infra.dockerExec(args, 20000)
+      if (res.ok) {
+        await this.refreshContainersFromDaemon()
+        return { ok: true }
+      }
+      return { ok: false, error: res.stderr || `docker ${action} failed` }
+    }
+    if (action === 'start') return { ok: this.startContainer(id) }
+    if (action === 'stop') return { ok: this.stopContainer(id) }
+    if (action === 'restart') return { ok: this.restartContainer(id) }
+    this.containers = this.containers.filter((c) => c.id !== id)
+    return { ok: true }
+  }
+
+  public async pruneDanglingImagesAsync(): Promise<{ ok: boolean; removed: number; output?: string }> {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.dockerExec && this.dockerLive) {
+      const before = this.images.length
+      const res = await window.electronAPI.infra.dockerExec(['image', 'prune', '-f'], 30000)
+      await this.refreshContainersFromDaemon()
+      return { ok: res.ok, removed: Math.max(0, before - this.images.length), output: res.stdout || res.stderr }
+    }
+    return { ok: true, removed: this.pruneDanglingImages() }
+  }
+
+  public async runComposeAsync(action: 'up' | 'down', cwd?: string): Promise<{ ok: boolean; output: string }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.dockerExec) {
+      return { ok: false, output: 'Docker Compose execution requires the Electron desktop app.' }
+    }
+    const args = action === 'up' ? ['compose', 'up', '-d'] : ['compose', 'down']
+    const res = await window.electronAPI.infra.dockerExec(args, { cwd, timeoutMs: 60000 })
+    if (res.ok) await this.refreshContainersFromDaemon()
+    return { ok: res.ok, output: [res.stdout, res.stderr].filter(Boolean).join('\n').trim() }
+  }
+
+  /**
+   * Fetch live Kubernetes cluster topology from kubectl via Electron IPC (`infra:k8sExec`).
+   */
+  public async refreshKubernetesFromCluster(): Promise<{ live: boolean; error?: string }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.k8sExec) {
+      this.k8sLive = false
+      return { live: false }
+    }
+    const [ctxRes, verRes, allRes] = await Promise.all([
+      window.electronAPI.infra.k8sExec(['config', 'current-context'], 8000),
+      window.electronAPI.infra.k8sExec(['version', '-o', 'json'], 8000),
+      window.electronAPI.infra.k8sExec(['get', 'ns,nodes,pods,deployments,svc,ingress', '-A', '-o', 'json'], 15000),
+    ])
+
+    if (!allRes.ok || !allRes.stdout.trim()) {
+      this.k8sLive = false
+      return { live: false, error: allRes.stderr || 'kubectl cluster unreachable' }
+    }
+
+    try {
+      const list = JSON.parse(allRes.stdout)
+      const items: any[] = Array.isArray(list?.items) ? list.items : []
+      const namespaces = new Set<string>()
+      const nodes: K8sNode[] = []
+      const pods: K8sPod[] = []
+      const deployments: K8sDeployment[] = []
+      const services: K8sService[] = []
+      const ingresses: K8sIngress[] = []
+
+      for (const item of items) {
+        const kind = item.kind
+        const meta = item.metadata || {}
+        const ns = meta.namespace || 'default'
+        if (kind === 'Namespace') {
+          if (meta.name) namespaces.add(meta.name)
+        } else if (kind === 'Node') {
+          const conds = item.status?.conditions || []
+          const ready = conds.find((c: any) => c.type === 'Ready')?.status === 'True'
+          const labels = meta.labels || {}
+          const roles = Object.keys(labels)
+            .filter((k) => k.startsWith('node-role.kubernetes.io/'))
+            .map((k) => k.split('/')[1])
+          const cap = item.status?.capacity || {}
+          const memKi = parseInt(String(cap.memory || '0').replace(/\D/g, ''), 10) || 0
+          nodes.push({
+            name: meta.name || 'node',
+            status: ready ? 'Ready' : 'NotReady',
+            roles: roles.length ? roles : ['worker'],
+            age: meta.creationTimestamp ? new Date(meta.creationTimestamp).toLocaleDateString() : '',
+            version: item.status?.nodeInfo?.kubeletVersion || 'unknown',
+            osImage: item.status?.nodeInfo?.osImage || '',
+            cpuCapacityCores: parseInt(String(cap.cpu || '0'), 10) || 0,
+            memoryCapacityGb: Math.round((memKi / (1024 * 1024)) * 10) / 10,
+            cpuAllocatedPercent: 0,
+            memAllocatedPercent: 0,
+            podCount: 0,
+            podCapacity: parseInt(String(cap.pods || '110'), 10) || 110,
+          })
+        } else if (kind === 'Pod') {
+          namespaces.add(ns)
+          const statuses = item.status?.containerStatuses || []
+          const restarts = statuses.reduce((acc: number, s: any) => acc + (Number(s.restartCount) || 0), 0)
+          const readyCount = statuses.filter((s: any) => s.ready).length
+          const totalCount = statuses.length || (item.spec?.containers?.length || 1)
+          const waitingReason = statuses.find((s: any) => s.state?.waiting?.reason)?.state?.waiting?.reason
+          const rawPhase = waitingReason === 'CrashLoopBackOff' ? 'CrashLoopBackOff' : (item.status?.phase || 'Pending')
+          const validStatus: K8sPod['status'] =
+            rawPhase === 'Running' || rawPhase === 'Pending' || rawPhase === 'CrashLoopBackOff' || rawPhase === 'Completed' || rawPhase === 'Failed'
+              ? rawPhase
+              : rawPhase === 'Succeeded'
+              ? 'Completed'
+              : 'Pending'
+          pods.push({
+            id: meta.uid || `${ns}/${meta.name}`,
+            name: meta.name || 'pod',
+            namespace: ns,
+            status: validStatus,
+            readyContainers: readyCount,
+            totalContainers: totalCount,
+            restarts,
+            age: meta.creationTimestamp ? new Date(meta.creationTimestamp).toLocaleDateString() : '',
+            ip: item.status?.podIP || 'Pending',
+            node: item.spec?.nodeName || 'Unscheduled',
+            cpuPercent: 0,
+            memoryUsageMb: 0,
+            memoryLimitMb: 512,
+            logs: [],
+          })
+        } else if (kind === 'Deployment') {
+          namespaces.add(ns)
+          deployments.push({
+            id: meta.uid || `${ns}/${meta.name}`,
+            name: meta.name || 'deployment',
+            namespace: ns,
+            desiredReplicas: Number(item.spec?.replicas ?? 1),
+            currentReplicas: Number(item.status?.replicas ?? 0),
+            updatedReplicas: Number(item.status?.updatedReplicas ?? item.status?.replicas ?? 0),
+            availableReplicas: Number(item.status?.availableReplicas ?? 0),
+            age: meta.creationTimestamp ? new Date(meta.creationTimestamp).toLocaleDateString() : '',
+            image: item.spec?.template?.spec?.containers?.[0]?.image || '',
+            strategy: item.spec?.strategy?.type === 'Recreate' ? 'Recreate' : 'RollingUpdate',
+          })
+        } else if (kind === 'Service') {
+          namespaces.add(ns)
+          const ports = (item.spec?.ports || []).map((p: any) => `${p.port}:${p.targetPort}/${p.protocol || 'TCP'}`)
+          const selectorObj = item.spec?.selector || {}
+          const selector = Object.entries(selectorObj).map(([k, v]) => `${k}=${v}`).join(', ') || 'none'
+          services.push({
+            id: meta.uid || `${ns}/${meta.name}`,
+            name: meta.name || 'service',
+            namespace: ns,
+            type: item.spec?.type || 'ClusterIP',
+            clusterIp: item.spec?.clusterIP || 'None',
+            externalIp: item.status?.loadBalancer?.ingress?.[0]?.ip || item.status?.loadBalancer?.ingress?.[0]?.hostname,
+            ports,
+            selector,
+          })
+        } else if (kind === 'Ingress') {
+          namespaces.add(ns)
+          const rule = item.spec?.rules?.[0]
+          const pathEntry = rule?.http?.paths?.[0]
+          ingresses.push({
+            id: meta.uid || `${ns}/${meta.name}`,
+            name: meta.name || 'ingress',
+            namespace: ns,
+            host: rule?.host || '*',
+            path: pathEntry?.path || '/',
+            targetService: pathEntry?.backend?.service?.name || '',
+            targetPort: pathEntry?.backend?.service?.port?.number || 80,
+            tls: Boolean(item.spec?.tls?.length),
+          })
+        }
+      }
+
+      // Compute pod count per node
+      for (const n of nodes) {
+        n.podCount = pods.filter((p) => p.node === n.name).length
+      }
+
+      this.k8sNamespaces = namespaces.size ? Array.from(namespaces) : ['default']
+      this.k8sNodes = nodes
+      this.k8sPods = pods
+      this.k8sDeployments = deployments
+      this.k8sServices = services
+      this.k8sIngresses = ingresses
+      if (ctxRes.ok && ctxRes.stdout.trim()) this.clusterName = ctxRes.stdout.trim()
+      if (verRes.ok && verRes.stdout.trim()) {
+        try {
+          const v = JSON.parse(verRes.stdout)
+          this.serverVersion = v.serverVersion?.gitVersion || v.clientVersion?.gitVersion || this.serverVersion
+        } catch {}
+      }
+      this.k8sLive = true
+      return { live: true }
+    } catch (err: any) {
+      this.k8sLive = false
+      return { live: false, error: err?.message || 'Failed to parse kubectl output' }
+    }
+  }
+
+  public async fetchPodLogsAsync(podId: string, tail = 200): Promise<string[]> {
+    const pod = this.k8sPods.find((p) => p.id === podId)
+    if (!pod) return []
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.k8sExec && this.k8sLive) {
+      const res = await window.electronAPI.infra.k8sExec(['logs', pod.name, '-n', pod.namespace, `--tail=${tail}`], 12000)
+      const combined = [res.stdout, res.stderr].filter(Boolean).join('\n').trim()
+      pod.logs = combined ? combined.split(/\r?\n/) : ['(No pod logs available)']
+    }
+    return [...pod.logs]
+  }
+
+  public async scaleDeploymentAsync(name: string, namespace: string, replicas: number): Promise<{ ok: boolean; error?: string }> {
+    const targetReplicas = Math.max(0, replicas)
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.k8sExec && this.k8sLive) {
+      const res = await window.electronAPI.infra.k8sExec(
+        ['scale', `deployment/${name}`, '-n', namespace, `--replicas=${targetReplicas}`],
+        15000
+      )
+      if (res.ok) {
+        await this.refreshKubernetesFromCluster()
+        return { ok: true }
+      }
+      return { ok: false, error: res.stderr || 'kubectl scale failed' }
+    }
+    return { ok: this.scaleDeployment(name, targetReplicas) }
+  }
+
+  public async deletePodAsync(podId: string): Promise<{ ok: boolean; error?: string }> {
+    const pod = this.k8sPods.find((p) => p.id === podId)
+    if (!pod) return { ok: false, error: 'Pod not found' }
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.k8sExec && this.k8sLive) {
+      const res = await window.electronAPI.infra.k8sExec(['delete', 'pod', pod.name, '-n', pod.namespace], 15000)
+      if (res.ok) {
+        await this.refreshKubernetesFromCluster()
+        return { ok: true }
+      }
+      return { ok: false, error: res.stderr || 'kubectl delete pod failed' }
+    }
+    return { ok: this.deletePod(podId) }
+  }
+
+  public async execInPodAsync(podId: string, command: string): Promise<{ ok: boolean; output: string }> {
+    const pod = this.k8sPods.find((p) => p.id === podId)
+    if (!pod) return { ok: false, output: 'Pod not found' }
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.k8sExec) {
+      return { ok: false, output: 'kubectl exec requires the Electron desktop app.' }
+    }
+    const res = await window.electronAPI.infra.k8sExec(['exec', pod.name, '-n', pod.namespace, '--', 'sh', '-c', command], 20000)
+    return {
+      ok: res.ok,
+      output: [res.stdout, res.stderr].filter(Boolean).join('\n').trim() || (res.ok ? '(exit 0)' : `exit ${res.exitCode}`),
+    }
+  }
+
+  public async applyKubernetesYamlAsync(yaml: string): Promise<{ ok: boolean; output: string }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.k8sExec) {
+      return { ok: false, output: 'kubectl apply requires the Electron desktop app.' }
+    }
+    const res = await window.electronAPI.infra.k8sExec(['apply', '-f', '-'], { stdin: yaml, timeoutMs: 25000 })
+    if (res.ok) await this.refreshKubernetesFromCluster()
+    return { ok: res.ok, output: [res.stdout, res.stderr].filter(Boolean).join('\n').trim() }
   }
 
   public startContainer(id: string): boolean {
@@ -710,15 +1090,19 @@ volumes:
     const totalPods = this.k8sPods.length
     const runningPods = this.k8sPods.filter((p) => p.status === 'Running').length
     return {
-      clusterName: 'indoctrinated-k8s-production',
-      serverVersion: 'v1.31.1+k8s',
-      status: runningPods === totalPods ? 'Healthy' : 'Degraded',
+      clusterName: this.clusterName,
+      serverVersion: this.serverVersion,
+      status: runningPods === totalPods && totalPods > 0 ? 'Healthy' : totalPods === 0 ? 'Healthy' : 'Degraded',
       totalNodes: this.k8sNodes.length,
       totalPods,
       runningPods,
       totalDeployments: this.k8sDeployments.length,
-      cpuUsagePercent: 51,
-      memUsagePercent: 54,
+      cpuUsagePercent: this.k8sNodes.length
+        ? Math.round(this.k8sNodes.reduce((a, n) => a + n.cpuAllocatedPercent, 0) / this.k8sNodes.length)
+        : 0,
+      memUsagePercent: this.k8sNodes.length
+        ? Math.round(this.k8sNodes.reduce((a, n) => a + n.memAllocatedPercent, 0) / this.k8sNodes.length)
+        : 0,
     }
   }
 

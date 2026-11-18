@@ -19,6 +19,11 @@ import {
   Maximize2,
   Minimize2,
   X,
+  FolderOpen,
+  Plus,
+  Save,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import {
   databaseService,
@@ -53,6 +58,7 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
   const [copiedCell, setCopiedCell] = useState<string | null>(null)
   const [selectedJsonValue, setSelectedJsonValue] = useState<any | null>(null)
   const [resultFilter, setResultFilter] = useState('')
+  const [statusBanner, setStatusBanner] = useState<string | null>(null)
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -63,23 +69,65 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
     })
   }, [])
 
-  // Auto-run initial sample query on mount
+  // Auto-run initial query on mount for the active database's first table
   useEffect(() => {
-    handleRunQuery('SELECT * FROM customers LIMIT 25;')
+    const firstTable = Object.keys(activeDb.tables)[0]
+    if (firstTable) {
+      const q = `SELECT * FROM ${firstTable} LIMIT 25;`
+      setSqlQuery(q)
+      void handleRunQuery(q)
+    }
   }, [])
 
-  const handleRunQuery = (customSql?: string) => {
+  const handleRunQuery = async (customSql?: string) => {
     const code = customSql ?? sqlQuery
     if (!code.trim()) return
 
     setIsRunning(true)
-    setTimeout(() => {
-      const res = databaseService.executeQuery(code)
+    try {
+      const res = await databaseService.executeQueryAsync(code)
       setQueryResult(res)
       setHistoryList(databaseService.getHistory())
-      setIsRunning(false)
       setActiveViewTab('results')
-    }, 40)
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
+  const handleOpenSqlite = async () => {
+    const res = await databaseService.openSqliteFileAsync()
+    if (res.ok && res.db) {
+      setStatusBanner(`Opened ${res.db.name}`)
+      const firstTable = Object.keys(res.db.tables)[0]
+      if (firstTable) {
+        const q = `SELECT * FROM "${firstTable}" LIMIT 50;`
+        setSqlQuery(q)
+        await handleRunQuery(q)
+      }
+    } else if (res.error && !res.canceled) {
+      setStatusBanner(`Error: ${res.error}`)
+    }
+  }
+
+  const handleNewSqlite = async () => {
+    const res = await databaseService.createSqliteDbAsync()
+    if (res.ok && res.db) {
+      setStatusBanner(`Created live SQLite 3 WASM database: ${res.db.name}`)
+      const q = 'SELECT * FROM notes LIMIT 25;'
+      setSqlQuery(q)
+      await handleRunQuery(q)
+    } else if (res.error) {
+      setStatusBanner(`Error: ${res.error}`)
+    }
+  }
+
+  const handleSaveSqlite = async () => {
+    const res = await databaseService.saveSqliteFileAsync()
+    if (res.ok && res.filePath) {
+      setStatusBanner(`Saved SQLite DB to ${res.filePath}`)
+    } else if (res.error && !res.canceled) {
+      setStatusBanner(`Error: ${res.error}`)
+    }
   }
 
   const handleTableQuickSelect = (tableName: string) => {
@@ -219,6 +267,41 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
         </div>
 
         <div className="header-actions">
+          <button
+            className="dock-action-btn glass-interactive"
+            onClick={() => void handleOpenSqlite()}
+            title="Open local .sqlite / .db file (sql.js WASM)"
+          >
+            <FolderOpen size={13} />
+          </button>
+          <button
+            className="dock-action-btn glass-interactive"
+            onClick={() => void handleNewSqlite()}
+            title="New Live SQLite 3 Database (sql.js WASM)"
+          >
+            <Plus size={13} />
+          </button>
+          {activeDb.isLiveSqlite && (
+            <button
+              className="dock-action-btn glass-interactive"
+              onClick={() => void handleSaveSqlite()}
+              title="Save SQLite Database to Disk"
+            >
+              <Save size={13} />
+            </button>
+          )}
+          <button
+            className="dock-action-btn glass-interactive"
+            onClick={() => {
+              databaseService.resetToDefaults()
+              setAllDbs(databaseService.getAllDatabases())
+              setActiveDb(databaseService.getActiveDatabase())
+              setStatusBanner('Reset sample databases to defaults.')
+            }}
+            title="Reset Sample Databases"
+          >
+            <RotateCcw size={13} />
+          </button>
           {onToggleDockPosition && (
             <button
               className="dock-action-btn glass-interactive"
@@ -404,7 +487,37 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
                 <span>History</span>
                 <span className="tab-badge">{historyList.length}</span>
               </button>
+              <button
+                className={`tab-btn glass-interactive ${activeViewTab === 'schema' ? 'active' : ''}`}
+                onClick={() => setActiveViewTab('schema')}
+              >
+                <Columns size={12} />
+                <span>Schema &amp; DDL</span>
+                <span className="tab-badge">{Object.keys(activeDb.tables).length}</span>
+              </button>
             </div>
+
+            {statusBanner && (
+              <span style={{ fontSize: 11, color: '#64D2FF', marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {statusBanner}
+              </span>
+            )}
+
+            {activeViewTab === 'history' && historyList.length > 0 && (
+              <div className="results-actions">
+                <button
+                  className="export-btn glass-interactive"
+                  onClick={() => {
+                    databaseService.clearHistory()
+                    setHistoryList([])
+                  }}
+                  title="Clear Query History"
+                >
+                  <Trash2 size={12} />
+                  <span>Clear</span>
+                </button>
+              </div>
+            )}
 
             {activeViewTab === 'results' && queryResult && !queryResult.error && queryResult.rows.length > 0 && (
               <div className="results-actions">
@@ -521,6 +634,52 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
                   <p>Write an SQL statement above and click <strong>Run Query</strong>.</p>
                 </div>
               )
+            ) : activeViewTab === 'schema' ? (
+              <div className="schema-ddl-view" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {Object.values(activeDb.tables).length === 0 ? (
+                  <div className="results-empty-state">
+                    <Columns size={24} className="empty-sparkle" />
+                    <p>No tables found in this database. Run a <code>CREATE TABLE</code> query above.</p>
+                  </div>
+                ) : (
+                  Object.values(activeDb.tables).map((tbl) => {
+                    const ddlCols = tbl.columns
+                      .map((c) => {
+                        const parts = [`  "${c.name}" ${c.type}`]
+                        if (c.isPrimaryKey) parts.push('PRIMARY KEY')
+                        if (c.isNullable === false && !c.isPrimaryKey) parts.push('NOT NULL')
+                        if (c.defaultValue !== undefined) parts.push(`DEFAULT ${c.defaultValue}`)
+                        if (c.isForeignKey && c.foreignKeyRef) {
+                          parts.push(`REFERENCES "${c.foreignKeyRef.table}"("${c.foreignKeyRef.column}")`)
+                        }
+                        return parts.join(' ')
+                      })
+                      .join(',\n')
+                    const ddl = `CREATE TABLE "${tbl.name}" (\n${ddlCols}\n);`
+                    return (
+                      <div key={tbl.name} className="history-item">
+                        <div className="history-header">
+                          <div className="history-meta-left">
+                            <TableIcon size={12} className="table-icon" />
+                            <strong style={{ color: '#F8FAFC' }}>{tbl.name}</strong>
+                            <span className="history-rows">{tbl.columns.length} cols · {tbl.rowCount ?? tbl.data.length} rows</span>
+                            {tbl.indexes && tbl.indexes.length > 0 && (
+                              <span className="history-duration">Indexes: {tbl.indexes.map((ix) => ix.name).join(', ')}</span>
+                            )}
+                          </div>
+                          <button
+                            className="history-rerun-btn glass-interactive"
+                            onClick={() => handleTableQuickSelect(tbl.name)}
+                          >
+                            <Play size={10} /> <span>Inspect</span>
+                          </button>
+                        </div>
+                        <pre className="history-sql">{ddl}</pre>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             ) : (
               /* History Tab */
               <div className="history-list">
