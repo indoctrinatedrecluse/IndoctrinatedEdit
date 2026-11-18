@@ -482,7 +482,8 @@ export async function executeRedisRespCommand(options: {
 
     sock.once('error', (err) => done({ ok: false, error: err.message }))
 
-    sock.once('connect', () => {
+    const connectEvent = options.tls ? 'secureConnect' : 'connect'
+    sock.once(connectEvent, () => {
       for (const cmd of pipeline) {
         sock.write(encodeRespCommand(cmd), 'utf8')
       }
@@ -498,11 +499,12 @@ export async function executeRedisRespCommand(options: {
         replies.push(parsed.value)
         cursor = parsed.nextOffset
       }
-      const last = replies[replies.length - 1]
-      if (last && typeof last === 'object' && '__redisError' in last) {
-        done({ ok: false, error: last.__redisError })
+      // Surface any error in AUTH, SELECT, or target command
+      const firstError = replies.find((r) => r && typeof r === 'object' && '__redisError' in r)
+      if (firstError) {
+        done({ ok: false, error: firstError.__redisError })
       } else {
-        done({ ok: true, value: last })
+        done({ ok: true, value: replies[replies.length - 1] })
       }
     })
   })
@@ -767,10 +769,16 @@ export async function sendSmtpDiagnostic(options: {
 
     if (options.username && options.password) {
       const auth = await sendCmd(sock, 'AUTH LOGIN')
-      if (auth.code !== 334) throw new Error(`AUTH LOGIN failed: ${auth.text}`)
-      await sendCmd(sock, Buffer.from(options.username, 'utf8').toString('base64'), '<BASE64 USERNAME>')
-      const passRes = await sendCmd(sock, Buffer.from(options.password, 'utf8').toString('base64'), '<REDACTED PASSWORD>')
-      if (passRes.code !== 235) throw new Error(`Authentication failed: ${passRes.text}`)
+      if (auth.code === 334) {
+        await sendCmd(sock, Buffer.from(options.username, 'utf8').toString('base64'), '<BASE64 USERNAME>')
+        const passRes = await sendCmd(sock, Buffer.from(options.password, 'utf8').toString('base64'), '<REDACTED PASSWORD>')
+        if (passRes.code !== 235) throw new Error(`Authentication failed: ${passRes.text}`)
+      } else {
+        // Fallback to AUTH PLAIN (RFC 4616)
+        const plainToken = Buffer.from(`\0${options.username}\0${options.password}`, 'utf8').toString('base64')
+        const plainRes = await sendCmd(sock, `AUTH PLAIN ${plainToken}`, 'AUTH PLAIN <REDACTED>')
+        if (plainRes.code !== 235) throw new Error(`SMTP AUTH failed: ${plainRes.text}`)
+      }
     }
 
     const mf = await sendCmd(sock, `MAIL FROM:<${options.from}>`)
@@ -780,12 +788,13 @@ export async function sendSmtpDiagnostic(options: {
     const dt = await sendCmd(sock, 'DATA')
     if (dt.code !== 354) throw new Error(dt.text)
 
+    const isHtml = /<[a-z][\s\S]*>/i.test(options.body)
     const payload = [
       `From: ${options.from}`,
       `To: ${options.to}`,
       `Subject: ${options.subject}`,
       `MIME-Version: 1.0`,
-      `Content-Type: text/plain; charset=UTF-8`,
+      `Content-Type: ${isHtml ? 'text/html' : 'text/plain'}; charset=UTF-8`,
       '',
       options.body.replace(/^\./gm, '..'),
       '.',
@@ -963,8 +972,255 @@ class InfraSocketManager {
   public disposeAll(): void {
     for (const id of Array.from(this.wsSessions.keys())) this.wsDisconnect(id)
     for (const id of Array.from(this.tcpSessions.keys())) this.tcpDisconnect(id)
+    for (const id of Array.from(this.redisSubSessions.keys())) this.redisUnsubscribe(id)
     void realMockHttpServer.stop()
+    sqliteWasmService.disposeAll()
   }
+
+  private redisSubSessions = new Map<string, net.Socket>()
+
+  public async redisSubscribe(options: {
+    id: string
+    host: string
+    port: number
+    password?: string
+    tls?: boolean
+    channel: string
+  }): Promise<{ ok: boolean; error?: string }> {
+    this.redisUnsubscribe(options.id)
+    return new Promise((resolve) => {
+      const sock: net.Socket = options.tls
+        ? tls.connect({ host: options.host, port: options.port, rejectUnauthorized: false })
+        : net.createConnection({ host: options.host, port: options.port })
+      let settled = false
+      let buf = Buffer.alloc(0)
+      const connectEvent = options.tls ? 'secureConnect' : 'connect'
+
+      sock.once(connectEvent, () => {
+        this.redisSubSessions.set(options.id, sock)
+        if (options.password) sock.write(encodeRespCommand(['AUTH', options.password]), 'utf8')
+        sock.write(encodeRespCommand(['SUBSCRIBE', options.channel]), 'utf8')
+        if (!settled) {
+          settled = true
+          resolve({ ok: true })
+        }
+      })
+
+      sock.on('data', (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk])
+        let cursor = 0
+        while (cursor < buf.length) {
+          const parsed = parseRespValue(buf, cursor)
+          if (!parsed) break
+          cursor = parsed.nextOffset
+          const val = parsed.value
+          if (Array.isArray(val) && val[0] === 'message' && val.length >= 3) {
+            this.emit('infra:redisPubSubEvent', {
+              id: options.id,
+              type: 'message',
+              channel: String(val[1]),
+              payload: String(val[2]),
+              timestamp: new Date().toLocaleTimeString(),
+            })
+          }
+        }
+        if (cursor > 0) buf = buf.subarray(cursor)
+      })
+
+      sock.on('error', (err) => {
+        this.redisSubSessions.delete(options.id)
+        this.emit('infra:redisPubSubEvent', { id: options.id, type: 'error', error: err.message })
+        if (!settled) {
+          settled = true
+          resolve({ ok: false, error: err.message })
+        }
+      })
+
+      sock.on('close', () => {
+        this.redisSubSessions.delete(options.id)
+        this.emit('infra:redisPubSubEvent', { id: options.id, type: 'close' })
+      })
+    })
+  }
+
+  public redisUnsubscribe(id: string): boolean {
+    const s = this.redisSubSessions.get(id)
+    if (!s) return false
+    try {
+      s.destroy()
+    } catch {}
+    this.redisSubSessions.delete(id)
+    return true
+  }
+}
+
+// =========================================================================
+// 9. REAL OPENSSH / SFTP / SCP CLIENT (uses built-in OS OpenSSH binaries)
+// =========================================================================
+export interface SshConnSpec {
+  host: string
+  port?: number
+  username: string
+  keyPath?: string
+  timeoutMs?: number
+}
+
+function buildSshBaseArgs(spec: SshConnSpec, portFlag: '-p' | '-P' = '-p'): string[] {
+  const args = [
+    portFlag,
+    String(spec.port || 22),
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'StrictHostKeyChecking=accept-new',
+    '-o',
+    'ConnectTimeout=8',
+  ]
+  if (spec.keyPath?.trim()) {
+    args.push('-i', spec.keyPath.trim())
+  }
+  return args
+}
+
+function shellQuotePosix(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
+export async function execSshCommand(
+  spec: SshConnSpec & { command: string }
+): Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number; latencyMs: number }> {
+  const start = Date.now()
+  const timeout = Math.min(Math.max(spec.timeoutMs ?? 20000, 1000), 60000)
+  const args = [...buildSshBaseArgs(spec, '-p'), `${spec.username}@${spec.host}`, spec.command]
+  try {
+    const { stdout, stderr } = await execFileAsync('ssh', args, {
+      timeout,
+      maxBuffer: 8 * 1024 * 1024,
+      windowsHide: true,
+    })
+    return { ok: true, stdout: stdout || '', stderr: stderr || '', exitCode: 0, latencyMs: Date.now() - start }
+  } catch (err: any) {
+    return {
+      ok: false,
+      stdout: err?.stdout || '',
+      stderr: err?.stderr || err?.message || 'SSH execution failed',
+      exitCode: typeof err?.code === 'number' ? err.code : 1,
+      latencyMs: Date.now() - start,
+    }
+  }
+}
+
+export interface SftpEntry {
+  name: string
+  type: 'file' | 'directory'
+  size: string
+  permissions: string
+  modified: string
+}
+
+export function parsePosixLsOutput(stdout: string): SftpEntry[] {
+  const entries: SftpEntry[] = []
+  for (const raw of stdout.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line || line.startsWith('total ') || line.startsWith('sftp>')) continue
+    const m = line.match(/^([d\-lcbps][rwxstST\-]{9})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$/)
+    if (!m) continue
+    const perms = m[1]
+    const bytes = Number(m[2])
+    const modified = m[3]
+    const name = m[4].replace(/\s+->\s+.*$/, '')
+    if (name === '.') continue
+    const size =
+      perms.startsWith('d')
+        ? '--'
+        : bytes >= 1024 * 1024
+        ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+        : bytes >= 1024
+        ? `${(bytes / 1024).toFixed(1)} KB`
+        : `${bytes} B`
+    entries.push({
+      name,
+      type: perms.startsWith('d') ? 'directory' : 'file',
+      size,
+      permissions: perms,
+      modified,
+    })
+  }
+  return entries
+}
+
+export async function sftpListDir(
+  spec: SshConnSpec & { remotePath: string }
+): Promise<{ ok: boolean; entries: SftpEntry[]; error?: string }> {
+  const res = await execSshCommand({
+    ...spec,
+    command: `ls -la ${shellQuotePosix(spec.remotePath || '.')}`,
+  })
+  if (!res.ok) return { ok: false, entries: [], error: res.stderr }
+  return { ok: true, entries: parsePosixLsOutput(res.stdout) }
+}
+
+export async function sftpReadFile(
+  spec: SshConnSpec & { remoteFile: string }
+): Promise<{ ok: boolean; content?: string; error?: string }> {
+  const res = await execSshCommand({
+    ...spec,
+    command: `cat ${shellQuotePosix(spec.remoteFile)}`,
+  })
+  if (!res.ok) return { ok: false, error: res.stderr }
+  return { ok: true, content: res.stdout }
+}
+
+export async function sftpWriteFile(
+  spec: SshConnSpec & { remoteFile: string; content: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const args = [...buildSshBaseArgs(spec, '-p'), `${spec.username}@${spec.host}`, `cat > ${shellQuotePosix(spec.remoteFile)}`]
+  return new Promise((resolve) => {
+    let stderr = ''
+    const child = spawn('ssh', args, { windowsHide: true })
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL') } catch {}
+      resolve({ ok: false, error: 'SFTP write timed out' })
+    }, spec.timeoutMs ?? 20000)
+    child.stderr?.on('data', (d) => { stderr += d.toString() })
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      resolve({ ok: false, error: err.message })
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve(code === 0 ? { ok: true } : { ok: false, error: stderr || `ssh exited with ${code}` })
+    })
+    child.stdin?.write(spec.content, 'utf8')
+    child.stdin?.end()
+  })
+}
+
+export async function sftpTransferScp(
+  direction: 'upload' | 'download',
+  spec: SshConnSpec & { localPath: string; remotePath: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const remoteTarget = `${spec.username}@${spec.host}:${spec.remotePath}`
+  const args =
+    direction === 'upload'
+      ? [...buildSshBaseArgs(spec, '-P'), spec.localPath, remoteTarget]
+      : [...buildSshBaseArgs(spec, '-P'), remoteTarget, spec.localPath]
+  try {
+    await execFileAsync('scp', args, { timeout: spec.timeoutMs ?? 60000, windowsHide: true })
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.stderr || err?.message || `scp ${direction} failed` }
+  }
+}
+
+export async function sftpDeleteFile(
+  spec: SshConnSpec & { remoteFile: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await execSshCommand({
+    ...spec,
+    command: `rm -f ${shellQuotePosix(spec.remoteFile)}`,
+  })
+  return res.ok ? { ok: true } : { ok: false, error: res.stderr }
 }
 
 export const infraSocketManager = new InfraSocketManager()
@@ -992,6 +1248,17 @@ export function setupInfraIPC(ipcMain: IpcMain, getWin: () => BrowserWindow | nu
   ipcMain.handle('infra:portsKill', (_, pid: number) => killOsProcess(pid))
 
   ipcMain.handle('infra:redisExec', (_, options) => executeRedisRespCommand(options))
+  ipcMain.handle('infra:redisSubscribe', (_, options) => infraSocketManager.redisSubscribe(options))
+  ipcMain.handle('infra:redisUnsubscribe', (_, id: string) => infraSocketManager.redisUnsubscribe(id))
+
+  // Real OpenSSH / SFTP / SCP IPC
+  ipcMain.handle('infra:sshExec', (_, spec) => execSshCommand(spec))
+  ipcMain.handle('infra:sftpList', (_, spec) => sftpListDir(spec))
+  ipcMain.handle('infra:sftpRead', (_, spec) => sftpReadFile(spec))
+  ipcMain.handle('infra:sftpWrite', (_, spec) => sftpWriteFile(spec))
+  ipcMain.handle('infra:sftpUpload', (_, spec) => sftpTransferScp('upload', spec))
+  ipcMain.handle('infra:sftpDownload', (_, spec) => sftpTransferScp('download', spec))
+  ipcMain.handle('infra:sftpDelete', (_, spec) => sftpDeleteFile(spec))
 
   ipcMain.handle('infra:dockerExec', (_, args: string[], timeoutOrOpts?: number | InfraCliOptions) =>
     execInfraCli('docker', args, timeoutOrOpts)

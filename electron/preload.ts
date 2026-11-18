@@ -103,6 +103,16 @@ export interface ElectronInfraAPI {
   portsPing: (port: number, host?: string) => Promise<{ isReachable: boolean; latencyMs: number; statusCode?: number; statusText?: string; serverHeader?: string; error?: string }>
   portsKill: (pid: number) => Promise<{ success: boolean; message: string }>
   redisExec: (options: { host: string; port: number; password?: string; db?: number; tls?: boolean; args: string[]; timeoutMs?: number }) => Promise<{ ok: boolean; value?: any; error?: string; latencyMs: number }>
+  redisSubscribe: (options: { id: string; host: string; port: number; password?: string; tls?: boolean; channel: string }) => Promise<{ ok: boolean; error?: string }>
+  redisUnsubscribe: (id: string) => Promise<boolean>
+  onRedisPubSubEvent: (cb: (ev: any) => void) => () => void
+  sshExec: (spec: { host: string; port?: number; username: string; keyPath?: string; command: string; timeoutMs?: number }) => Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number; latencyMs: number }>
+  sftpList: (spec: { host: string; port?: number; username: string; keyPath?: string; remotePath: string }) => Promise<{ ok: boolean; entries: Array<{ name: string; type: 'file' | 'directory'; size: string; permissions: string; modified: string }>; error?: string }>
+  sftpRead: (spec: { host: string; port?: number; username: string; keyPath?: string; remoteFile: string }) => Promise<{ ok: boolean; content?: string; error?: string }>
+  sftpWrite: (spec: { host: string; port?: number; username: string; keyPath?: string; remoteFile: string; content: string }) => Promise<{ ok: boolean; error?: string }>
+  sftpUpload: (spec: { host: string; port?: number; username: string; keyPath?: string; localPath: string; remotePath: string }) => Promise<{ ok: boolean; error?: string }>
+  sftpDownload: (spec: { host: string; port?: number; username: string; keyPath?: string; localPath: string; remotePath: string }) => Promise<{ ok: boolean; error?: string }>
+  sftpDelete: (spec: { host: string; port?: number; username: string; keyPath?: string; remoteFile: string }) => Promise<{ ok: boolean; error?: string }>
   dockerExec: (args: string[], timeoutOrOpts?: number | { timeoutMs?: number; cwd?: string; stdin?: string }) => Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }>
   k8sExec: (args: string[], timeoutOrOpts?: number | { timeoutMs?: number; cwd?: string; stdin?: string }) => Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }>
   dbOpenSqlite: (filePath?: string) => Promise<{ ok: boolean; canceled?: boolean; dbId?: string; name?: string; filePath?: string; tables?: Record<string, any>; error?: string }>
@@ -428,6 +438,20 @@ const api: ElectronAPI = {
     portsPing: (port, host) => ipcRenderer.invoke('infra:portsPing', port, host),
     portsKill: (pid) => ipcRenderer.invoke('infra:portsKill', pid),
     redisExec: (options) => ipcRenderer.invoke('infra:redisExec', options),
+    redisSubscribe: (options) => ipcRenderer.invoke('infra:redisSubscribe', options),
+    redisUnsubscribe: (id) => ipcRenderer.invoke('infra:redisUnsubscribe', id),
+    onRedisPubSubEvent: (cb) => {
+      const handler = (_: unknown, ev: any) => cb(ev)
+      ipcRenderer.on('infra:redisPubSubEvent', handler)
+      return () => ipcRenderer.removeListener('infra:redisPubSubEvent', handler)
+    },
+    sshExec: (spec) => ipcRenderer.invoke('infra:sshExec', spec),
+    sftpList: (spec) => ipcRenderer.invoke('infra:sftpList', spec),
+    sftpRead: (spec) => ipcRenderer.invoke('infra:sftpRead', spec),
+    sftpWrite: (spec) => ipcRenderer.invoke('infra:sftpWrite', spec),
+    sftpUpload: (spec) => ipcRenderer.invoke('infra:sftpUpload', spec),
+    sftpDownload: (spec) => ipcRenderer.invoke('infra:sftpDownload', spec),
+    sftpDelete: (spec) => ipcRenderer.invoke('infra:sftpDelete', spec),
     dockerExec: (args, timeoutOrOpts) => ipcRenderer.invoke('infra:dockerExec', args, timeoutOrOpts),
     k8sExec: (args, timeoutOrOpts) => ipcRenderer.invoke('infra:k8sExec', args, timeoutOrOpts),
     dbOpenSqlite: (filePath) => ipcRenderer.invoke('infra:dbOpenSqlite', filePath),

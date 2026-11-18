@@ -17,30 +17,14 @@ import {
   Star,
   Lock,
 } from 'lucide-react'
+import {
+  remoteProtocolService,
+  SshSessionBookmark,
+  RemoteFileItem,
+} from '../../services/remoteProtocolService'
 import './RemoteProtocolStudioView.css'
 
 export type RemoteStudioTab = 'ssh' | 'sftp' | 'smtp' | 'telnet'
-
-interface SshSessionBookmark {
-  id: string
-  name: string
-  host: string
-  port: number
-  user: string
-  authType: 'password' | 'key'
-  category: 'production' | 'staging' | 'database' | 'local'
-  starred: boolean
-  lastConnected?: string
-}
-
-interface RemoteFileItem {
-  name: string
-  type: 'file' | 'directory'
-  size: string
-  permissions: string
-  modified: string
-  content?: string
-}
 
 export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: () => void }> = ({
   isDocked = true,
@@ -48,77 +32,24 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
   const [activeSubTab, setActiveSubTab] = useState<RemoteStudioTab>('ssh')
 
   // --- SSH State ---
-  const [sshHost, setSshHost] = useState('192.168.1.120')
+  const [sshHost, setSshHost] = useState('127.0.0.1')
   const [sshPort, setSshPort] = useState(22)
   const [sshUser, setSshUser] = useState('root')
-  const [sshAuthType, setSshAuthType] = useState<'password' | 'key'>('password')
+  const [sshAuthType, setSshAuthType] = useState<'password' | 'key'>('key')
+  const [sshKeyPath, setSshKeyPath] = useState('')
   const [isSshConnected, setIsSshConnected] = useState(false)
   const [sshTerminalBuffer, setSshTerminalBuffer] = useState<string[]>([
-    'IndoctrinatedEdit Remote Protocol Studio [SSH / SFTP / SMTP Suite v1.0.0]',
-    'Type commands or connect to remote host to begin interactive SSH session.',
+    'IndoctrinatedEdit Remote Protocol Studio [Real OpenSSH / SFTP / SMTP / TCP-TLS]',
+    'Configure host & key, then click Quick Connect to run real OpenSSH commands.',
   ])
   const [sshInput, setSshInput] = useState('')
-  const [sshLatency, setSshLatency] = useState<number>(18)
+  const [sshLatency, setSshLatency] = useState<number>(0)
 
-  const [savedBookmarks] = useState<SshSessionBookmark[]>([
-    {
-      id: 'bm-1',
-      name: 'AWS Production Web Cluster',
-      host: 'ec2-54-180-20-11.us-east-1.compute.amazonaws.com',
-      port: 22,
-      user: 'ubuntu',
-      authType: 'key',
-      category: 'production',
-      starred: true,
-      lastConnected: 'Today, 10:14 AM',
-    },
-    {
-      id: 'bm-2',
-      name: 'Staging K8s Ingress Node',
-      host: '10.0.12.45',
-      port: 2222,
-      user: 'deploy',
-      authType: 'password',
-      category: 'staging',
-      starred: true,
-      lastConnected: 'Yesterday',
-    },
-    {
-      id: 'bm-3',
-      name: 'Database Primary (Postgres)',
-      host: '192.168.1.200',
-      port: 22,
-      user: 'postgres',
-      authType: 'key',
-      category: 'database',
-      starred: false,
-      lastConnected: '3 days ago',
-    },
-    {
-      id: 'bm-4',
-      name: 'Raspberry Pi Home Gateway',
-      host: '192.168.1.1',
-      port: 22,
-      user: 'pi',
-      authType: 'password',
-      category: 'local',
-      starred: false,
-      lastConnected: 'Sep 21, 2026',
-    },
-  ])
+  const [savedBookmarks, setSavedBookmarks] = useState<SshSessionBookmark[]>(() => remoteProtocolService.getBookmarks())
 
   // --- SFTP State ---
-  const [currentRemotePath, setCurrentRemotePath] = useState('/var/www/html/app')
-  const [remoteFiles, setRemoteFiles] = useState<RemoteFileItem[]>([
-    { name: '..', type: 'directory', size: '-', permissions: 'drwxr-xr-x', modified: '2026-09-24 08:00' },
-    { name: 'src', type: 'directory', size: '4.0 KB', permissions: 'drwxr-xr-x', modified: '2026-09-24 09:12' },
-    { name: 'config', type: 'directory', size: '4.0 KB', permissions: 'drwxr-xr-x', modified: '2026-09-23 18:40' },
-    { name: 'logs', type: 'directory', size: '12.4 KB', permissions: 'drwxrwxr-x', modified: '2026-09-24 10:30' },
-    { name: 'server.js', type: 'file', size: '18.2 KB', permissions: '-rw-r--r--', modified: '2026-09-24 10:05', content: 'const express = require("express");\nconst app = express();\napp.get("/health", (req, res) => res.json({ status: "ok" }));\napp.listen(3000);' },
-    { name: 'package.json', type: 'file', size: '1.4 KB', permissions: '-rw-r--r--', modified: '2026-09-24 09:30', content: '{\n  "name": "remote-app",\n  "version": "1.0.0",\n  "dependencies": {\n    "express": "^4.19.2"\n  }\n}' },
-    { name: '.env.production', type: 'file', size: '420 B', permissions: '-rw-------', modified: '2026-09-22 14:15', content: 'PORT=3000\nNODE_ENV=production\nDB_HOST=10.0.12.45' },
-    { name: 'docker-compose.yml', type: 'file', size: '2.1 KB', permissions: '-rw-r--r--', modified: '2026-09-20 11:20', content: 'version: "3.8"\nservices:\n  web:\n    build: .\n    ports:\n      - "80:3000"' },
-  ])
+  const [currentRemotePath, setCurrentRemotePath] = useState('/var/www')
+  const [remoteFiles, setRemoteFiles] = useState<RemoteFileItem[]>([])
   const [selectedRemoteFile, setSelectedRemoteFile] = useState<RemoteFileItem | null>(null)
   const [editingFileContent, setEditingFileContent] = useState<string>('')
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false)
@@ -129,29 +60,52 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
   const [smtpPort, setSmtpPort] = useState(587)
   const [smtpSecurity, setSmtpSecurity] = useState<'starttls' | 'ssl' | 'none'>('starttls')
   const [smtpUser, setSmtpUser] = useState('postmaster@sandbox.mailgun.org')
-  const [smtpPass, setSmtpPass] = useState('••••••••••••')
-  const [smtpFrom, setSmtpFrom] = useState('developer@indoctrinated.io')
-  const [smtpTo, setSmtpTo] = useState('admin@client.com')
-  const [smtpSubject, setSmtpSubject] = useState('🚀 IndoctrinatedEdit SMTP Diagnostic Test')
+  const [smtpPass, setSmtpPass] = useState('')
+  const [smtpFrom, setSmtpFrom] = useState('developer@example.com')
+  const [smtpTo, setSmtpTo] = useState('recipient@example.com')
+  const [smtpSubject, setSmtpSubject] = useState('IndoctrinatedEdit SMTP Diagnostic Test')
   const [smtpBody, setSmtpBody] = useState(
-    '<h1>SMTP Diagnostic Passed</h1><p>Sent securely via IndoctrinatedEdit Remote Protocol Studio with STARTTLS handshake validation.</p>'
+    '<h1>SMTP Diagnostic Passed</h1><p>Sent via IndoctrinatedEdit Remote Protocol Studio with STARTTLS handshake validation.</p>'
   )
   const [isSendingMail, setIsSendingMail] = useState(false)
   const [smtpHandshakeLogs, setSmtpHandshakeLogs] = useState<
     Array<{ type: 'client' | 'server' | 'info'; text: string; time: string }>
   >([
-    { type: 'info', text: 'Ready to run SMTP protocol handshake diagnosis.', time: '00:00:00' },
+    { type: 'info', text: 'Ready to run real ESMTP/STARTTLS protocol handshake.', time: '00:00:00' },
   ])
   const [smtpResultStatus, setSmtpResultStatus] = useState<'idle' | 'success' | 'failed'>('idle')
 
-  // --- Telnet / Raw TCP Socket State ---
+  // --- Telnet / Raw TCP-TLS Socket State ---
   const [tcpHost, setTcpHost] = useState('127.0.0.1')
   const [tcpPort, setTcpPort] = useState(6379)
+  const [tcpUseTls, setTcpUseTls] = useState(false)
   const [isTcpConnected, setIsTcpConnected] = useState(false)
-  const [tcpPayload, setTcpPayload] = useState('PING\r\n')
+  const [tcpPayload, setTcpPayload] = useState('PING\\r\\n')
   const [tcpLogs, setTcpLogs] = useState<string[]>([
-    '[TCP Lab] Ready to connect to raw socket endpoints.',
+    '[TCP Lab] Ready to open a real Node.js TCP/TLS socket.',
   ])
+  const tcpSessionIdRef = useRef<string>('remote_tcp_1')
+
+  useEffect(() => {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.onTcpEvent) return
+    const unsub = infra.onTcpEvent((ev: any) => {
+      if (ev.id !== tcpSessionIdRef.current) return
+      if (ev.type === 'data') {
+        setTcpLogs((prev) => [...prev, `[RECV <<<] ${ev.data}`])
+      } else if (ev.type === 'error') {
+        setTcpLogs((prev) => [...prev, `[TCP ERROR] ${ev.error}`])
+        setIsTcpConnected(false)
+      } else if (ev.type === 'close') {
+        setTcpLogs((prev) => [...prev, '[TCP] Remote socket closed.'])
+        setIsTcpConnected(false)
+      }
+    })
+    return () => {
+      unsub()
+      void infra.tcpDisconnect?.(tcpSessionIdRef.current)
+    }
+  }, [])
 
   const sshScrollRef = useRef<HTMLDivElement>(null)
 
@@ -161,83 +115,82 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
     }
   }, [sshTerminalBuffer])
 
-  // --- SSH Actions ---
-  const handleConnectSsh = () => {
+  // --- SSH Actions (Real OpenSSH via Electron IPC) ---
+  const handleConnectSsh = async () => {
     if (isSshConnected) {
       setIsSshConnected(false)
       setSshTerminalBuffer((prev) => [
         ...prev,
-        `\x1b[33m[SSH] Connection to ${sshUser}@${sshHost}:${sshPort} terminated by user.\x1b[0m`,
+        `[SSH] Disconnected from ${sshUser}@${sshHost}:${sshPort}.`,
       ])
       return
     }
 
-    setIsSshConnected(true)
-    setSshLatency(Math.floor(Math.random() * 20) + 12)
     setSshTerminalBuffer((prev) => [
       ...prev,
-      `\x1b[36m[SSH] Initiating handshake to ${sshUser}@${sshHost}:${sshPort}...\x1b[0m`,
-      `\x1b[32m[SSH] Host key verified (SHA256:4tM8nK9wP3xQ7vL2bZ0yR1). Authenticated as ${sshUser}.\x1b[0m`,
-      `\x1b[32m[SSH] Interactive pseudo-terminal (xterm-256color) allocated.\x1b[0m`,
-      `Welcome to Ubuntu 24.04.1 LTS (GNU/Linux 6.8.0-40-generic x86_64)`,
-      ` * Documentation:  https://help.ubuntu.com`,
-      ` * Management:     https://landscape.canonical.com`,
-      ` * Support:        https://ubuntu.com/pro`,
-      `Last login: Thu Sep 24 10:15:22 2026 from 192.168.1.50`,
-      `${sshUser}@${sshHost.split('.')[0]}:~$ `,
+      `[SSH] Connecting via OpenSSH to ${sshUser}@${sshHost}:${sshPort}...`,
     ])
+    const res = await remoteProtocolService.sshExec({
+      host: sshHost,
+      port: sshPort,
+      username: sshUser,
+      keyPath: sshKeyPath || undefined,
+      command: 'uname -a && pwd',
+    })
+    setSshLatency(res.latencyMs)
+    if (res.ok) {
+      setIsSshConnected(true)
+      const lines = res.stdout.trim().split(/\r?\n/).filter(Boolean)
+      setSshTerminalBuffer((prev) => [
+        ...prev,
+        `[SSH] Connected (${res.latencyMs}ms).`,
+        ...lines,
+      ])
+      if (lines.length > 1) setCurrentRemotePath(lines[lines.length - 1].trim())
+    } else {
+      setIsSshConnected(false)
+      setSshTerminalBuffer((prev) => [
+        ...prev,
+        `[SSH Error] ${res.stderr || `Exited with code ${res.exitCode}`}`,
+      ])
+    }
   }
 
-  const handleSendSshCommand = (e: React.FormEvent) => {
+  const handleSendSshCommand = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!sshInput.trim()) return
 
     const cmd = sshInput.trim()
     setSshInput('')
 
+    if (cmd === 'clear' || cmd === 'cls') {
+      setSshTerminalBuffer([])
+      return
+    }
+
     if (!isSshConnected) {
       setSshTerminalBuffer((prev) => [
         ...prev,
         `$ ${cmd}`,
-        `\x1b[31m[SSH Error] Not connected. Connect to a host or select a bookmark above.\x1b[0m`,
+        `[SSH Error] Not connected. Click Quick Connect first.`,
       ])
       return
     }
 
-    setSshTerminalBuffer((prev) => [...prev, `${sshUser}@${sshHost.split('.')[0]}:~$ ${cmd}`])
-
-    setTimeout(() => {
-      if (cmd === 'clear' || cmd === 'cls') {
-        setSshTerminalBuffer([`${sshUser}@${sshHost.split('.')[0]}:~$ `])
-        return
-      }
-      if (cmd === 'uname -a') {
-        setSshTerminalBuffer((prev) => [
-          ...prev,
-          `Linux ubuntu-node-01 6.8.0-40-generic #40-Ubuntu SMP PREEMPT_DYNAMIC x86_64 x86_64 x86_64 GNU/Linux`,
-        ])
-      } else if (cmd === 'ls' || cmd === 'ls -la' || cmd === 'll') {
-        setSshTerminalBuffer((prev) => [
-          ...prev,
-          `total 48\ndrwxr-xr-x 6 ${sshUser} ${sshUser} 4096 Sep 24 10:20 .\ndrwxr-xr-x 3 root root 4096 Sep 20 12:00 ..\n-rw------- 1 ${sshUser} ${sshUser} 1250 Sep 24 10:15 .bash_history\n-rw-r--r-- 1 ${sshUser} ${sshUser}  220 Sep 20 12:00 .bash_logout\n-rw-r--r-- 1 ${sshUser} ${sshUser} 3771 Sep 20 12:00 .bashrc\ndrwx------ 2 ${sshUser} ${sshUser} 4096 Sep 20 12:05 .ssh\ndrwxr-xr-x 4 ${sshUser} ${sshUser} 4096 Sep 24 09:30 app`,
-        ])
-      } else if (cmd.startsWith('ping')) {
-        setSshTerminalBuffer((prev) => [
-          ...prev,
-          `PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.\n64 bytes from 8.8.8.8: icmp_seq=1 ttl=118 time=8.42 ms\n64 bytes from 8.8.8.8: icmp_seq=2 ttl=118 time=8.19 ms\n--- 8.8.8.8 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1001ms`,
-        ])
-      } else if (cmd === 'df -h') {
-        setSshTerminalBuffer((prev) => [
-          ...prev,
-          `Filesystem      Size  Used Avail Use% Mounted on\n/dev/root        48G   14G   32G  31% /\ntmpfs           3.9G     0  3.9G   0% /dev/shm`,
-        ])
-      } else {
-        setSshTerminalBuffer((prev) => [
-          ...prev,
-          `[remote: ${cmd}] -> Executed successfully (exit code: 0).`,
-        ])
-      }
-    }, 120)
+    setSshTerminalBuffer((prev) => [...prev, `${sshUser}@${sshHost}:$ ${cmd}`])
+    const res = await remoteProtocolService.sshExec({
+      host: sshHost,
+      port: sshPort,
+      username: sshUser,
+      keyPath: sshKeyPath || undefined,
+      command: cmd,
+    })
+    setSshLatency(res.latencyMs)
+    const out = [res.stdout, res.stderr].filter(Boolean).join('\n').trim()
+    setSshTerminalBuffer((prev) => [
+      ...prev,
+      out || `(exit code ${res.exitCode})`,
+    ])
   }
 
   const handleSelectBookmark = (bm: SshSessionBookmark) => {
@@ -245,55 +198,116 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
     setSshPort(bm.port)
     setSshUser(bm.user)
     setSshAuthType(bm.authType)
+    if (bm.keyPath) setSshKeyPath(bm.keyPath)
   }
 
-  // --- SFTP Actions ---
-  const handleOpenRemoteFile = (file: RemoteFileItem) => {
+  const handleSaveCurrentBookmark = () => {
+    remoteProtocolService.addBookmark({
+      name: `${sshUser}@${sshHost}`,
+      host: sshHost,
+      port: sshPort,
+      user: sshUser,
+      authType: sshAuthType,
+      keyPath: sshKeyPath || undefined,
+      group: 'Local',
+    })
+    setSavedBookmarks(remoteProtocolService.getBookmarks())
+  }
+
+  // --- SFTP Actions (Real OpenSSH / SCP via Electron IPC) ---
+  const handleRefreshSftp = async (targetPath = currentRemotePath) => {
+    setTransferStatus(`Listing ${targetPath}...`)
+    const res = await remoteProtocolService.sftpList({
+      host: sshHost,
+      port: sshPort,
+      username: sshUser,
+      keyPath: sshKeyPath || undefined,
+      remotePath: targetPath,
+    })
+    if (res.ok) {
+      const parentEntry: RemoteFileItem = { name: '..', type: 'directory', size: '--', permissions: 'drwxr-xr-x', modified: '' }
+      const withoutParent = res.entries.filter((e) => e.name !== '..')
+      setRemoteFiles([parentEntry, ...withoutParent])
+      setTransferStatus(`Loaded ${withoutParent.length} items from ${targetPath}`)
+    } else {
+      setTransferStatus(`SFTP Error: ${res.error || 'Failed to list directory'}`)
+    }
+  }
+
+  const handleOpenRemoteFile = async (file: RemoteFileItem) => {
     if (file.type === 'directory') {
+      let nextPath = currentRemotePath
       if (file.name === '..') {
         const parts = currentRemotePath.split('/').filter(Boolean)
         parts.pop()
-        setCurrentRemotePath('/' + parts.join('/'))
+        nextPath = '/' + parts.join('/')
       } else {
-        setCurrentRemotePath((prev) => (prev.endsWith('/') ? prev + file.name : prev + '/' + file.name))
+        nextPath = currentRemotePath.endsWith('/') ? currentRemotePath + file.name : currentRemotePath + '/' + file.name
       }
+      setCurrentRemotePath(nextPath)
+      await handleRefreshSftp(nextPath)
       return
     }
 
-    setSelectedRemoteFile(file)
-    setEditingFileContent(file.content || `// Remote file: ${file.name}\n// Size: ${file.size}\n`)
-    setIsEditModalOpen(true)
+    const remoteFile = currentRemotePath.endsWith('/') ? currentRemotePath + file.name : currentRemotePath + '/' + file.name
+    setTransferStatus(`Reading ${remoteFile}...`)
+    const res = await remoteProtocolService.sftpRead({
+      host: sshHost,
+      port: sshPort,
+      username: sshUser,
+      keyPath: sshKeyPath || undefined,
+      remoteFile,
+    })
+    if (res.ok) {
+      setSelectedRemoteFile(file)
+      setEditingFileContent(res.content || '')
+      setIsEditModalOpen(true)
+      setTransferStatus(null)
+    } else {
+      setTransferStatus(`Read failed: ${res.error}`)
+    }
   }
 
-  const handleSaveRemoteFile = () => {
+  const handleSaveRemoteFile = async () => {
     if (!selectedRemoteFile) return
-    setRemoteFiles((prev) =>
-      prev.map((f) =>
-        f.name === selectedRemoteFile.name ? { ...f, content: editingFileContent, modified: 'Just now' } : f
-      )
-    )
+    const remoteFile = currentRemotePath.endsWith('/')
+      ? currentRemotePath + selectedRemoteFile.name
+      : currentRemotePath + '/' + selectedRemoteFile.name
+    const res = await remoteProtocolService.sftpWrite({
+      host: sshHost,
+      port: sshPort,
+      username: sshUser,
+      keyPath: sshKeyPath || undefined,
+      remoteFile,
+      content: editingFileContent,
+    })
     setIsEditModalOpen(false)
-    setTransferStatus(`Saved & synced ${selectedRemoteFile.name} to remote server!`)
-    setTimeout(() => setTransferStatus(null), 3000)
+    if (res.ok) {
+      setTransferStatus(`Saved ${remoteFile} to remote host.`)
+      await handleRefreshSftp(currentRemotePath)
+    } else {
+      setTransferStatus(`Save failed: ${res.error}`)
+    }
   }
 
-  const handleUploadSimulator = () => {
-    setTransferStatus('Uploading local workspace bundle to remote server...')
-    setTimeout(() => {
-      setRemoteFiles((prev) => [
-        ...prev,
-        {
-          name: `upload-${Date.now().toString(36)}.tar.gz`,
-          type: 'file',
-          size: '48.5 KB',
-          permissions: '-rw-r--r--',
-          modified: 'Just now',
-          content: 'TAR GZ binary payload',
-        },
-      ])
-      setTransferStatus('Upload completed! (48.5 KB transferred)')
-      setTimeout(() => setTransferStatus(null), 3000)
-    }, 1000)
+  const handleUploadFile = async () => {
+    const picked = await window.electronAPI?.openFileDialog?.()
+    if (!picked?.path) return
+    setTransferStatus(`Uploading ${picked.name} to ${currentRemotePath}...`)
+    const res = await remoteProtocolService.sftpUpload({
+      host: sshHost,
+      port: sshPort,
+      username: sshUser,
+      keyPath: sshKeyPath || undefined,
+      localPath: picked.path,
+      remotePath: currentRemotePath,
+    })
+    if (res.ok) {
+      setTransferStatus(`Uploaded ${picked.name} successfully.`)
+      await handleRefreshSftp(currentRemotePath)
+    } else {
+      setTransferStatus(`Upload failed: ${res.error}`)
+    }
   }
 
   // --- SMTP Actions (Real Electron ESMTP/STARTTLS client with clean error reporting) ---
@@ -350,46 +364,49 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
     setSmtpResultStatus('failed')
   }
 
-  // --- Telnet / TCP Actions ---
-  const handleToggleTcp = () => {
+  // --- Real Raw TCP / TLS Socket Actions via Electron IPC ---
+  const handleToggleTcp = async () => {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
     if (isTcpConnected) {
+      await infra?.tcpDisconnect?.(tcpSessionIdRef.current)
       setIsTcpConnected(false)
       setTcpLogs((prev) => [...prev, `[TCP] Disconnected from ${tcpHost}:${tcpPort}.`])
       return
     }
 
-    setIsTcpConnected(true)
-    setTcpLogs((prev) => [
-      ...prev,
-      `[TCP] Connecting to ${tcpHost}:${tcpPort}...`,
-      `[TCP] Socket Connected! Local: 127.0.0.1:54321 <-> Remote: ${tcpHost}:${tcpPort}`,
-      `[TCP] Ready for raw stream duplex IO.`,
-    ])
+    if (!infra?.tcpConnect) {
+      setTcpLogs((prev) => [...prev, '[TCP Error] Raw TCP/TLS sockets require the Electron desktop app.'])
+      return
+    }
+
+    setTcpLogs((prev) => [...prev, `[TCP] Opening ${tcpUseTls ? 'TLS' : 'TCP'} socket to ${tcpHost}:${tcpPort}...`])
+    const res = await infra.tcpConnect({
+      id: tcpSessionIdRef.current,
+      host: tcpHost,
+      port: Number(tcpPort),
+      useTls: tcpUseTls,
+    })
+    if (res.ok) {
+      setIsTcpConnected(true)
+      setTcpLogs((prev) => [...prev, `[TCP] Connected to ${tcpHost}:${tcpPort} (${tcpUseTls ? 'TLS' : 'Plain TCP'}).`])
+    } else {
+      setIsTcpConnected(false)
+      setTcpLogs((prev) => [...prev, `[TCP Error] ${res.error || 'Connection refused'}`])
+    }
   }
 
-  const handleSendTcpPayload = () => {
+  const handleSendTcpPayload = async () => {
     if (!isTcpConnected) {
       setTcpLogs((prev) => [...prev, `[TCP Error] Socket not connected.`])
       return
     }
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
     const clean = tcpPayload.replace(/\\r/g, '\r').replace(/\\n/g, '\n')
-    setTcpLogs((prev) => [
-      ...prev,
-      `[SEND >>>] ${JSON.stringify(clean)}`,
-    ])
-
-    setTimeout(() => {
-      if (clean.includes('PING')) {
-        setTcpLogs((prev) => [...prev, `[RECV <<<] +PONG\r\n`])
-      } else if (clean.includes('INFO')) {
-        setTcpLogs((prev) => [
-          ...prev,
-          `[RECV <<<] # Server\r\nredis_version:7.2.4\r\nos:Linux 6.8.0-40-generic x86_64\r\ntcp_port:${tcpPort}\r\nuptime_in_seconds:348912\r\n`,
-        ])
-      } else {
-        setTcpLogs((prev) => [...prev, `[RECV <<<] +OK\r\n`])
-      }
-    }, 100)
+    setTcpLogs((prev) => [...prev, `[SEND >>>] ${JSON.stringify(clean)}`])
+    const ok = await infra?.tcpSend?.(tcpSessionIdRef.current, clean)
+    if (!ok) {
+      setTcpLogs((prev) => [...prev, '[TCP Error] Failed to write payload to socket.'])
+    }
   }
 
   return (
@@ -477,19 +494,26 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                 </div>
 
                 <div className="qc-field auth-field">
-                  <label>Auth Type</label>
-                  <select
-                    value={sshAuthType}
-                    onChange={(e) => setSshAuthType(e.target.value as any)}
-                  >
-                    <option value="password">Password</option>
-                    <option value="key">Private Key (PEM/PPK)</option>
-                  </select>
+                  <label>Auth / Key Path</label>
+                  <input
+                    type="text"
+                    value={sshKeyPath}
+                    onChange={(e) => setSshKeyPath(e.target.value)}
+                    placeholder="~/.ssh/id_ed25519 (optional)"
+                  />
                 </div>
 
                 <button
+                  className="sftp-tool-btn"
+                  onClick={handleSaveCurrentBookmark}
+                  title="Save Host Bookmark"
+                >
+                  + Bookmark
+                </button>
+
+                <button
                   className={`qc-connect-btn ${isSshConnected ? 'connected' : ''}`}
-                  onClick={handleConnectSsh}
+                  onClick={() => void handleConnectSsh()}
                 >
                   {isSshConnected ? (
                     <>
@@ -593,15 +617,15 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                 />
                 <button
                   className="sftp-tool-btn"
-                  onClick={() => setTransferStatus('Refreshed directory listing')}
-                  title="Refresh Folder"
+                  onClick={() => void handleRefreshSftp(currentRemotePath)}
+                  title="Refresh Remote Directory (OpenSSH)"
                 >
                   <RefreshCw size={12} />
                 </button>
               </div>
 
               <div className="sftp-actions-group">
-                <button className="sftp-tool-btn upload" onClick={handleUploadSimulator}>
+                <button className="sftp-tool-btn upload" onClick={() => void handleUploadFile()}>
                   <Upload size={12} /> Upload File...
                 </button>
               </div>
@@ -840,6 +864,11 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                       <CheckCircle2 size={11} /> 250 OK (Message Queued)
                     </span>
                   )}
+                  {smtpResultStatus === 'failed' && (
+                    <span className="handshake-badge" style={{ background: 'rgba(255,69,58,0.18)', color: '#FF453A', border: '1px solid rgba(255,69,58,0.4)' }}>
+                      SMTP Delivery Failed
+                    </span>
+                  )}
                 </div>
 
                 <div className="trace-console">
@@ -880,9 +909,18 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                 />
               </div>
 
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#CBD5E1', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={tcpUseTls}
+                  onChange={(e) => setTcpUseTls(e.target.checked)}
+                />
+                TLS
+              </label>
+
               <button
                 className={`tcp-toggle-btn ${isTcpConnected ? 'connected' : ''}`}
-                onClick={handleToggleTcp}
+                onClick={() => void handleToggleTcp()}
               >
                 {isTcpConnected ? 'Disconnect Socket' : 'Open Raw TCP Stream'}
               </button>
@@ -902,11 +940,17 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                   type="text"
                   value={tcpPayload}
                   onChange={(e) => setTcpPayload(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void handleSendTcpPayload()
+                    }
+                  }}
                   placeholder="Raw packet string (e.g. PING\r\n or GET / HTTP/1.1\r\n\r\n)..."
                 />
                 <button
                   className="tcp-send-btn glass-interactive"
-                  onClick={handleSendTcpPayload}
+                  onClick={() => void handleSendTcpPayload()}
                 >
                   <Send size={12} /> Send Packet
                 </button>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Database,
   Search,
@@ -10,23 +10,36 @@ import {
   Send,
   Check,
   Copy,
+  RefreshCw,
 } from 'lucide-react'
 import {
   redisStudioService,
   RedisKeyEntry,
   RedisValueType,
   RedisCommandLog,
+  PubSubMessage,
 } from '../../services/redisStudioService'
 import './RedisStudioView.css'
 
 export const RedisStudioView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'keys' | 'cli' | 'pubsub'>('keys')
+  const [host, setHost] = useState('127.0.0.1')
+  const [port, setPort] = useState(6379)
+  const [password, setPassword] = useState('')
+  const [dbIndex, setDbIndex] = useState(0)
+  const [useTls, setUseTls] = useState(false)
+  const [isLive, setIsLive] = useState(false)
+  const [connStatus, setConnStatus] = useState<string>('Sandbox')
+
   const [searchPattern, setSearchPattern] = useState<string>('*')
+  const [keys, setKeys] = useState<RedisKeyEntry[]>(() => redisStudioService.getKeys('*'))
   const [selectedKey, setSelectedKey] = useState<RedisKeyEntry | null>(null)
-  const [commandInput, setCommandInput] = useState<string>('GET cache:featured_products:v2')
+  const [commandInput, setCommandInput] = useState<string>('PING')
   const [commandHistory, setCommandHistory] = useState<RedisCommandLog[]>([])
   const [pubSubMessage, setPubSubMessage] = useState<string>('')
   const [pubSubChannel, setPubSubChannel] = useState<string>('events:audit')
+  const [pubSubMessages, setPubSubMessages] = useState<PubSubMessage[]>(() => redisStudioService.getPubSubMessages())
+  const [isSubscribedLive, setIsSubscribedLive] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   // New Key Modal
@@ -36,35 +49,84 @@ export const RedisStudioView: React.FC = () => {
   const [newKeyValue, setNewKeyValue] = useState<string>('dark_velvet')
   const [newKeyTtl, setNewKeyTtl] = useState<string>('-1')
 
-  const keys = useMemo(() => {
-    return redisStudioService.getKeys(searchPattern)
-  }, [searchPattern, showAddKey, commandHistory])
+  const refreshKeys = useCallback(async (pattern = searchPattern) => {
+    const list = await redisStudioService.scanKeysLive(pattern)
+    setKeys(list)
+  }, [searchPattern])
 
-  const pubSubMessages = useMemo(() => {
-    return redisStudioService.getPubSubMessages()
-  }, [pubSubMessage])
+  useEffect(() => {
+    void refreshKeys(searchPattern)
+  }, [searchPattern, isLive, refreshKeys])
 
-  const handleExecuteCli = (e?: React.FormEvent) => {
+  useEffect(() => {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.onRedisPubSubEvent) return
+    const unsub = infra.onRedisPubSubEvent((ev: any) => {
+      if (ev.id !== 'redis_studio_sub') return
+      if (ev.type === 'message') {
+        setPubSubMessages((prev) => [
+          {
+            id: `live_ps_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+            channel: ev.channel,
+            message: ev.payload,
+            receivedAt: ev.timestamp || new Date().toLocaleTimeString(),
+          },
+          ...prev.slice(0, 100),
+        ])
+      } else if (ev.type === 'close' || ev.type === 'error') {
+        setIsSubscribedLive(false)
+      }
+    })
+    return () => {
+      unsub()
+      void infra.redisUnsubscribe?.('redis_studio_sub')
+    }
+  }, [])
+
+  const handleToggleLiveConnection = async () => {
+    if (isLive) {
+      redisStudioService.disconnectLive()
+      setIsLive(false)
+      setConnStatus('Sandbox')
+      setKeys(redisStudioService.getKeys(searchPattern))
+      return
+    }
+    setConnStatus('Connecting...')
+    const res = await redisStudioService.connectLive({ host, port, password, dbIndex, tls: useTls })
+    if (res.ok) {
+      setIsLive(true)
+      setConnStatus(`LIVE (${res.latencyMs ?? 1}ms)`)
+      await refreshKeys(searchPattern)
+    } else {
+      setIsLive(false)
+      setConnStatus(`Error: ${res.error || 'Refused'}`)
+    }
+  }
+
+  const handleExecuteCli = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     if (!commandInput.trim()) return
-    const res = redisStudioService.executeCommand(commandInput)
+    const res = await redisStudioService.executeLiveCommand(commandInput)
     setCommandHistory((prev) => [res, ...prev.slice(0, 40)])
     setCommandInput('')
+    await refreshKeys(searchPattern)
   }
 
-  const handleSaveNewKey = () => {
+  const handleSaveNewKey = async () => {
     if (!newKeyName.trim()) return
     const ttl = parseInt(newKeyTtl, 10) || -1
-    const entry = redisStudioService.setStringKey(newKeyName, newKeyValue, ttl)
+    const entry = await redisStudioService.saveKeyTypedAsync(newKeyName, newKeyType, newKeyValue, ttl)
     setSelectedKey(entry)
     setShowAddKey(false)
+    await refreshKeys(searchPattern)
   }
 
-  const handleDeleteKey = (key: string) => {
-    redisStudioService.deleteKey(key)
+  const handleDeleteKey = async (key: string) => {
+    await redisStudioService.deleteKeyAsync(key)
     if (selectedKey?.key === key) {
       setSelectedKey(null)
     }
+    await refreshKeys(searchPattern)
     setCommandHistory((prev) => [
       {
         id: `del_${Date.now()}`,
@@ -78,11 +140,31 @@ export const RedisStudioView: React.FC = () => {
     ])
   }
 
-  const handlePublish = (e: React.FormEvent) => {
+  const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!pubSubMessage.trim()) return
-    redisStudioService.publishMessage(pubSubChannel, pubSubMessage)
+    await redisStudioService.publishLiveAsync(pubSubChannel, pubSubMessage)
+    setPubSubMessages(redisStudioService.getPubSubMessages())
     setPubSubMessage('')
+  }
+
+  const handleToggleSubscribe = async () => {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.redisSubscribe) return
+    if (isSubscribedLive) {
+      await infra.redisUnsubscribe('redis_studio_sub')
+      setIsSubscribedLive(false)
+      return
+    }
+    const res = await infra.redisSubscribe({
+      id: 'redis_studio_sub',
+      host,
+      port,
+      password: password || undefined,
+      tls: useTls,
+      channel: pubSubChannel,
+    })
+    if (res.ok) setIsSubscribedLive(true)
   }
 
   const copyToClipboard = (text: string, key: string) => {
@@ -93,6 +175,21 @@ export const RedisStudioView: React.FC = () => {
 
   return (
     <div className="redis-studio-root">
+      {/* Live RESP2 Connection Bar */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.22)', fontSize: 11 }}>
+        <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="Host" style={{ width: 96, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E2E8F0', fontSize: 11 }} />
+        <input type="number" value={port} onChange={(e) => setPort(Number(e.target.value))} style={{ width: 56, padding: '2px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E2E8F0', fontSize: 11 }} />
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Auth" style={{ width: 64, padding: '2px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E2E8F0', fontSize: 11 }} />
+        <input type="number" min={0} max={15} value={dbIndex} onChange={(e) => setDbIndex(Number(e.target.value))} title="DB Index" style={{ width: 40, padding: '2px 4px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E2E8F0', fontSize: 11 }} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 3, color: '#94A3B8' }}>
+          <input type="checkbox" checked={useTls} onChange={(e) => setUseTls(e.target.checked)} /> TLS
+        </label>
+        <button className="add-key-btn glass-interactive" onClick={() => void handleToggleLiveConnection()} style={{ padding: '2px 8px', width: 'auto', fontSize: 11 }}>
+          {isLive ? 'Disconnect' : 'Connect'}
+        </button>
+        <span style={{ fontSize: 10, color: isLive ? '#30D158' : '#94A3B8', marginLeft: 'auto' }}>{connStatus}</span>
+      </div>
+
       {/* Sub-Nav Bar */}
       <div
         className="redis-nav-bar"
@@ -140,6 +237,13 @@ export const RedisStudioView: React.FC = () => {
                 className="search-input"
               />
             </div>
+            <button
+              className="add-key-btn glass-interactive"
+              onClick={() => void refreshKeys(searchPattern)}
+              title="Refresh / SCAN Keys"
+            >
+              <RefreshCw size={12} />
+            </button>
             <button
               className="add-key-btn glass-interactive"
               onClick={() => setShowAddKey(true)}
@@ -238,7 +342,7 @@ export const RedisStudioView: React.FC = () => {
             {commandHistory.map((cmd) => (
               <div key={cmd.id} className="cli-entry">
                 <div className="cli-cmd-line">
-                  <span className="prompt">redis:6379&gt;</span>
+                  <span className="prompt">{host}:{port}&gt;</span>
                   <span className="cmd-text">{cmd.command}</span>
                   <span className="duration">({cmd.durationMs}ms)</span>
                 </div>
@@ -295,6 +399,15 @@ export const RedisStudioView: React.FC = () => {
               placeholder="Publish message payload (JSON or text)..."
               className="payload-input"
             />
+            <button
+              type="button"
+              className="publish-btn glass-interactive"
+              onClick={() => void handleToggleSubscribe()}
+              title="Subscribe / Unsubscribe Live RESP2 Channel"
+              style={{ padding: '0 8px', width: 'auto', fontSize: 11 }}
+            >
+              {isSubscribedLive ? 'Unsub' : 'Sub'}
+            </button>
             <button type="submit" className="publish-btn glass-interactive">
               <Send size={12} />
             </button>

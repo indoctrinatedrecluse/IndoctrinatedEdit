@@ -23,6 +23,7 @@ export interface RedisConnectionConfig {
   port: number
   dbIndex: number
   password?: string
+  tls?: boolean
   isConnected: boolean
 }
 
@@ -274,6 +275,207 @@ class RedisStudioService {
     return tokens
   }
 
+  private liveMode = false
+
+  public isLiveMode(): boolean {
+    return this.liveMode
+  }
+
+  private ensureConnection(): RedisConnectionConfig {
+    return this.getActiveConnection() || this.connections[0]
+  }
+
+  public updateActiveConnection(patch: Partial<RedisConnectionConfig>): RedisConnectionConfig {
+    const conn = this.ensureConnection()
+    Object.assign(conn, patch)
+    return { ...conn }
+  }
+
+  public async connectLive(config: {
+    host: string
+    port: number
+    password?: string
+    dbIndex?: number
+    tls?: boolean
+  }): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
+    this.updateActiveConnection({
+      host: config.host,
+      port: config.port,
+      password: config.password || undefined,
+      dbIndex: config.dbIndex ?? 0,
+      tls: Boolean(config.tls),
+    })
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.redisExec) {
+      this.liveMode = false
+      return { ok: false, error: 'Live Redis RESP2 connection requires the Electron desktop app.' }
+    }
+    const res = await infra.redisExec({
+      host: config.host,
+      port: config.port,
+      password: config.password || undefined,
+      db: config.dbIndex ?? 0,
+      tls: Boolean(config.tls),
+      args: ['PING'],
+    })
+    this.liveMode = Boolean(res?.ok)
+    this.updateActiveConnection({ isConnected: this.liveMode })
+    return res?.ok
+      ? { ok: true, latencyMs: res.latencyMs }
+      : { ok: false, error: res?.error || 'Redis PING failed' }
+  }
+
+  public disconnectLive(): void {
+    this.liveMode = false
+    this.updateActiveConnection({ isConnected: false })
+  }
+
+  public async scanKeysLive(pattern = '*'): Promise<RedisKeyEntry[]> {
+    const conn = this.ensureConnection()
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!this.liveMode || !infra?.redisExec) {
+      return this.getKeys(pattern)
+    }
+    const base = { host: conn.host, port: conn.port, password: conn.password, db: conn.dbIndex, tls: conn.tls }
+    const scanRes = await infra.redisExec({ ...base, args: ['SCAN', '0', 'MATCH', pattern || '*', 'COUNT', '100'] })
+    const rawKeys: string[] = Array.isArray(scanRes?.value) && Array.isArray(scanRes.value[1]) ? scanRes.value[1].map(String) : []
+    const entries: RedisKeyEntry[] = []
+
+    for (const key of rawKeys.slice(0, 60)) {
+      const [typeRes, ttlRes] = await Promise.all([
+        infra.redisExec({ ...base, args: ['TYPE', key] }),
+        infra.redisExec({ ...base, args: ['TTL', key] }),
+      ])
+      const rawType = String(typeRes?.value || 'string').toLowerCase()
+      let value: any = ''
+      let resolvedType: RedisValueType = 'string'
+      if (rawType === 'hash') {
+        resolvedType = 'hash'
+        const hRes = await infra.redisExec({ ...base, args: ['HGETALL', key] })
+        const arr = Array.isArray(hRes?.value) ? hRes.value : []
+        const obj: Record<string, string> = {}
+        for (let i = 0; i + 1 < arr.length; i += 2) obj[String(arr[i])] = String(arr[i + 1])
+        value = obj
+      } else if (rawType === 'list') {
+        resolvedType = 'list'
+        const lRes = await infra.redisExec({ ...base, args: ['LRANGE', key, '0', '100'] })
+        value = Array.isArray(lRes?.value) ? lRes.value.map(String) : []
+      } else if (rawType === 'set') {
+        resolvedType = 'set'
+        const sRes = await infra.redisExec({ ...base, args: ['SMEMBERS', key] })
+        value = Array.isArray(sRes?.value) ? sRes.value.map(String) : []
+      } else if (rawType === 'zset') {
+        resolvedType = 'zset'
+        const zRes = await infra.redisExec({ ...base, args: ['ZRANGE', key, '0', '100', 'WITHSCORES'] })
+        value = Array.isArray(zRes?.value) ? zRes.value : []
+      } else {
+        const gRes = await infra.redisExec({ ...base, args: ['GET', key] })
+        const str = String(gRes?.value ?? '')
+        try {
+          if (str.trim().startsWith('{') || str.trim().startsWith('[')) {
+            value = JSON.parse(str)
+            resolvedType = 'json'
+          } else {
+            value = str
+          }
+        } catch {
+          value = str
+        }
+      }
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value)
+      entries.push({
+        key,
+        type: resolvedType,
+        value,
+        ttl: typeof ttlRes?.value === 'number' ? ttlRes.value : -1,
+        sizeBytes: serialized.length,
+        updatedAt: 'Live',
+      })
+    }
+    return entries
+  }
+
+  public async saveKeyTypedAsync(key: string, type: RedisValueType, rawValue: string, ttl = -1): Promise<RedisKeyEntry> {
+    const conn = this.ensureConnection()
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    let parsedValue: any = rawValue
+    if (type === 'json' || type === 'hash') {
+      try { parsedValue = JSON.parse(rawValue) } catch { parsedValue = type === 'hash' ? { value: rawValue } : rawValue }
+    } else if (type === 'list' || type === 'set') {
+      try {
+        const p = JSON.parse(rawValue)
+        parsedValue = Array.isArray(p) ? p.map(String) : rawValue.split(',').map((s) => s.trim()).filter(Boolean)
+      } catch {
+        parsedValue = rawValue.split(',').map((s) => s.trim()).filter(Boolean)
+      }
+    }
+
+    if (this.liveMode && infra?.redisExec) {
+      const base = { host: conn.host, port: conn.port, password: conn.password, db: conn.dbIndex, tls: conn.tls }
+      if (type === 'hash' && parsedValue && typeof parsedValue === 'object') {
+        const flat: string[] = []
+        for (const [k, v] of Object.entries(parsedValue)) flat.push(k, String(v))
+        if (flat.length > 0) await infra.redisExec({ ...base, args: ['HSET', key, ...flat] })
+      } else if (type === 'list' && Array.isArray(parsedValue) && parsedValue.length > 0) {
+        await infra.redisExec({ ...base, args: ['DEL', key] })
+        await infra.redisExec({ ...base, args: ['RPUSH', key, ...parsedValue.map(String)] })
+      } else if (type === 'set' && Array.isArray(parsedValue) && parsedValue.length > 0) {
+        await infra.redisExec({ ...base, args: ['DEL', key] })
+        await infra.redisExec({ ...base, args: ['SADD', key, ...parsedValue.map(String)] })
+      } else {
+        const strVal = typeof parsedValue === 'string' ? parsedValue : JSON.stringify(parsedValue)
+        await infra.redisExec({ ...base, args: ['SET', key, strVal] })
+      }
+      if (ttl > 0) await infra.redisExec({ ...base, args: ['EXPIRE', key, String(ttl)] })
+      else await infra.redisExec({ ...base, args: ['PERSIST', key] })
+
+      const serialized = typeof parsedValue === 'string' ? parsedValue : JSON.stringify(parsedValue)
+      return { key, type, value: parsedValue, ttl, sizeBytes: serialized.length, updatedAt: 'Live' }
+    }
+
+    // Local sandbox fallback preserving chosen type
+    const serialized = typeof parsedValue === 'string' ? parsedValue : JSON.stringify(parsedValue)
+    const entry: RedisKeyEntry = {
+      key,
+      type,
+      value: parsedValue,
+      ttl,
+      sizeBytes: serialized.length,
+      updatedAt: 'Just now',
+    }
+    this.databaseStore.set(key, entry)
+    return entry
+  }
+
+  public async deleteKeyAsync(key: string): Promise<boolean> {
+    const conn = this.ensureConnection()
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (this.liveMode && infra?.redisExec) {
+      const res = await infra.redisExec({ host: conn.host, port: conn.port, password: conn.password, db: conn.dbIndex, tls: conn.tls, args: ['DEL', key] })
+      return Boolean(res?.ok)
+    }
+    return this.deleteKey(key)
+  }
+
+  public async flushDbAsync(): Promise<{ deletedCount: number }> {
+    const conn = this.ensureConnection()
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (this.liveMode && infra?.redisExec) {
+      await infra.redisExec({ host: conn.host, port: conn.port, password: conn.password, db: conn.dbIndex, tls: conn.tls, args: ['FLUSHDB'] })
+      return { deletedCount: 0 }
+    }
+    return this.flushDb()
+  }
+
+  public async publishLiveAsync(channel: string, message: string): Promise<PubSubMessage> {
+    const conn = this.ensureConnection()
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (this.liveMode && infra?.redisExec) {
+      await infra.redisExec({ host: conn.host, port: conn.port, password: conn.password, db: conn.dbIndex, tls: conn.tls, args: ['PUBLISH', channel, message] })
+    }
+    return this.publishMessage(channel, message)
+  }
+
   /**
    * Execute a live Redis command over real RESP2 TCP/TLS via Electron IPC when connected.
    */
@@ -284,13 +486,15 @@ class RedisStudioService {
       conn &&
       tokens.length > 0 &&
       typeof window !== 'undefined' &&
-      window.electronAPI?.infra?.redisExec
+      window.electronAPI?.infra?.redisExec &&
+      (this.liveMode || connection)
     ) {
       const res = await window.electronAPI.infra.redisExec({
         host: conn.host,
         port: conn.port,
         password: conn.password,
         db: conn.dbIndex,
+        tls: conn.tls,
         args: tokens,
       })
       const entry: RedisCommandLog = {
