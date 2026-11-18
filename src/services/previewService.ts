@@ -136,12 +136,22 @@ class PreviewService {
     processed = processed.replace(/^##\s+(.*$)/gm, (_, t) => makeHeading(2, t))
     processed = processed.replace(/^#\s+(.*$)/gm, (_, t) => makeHeading(1, t))
 
-    // LaTeX Math Formula Rendering ($$...$$ and $...$) with typographic math formatting
+    // LaTeX Math Formula Rendering ($$...$$ and $...$) with accessible raw LaTeX preservation + typographic rendering
     processed = processed.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
-      return stashBlock(`<div class="latex-math-block glass-panel"><span class="math-tex-display">${this.formatLatexMath(math.trim())}</span></div>`)
+      const clean = math.trim()
+      const escapedRaw = this.escapeHtml(clean)
+      const rendered = this.formatLatexMath(clean)
+      return stashBlock(
+        `<div class="latex-math-block glass-panel"><span class="math-tex-display" data-latex="${escapedRaw}"><span class="math-rendered">${rendered}</span><span class="math-raw" style="display:none">$$ ${escapedRaw} $$</span></span></div>`
+      )
     })
     processed = processed.replace(/\$([^\$\n]+)\$/g, (_, math) => {
-      return stashBlock(`<span class="latex-math-inline">${this.formatLatexMath(math.trim())}</span>`)
+      const clean = math.trim()
+      const escapedRaw = this.escapeHtml(clean)
+      const rendered = this.formatLatexMath(clean)
+      return stashBlock(
+        `<span class="latex-math-inline" data-latex="${escapedRaw}"><span class="math-rendered">${rendered}</span><span class="math-raw" style="display:none">${escapedRaw}</span></span>`
+      )
     })
 
     // Horizontal Rules

@@ -82,7 +82,8 @@ class JsonStudioService {
 
       const builtinFilters = new Set(['length', 'keys', 'type', 'reverse', 'unique', 'values', 'to_entries', 'flatten'])
 
-      for (let segment of pipes) {
+      for (let segIdx = 0; segIdx < pipes.length; segIdx++) {
+        let segment = pipes[segIdx]
         if (!segment || segment === '.' || segment === '@') continue
 
         // JMESPath function wrapping: length(users), length(@), keys(@), etc.
@@ -123,8 +124,17 @@ class JsonStudioService {
           segment.startsWith('select(')
 
         // Support JMESPath root property access without leading dot: users[0] -> .users[0]
-        if (!isBuiltin && !segment.startsWith('.') && /^[a-zA-Z_$\[]/.test(segment)) {
-          segment = segment.startsWith('[') ? `.${segment}` : `.${segment}`
+        // But reject unknown operator identifiers in pipe chains: .items | unknown_op
+        if (!isBuiltin && !segment.startsWith('.') && !segment.startsWith('[')) {
+          if (segIdx === 0) {
+            segment = `.${segment}`
+          } else {
+            return {
+              result: null,
+              executionTimeMs: Math.round((performance.now() - t0) * 100) / 100,
+              error: `Unsupported JQ filter segment: "${segment}"`,
+            }
+          }
         }
 
         if (segment === 'length') {
