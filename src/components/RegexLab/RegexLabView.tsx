@@ -23,6 +23,7 @@ export const RegexLabView: React.FC = () => {
   const [testText, setTestText] = useState<string>('Contact support@indoctrinated.io or recluse.dev+ops@sub.domain.org for inquiries.')
   const [replacement, setReplacement] = useState<string>('USER($1) -> DOMAIN($2)')
   const [aiPrompt, setAiPrompt] = useState<string>('match valid IPv4 address')
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null)
   const [result, setResult] = useState<RegexTestResult | null>(null)
   const [explanations, setExplanations] = useState<RegexTokenExplanation[]>([])
   const [selectedSnippetLang, setSelectedSnippetLang] = useState<'typescript' | 'python' | 'go' | 'rust'>('typescript')
@@ -39,6 +40,7 @@ export const RegexLabView: React.FC = () => {
 
   useEffect(() => {
     runRegexTest(pattern, flags, testText)
+    setBenchmarkResult(null)
   }, [pattern, flags, testText])
 
   const runRegexTest = (pat: string, fl: string, text: string) => {
@@ -76,7 +78,29 @@ export const RegexLabView: React.FC = () => {
     setPattern(gen.pattern)
     setFlags(gen.flags)
     setTestText(gen.sample)
+    setAiExplanation(gen.explanation)
   }
+
+  const highlightedSegments = useMemo(() => {
+    if (!result || !result.isValid || result.matches.length === 0) {
+      return [{ text: testText, matchIndex: 0 }]
+    }
+    const segs: Array<{ text: string; matchIndex: number }> = []
+    let cursor = 0
+    for (const m of result.matches) {
+      if (m.index > cursor) {
+        segs.push({ text: testText.slice(cursor, m.index), matchIndex: 0 })
+      }
+      if (m.length > 0) {
+        segs.push({ text: testText.slice(m.index, m.index + m.length), matchIndex: m.matchIndex })
+        cursor = m.index + m.length
+      }
+    }
+    if (cursor < testText.length) {
+      segs.push({ text: testText.slice(cursor), matchIndex: 0 })
+    }
+    return segs
+  }, [result, testText])
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text)
@@ -223,6 +247,42 @@ export const RegexLabView: React.FC = () => {
                 rows={4}
                 placeholder="Enter test text to match against..."
               />
+              {testText && (
+                <div
+                  className="glass-panel"
+                  style={{
+                    marginTop: 8,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11.5,
+                    lineHeight: 1.55,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    background: 'rgba(0, 0, 0, 0.35)',
+                  }}
+                >
+                  {highlightedSegments.map((seg, idx) =>
+                    seg.matchIndex > 0 ? (
+                      <mark
+                        key={idx}
+                        title={`Match #${seg.matchIndex}`}
+                        style={{
+                          background: seg.matchIndex % 2 === 1 ? 'rgba(10, 132, 255, 0.38)' : 'rgba(191, 90, 242, 0.38)',
+                          color: '#FFFFFF',
+                          borderRadius: 3,
+                          padding: '0 2px',
+                          borderBottom: '1px solid rgba(255,255,255,0.45)',
+                        }}
+                      >
+                        {seg.text}
+                      </mark>
+                    ) : (
+                      <React.Fragment key={idx}>{seg.text}</React.Fragment>
+                    )
+                  )}
+                </div>
+              )}
             </div>
 
             {result && result.isValid && result.matches.length > 0 && (
@@ -386,12 +446,19 @@ export const RegexLabView: React.FC = () => {
                     setPattern(gen.pattern)
                     setFlags(gen.flags)
                     setTestText(gen.sample)
+                    setAiExplanation(gen.explanation)
                   }}
                 >
                   {s}
                 </button>
               ))}
             </div>
+
+            {aiExplanation && (
+              <div className="glass-panel" style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, fontSize: 11.5, color: '#CBD5E1' }}>
+                <strong style={{ color: '#64D2FF' }}>Generated Pattern Explanation:</strong> {aiExplanation}
+              </div>
+            )}
           </div>
         )}
 

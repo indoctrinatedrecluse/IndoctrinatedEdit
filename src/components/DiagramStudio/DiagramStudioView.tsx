@@ -125,6 +125,7 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
     else if (firstLine.startsWith('class')) type = 'class'
     else if (firstLine.startsWith('er')) type = 'er'
     else if (firstLine.startsWith('state')) type = 'state'
+    else if (firstLine.startsWith('gantt')) type = 'gantt'
     else if (firstLine.startsWith('git')) type = 'git'
 
     const svg = previewService.generateMermaidSvg(mermaidCode, type)
@@ -179,6 +180,22 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
     const q = filterQuery.toLowerCase()
     return graphData.nodes.filter((n) => n.label.toLowerCase().includes(q) || n.path.toLowerCase().includes(q))
   }, [graphData.nodes, filterQuery])
+
+  const graphBounds = useMemo(() => {
+    if (filteredNodes.length === 0) {
+      return { minX: 0, minY: 0, width: 700, height: 550 }
+    }
+    const minX = Math.min(0, ...filteredNodes.map((n) => n.x - 80))
+    const minY = Math.min(0, ...filteredNodes.map((n) => n.y - 60))
+    const maxX = Math.max(700, ...filteredNodes.map((n) => n.x + 120))
+    const maxY = Math.max(550, ...filteredNodes.map((n) => n.y + 80))
+    return {
+      minX,
+      minY,
+      width: Math.max(700, maxX - minX),
+      height: Math.max(550, maxY - minY),
+    }
+  }, [filteredNodes])
 
   return (
     <div className="diagram-studio-root">
@@ -388,8 +405,16 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
               <button
                 className="ctrl-icon-btn glass-interactive"
                 onClick={() => setZoomLevel((z) => Math.max(z - 0.2, 0.4))}
+                title="Zoom Out"
               >
                 <ZoomOut size={12} />
+              </button>
+              <button
+                className="ctrl-icon-btn glass-interactive"
+                onClick={() => setZoomLevel(1.0)}
+                title="Reset Zoom"
+              >
+                <RotateCcw size={12} />
               </button>
               <button
                 className="ctrl-icon-btn glass-interactive"
@@ -405,8 +430,9 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
           <div className="depgraph-canvas-area" ref={containerRef}>
             <svg
               className="depgraph-svg"
-              width="700"
-              height="550"
+              width={graphBounds.width}
+              height={graphBounds.height}
+              viewBox={`${graphBounds.minX} ${graphBounds.minY} ${graphBounds.width} ${graphBounds.height}`}
               style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top left' }}
             >
               <defs>

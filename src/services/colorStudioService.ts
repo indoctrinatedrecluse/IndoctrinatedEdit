@@ -8,8 +8,10 @@ export interface ColorDetails {
   hex: string
   rgb: { r: number; g: number; b: number; a: number }
   hsl: { h: number; s: number; l: number; a: number }
+  hsv: { h: number; s: number; v: number }
   rgbString: string
   hslString: string
+  hsvString: string
   oklchString: string
   cmykString: string
   isDark: boolean
@@ -96,13 +98,26 @@ class ColorStudioService {
     }
   }
 
+  private namedCssColors: Record<string, string> = {
+    black: '#000000', white: '#FFFFFF', red: '#FF0000', green: '#008000', blue: '#0000FF',
+    yellow: '#FFFF00', cyan: '#00FFFF', magenta: '#FF00FF', gray: '#808080', grey: '#808080',
+    orange: '#FFA500', purple: '#800080', pink: '#FFC0CB', gold: '#FFD700', silver: '#C0C0C0',
+    rebeccapurple: '#663399', transparent: 'rgba(0,0,0,0)', cornflowerblue: '#6495ED',
+    darkblue: '#00008B', darkcyan: '#008B8B', darkgray: '#A9A9A9', darkgreen: '#006400',
+    darkmagenta: '#8B008B', darkred: '#8B0000', deepskyblue: '#00BFFF', dodgerblue: '#1E90FF',
+    indigo: '#4B0082', lime: '#00FF00', navy: '#000080', olive: '#808000', teal: '#008080',
+  }
+
   /**
-   * Parse hex, rgb/rgba, or hsl/hsla string into complete ColorDetails (safe against invalid hex)
+   * Parse hex, rgb/rgba, hsl/hsla, oklch, cmyk, or CSS color names into complete ColorDetails.
    */
   public parseColor(input: string): ColorDetails {
     let r = 10, g = 132, b = 255, a = 1.0 // Default electric blue
 
-    const clean = input.trim()
+    let clean = input.trim().toLowerCase()
+    if (this.namedCssColors[clean]) {
+      clean = this.namedCssColors[clean]
+    }
 
     if (clean.startsWith('#')) {
       const hex = clean.replace('#', '')
@@ -141,10 +156,49 @@ class ColorStudioService {
           a = Math.min(1, Math.max(0, parseFloat(parts[3])))
         }
       }
+    } else if (/^oklch\(/i.test(clean)) {
+      const hasPct = /oklch\(\s*[\d.]+%/i.test(clean)
+      const parts = clean.match(/[\d.]+/g)
+      if (parts && parts.length >= 3) {
+        const L = hasPct ? parseFloat(parts[0]) / 100 : parseFloat(parts[0])
+        const C = parseFloat(parts[1])
+        const H = (parseFloat(parts[2]) * Math.PI) / 180
+        const aLab = C * Math.cos(H)
+        const bLab = C * Math.sin(H)
+        const l_ = L + 0.3963377774 * aLab + 0.2158037573 * bLab
+        const m_ = L - 0.1055613458 * aLab - 0.0638541728 * bLab
+        const s_ = L - 0.0894841775 * aLab - 1.2914855480 * bLab
+        const l3 = l_ * l_ * l_
+        const m3 = m_ * m_ * m_
+        const s3 = s_ * s_ * s_
+        const toSrgb = (v: number) => {
+          const clamped = Math.min(1, Math.max(0, v))
+          const s = clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055
+          return Math.round(Math.min(1, Math.max(0, s)) * 255)
+        }
+        r = toSrgb(+4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3)
+        g = toSrgb(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3)
+        b = toSrgb(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3)
+        if (parts.length >= 4) {
+          a = Math.min(1, Math.max(0, parseFloat(parts[3])))
+        }
+      }
+    } else if (/^cmyk\(/i.test(clean)) {
+      const parts = clean.match(/[\d.]+/g)
+      if (parts && parts.length >= 4) {
+        const c = parseFloat(parts[0]) / 100
+        const m = parseFloat(parts[1]) / 100
+        const y = parseFloat(parts[2]) / 100
+        const k = parseFloat(parts[3]) / 100
+        r = Math.round(255 * (1 - c) * (1 - k))
+        g = Math.round(255 * (1 - m) * (1 - k))
+        b = Math.round(255 * (1 - y) * (1 - k))
+      }
     }
 
     const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase()
     const hsl = this.rgbToHsl(r, g, b, a)
+    const hsv = this.rgbToHsv(r, g, b)
     const cmyk = this.rgbToCmyk(r, g, b)
     const oklch = this.rgbToOklch(r, g, b)
 
@@ -155,11 +209,38 @@ class ColorStudioService {
       hex,
       rgb: { r, g, b, a },
       hsl,
+      hsv,
       rgbString: a < 1 ? `rgba(${r}, ${g}, ${b}, ${a})` : `rgb(${r}, ${g}, ${b})`,
       hslString: a < 1 ? `hsla(${hsl.h}, ${hsl.s}%, ${hsl.l}%, ${a})` : `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`,
+      hsvString: `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`,
       oklchString: `oklch(${(oklch.l * 100).toFixed(1)}% ${oklch.c.toFixed(3)} ${Math.round(oklch.h)})`,
       cmykString: `cmyk(${cmyk.c}%, ${cmyk.m}%, ${cmyk.y}%, ${cmyk.k}%)`,
       isDark,
+    }
+  }
+
+  private rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+    const rn = r / 255
+    const gn = g / 255
+    const bn = b / 255
+    const max = Math.max(rn, gn, bn)
+    const min = Math.min(rn, gn, bn)
+    const d = max - min
+    let h = 0
+    const s = max === 0 ? 0 : d / max
+    const v = max
+    if (max !== min) {
+      switch (max) {
+        case rn: h = (gn - bn) / d + (gn < bn ? 6 : 0); break
+        case gn: h = (bn - rn) / d + 2; break
+        case bn: h = (rn - gn) / d + 4; break
+      }
+      h /= 6
+    }
+    return {
+      h: Math.round(h * 360),
+      s: Math.round(s * 100),
+      v: Math.round(v * 100),
     }
   }
 

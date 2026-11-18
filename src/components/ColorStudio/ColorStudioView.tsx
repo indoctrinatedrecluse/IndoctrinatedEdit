@@ -37,6 +37,10 @@ export const ColorStudioView: React.FC = () => {
     return colorStudioService.parseColor(hexInput)
   }, [hexInput])
 
+  const bgDetails: ColorDetails = useMemo(() => {
+    return colorStudioService.parseColor(bgContrastHex)
+  }, [bgContrastHex])
+
   const contrastResult = useMemo(() => {
     return colorStudioService.calculateContrastRatio(hexInput, bgContrastHex)
   }, [hexInput, bgContrastHex])
@@ -122,7 +126,7 @@ export const ColorStudioView: React.FC = () => {
                 setHexInput(e.target.value)
                 setShaderParams((p) => ({ ...p, tintHex: e.target.value }))
               }}
-              placeholder="#0A84FF or rgb(...)"
+              placeholder="#0A84FF, rgb(...), oklch(...), cmyk(...), rebeccapurple"
             />
             <span className="contrast-badge">{colorDetails.isDark ? 'Dark Tone' : 'Light Tone'}</span>
           </div>
@@ -137,6 +141,7 @@ export const ColorStudioView: React.FC = () => {
                 { label: 'HEX', val: colorDetails.hex },
                 { label: 'RGB', val: colorDetails.rgbString },
                 { label: 'HSL', val: colorDetails.hslString },
+                { label: 'HSV / HSB', val: colorDetails.hsvString },
                 { label: 'OKLCH', val: colorDetails.oklchString },
                 { label: 'CMYK', val: colorDetails.cmykString },
               ].map((f) => (
@@ -164,11 +169,11 @@ export const ColorStudioView: React.FC = () => {
               <div
                 className="interactive-glass-card"
                 style={{
-                  background: `rgba(14, 18, 30, ${shaderParams.backgroundOpacity})`,
+                  background: `rgba(${Math.round(14 * (1 - shaderParams.darkDepth))}, ${Math.round(18 * (1 - shaderParams.darkDepth))}, ${Math.round(30 * (1 - shaderParams.darkDepth))}, ${shaderParams.backgroundOpacity})`,
                   backdropFilter: `blur(${shaderParams.blurRadiusPx}px) saturate(190%)`,
                   WebkitBackdropFilter: `blur(${shaderParams.blurRadiusPx}px) saturate(190%)`,
                   border: `1px solid rgba(255, 255, 255, ${shaderParams.specularBorderOpacity})`,
-                  boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.4), 0 0 ${shaderParams.accentGlowSpread}px ${colorDetails.hex}66`,
+                  boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 ${shaderParams.accentGlowSpread}px rgba(${colorDetails.rgb.r}, ${colorDetails.rgb.g}, ${colorDetails.rgb.b}, 0.35)`,
                 }}
               >
                 <div className="glass-card-content">
@@ -249,6 +254,23 @@ export const ColorStudioView: React.FC = () => {
                   }
                 />
               </div>
+
+              <div className="slider-item">
+                <div className="slider-label-row">
+                  <span>Dark Velvet Depth</span>
+                  <code>{Math.round(shaderParams.darkDepth * 100)}%</code>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="0.9"
+                  step="0.05"
+                  value={shaderParams.darkDepth}
+                  onChange={(e) =>
+                    setShaderParams({ ...shaderParams, darkDepth: Number(e.target.value) })
+                  }
+                />
+              </div>
             </div>
 
             <div className="shader-export-box glass-panel">
@@ -289,7 +311,7 @@ export const ColorStudioView: React.FC = () => {
                 <span className="bg-label">Background Color:</span>
                 <input
                   type="color"
-                  value={bgContrastHex.substring(0, 7)}
+                  value={bgDetails.hex}
                   onChange={(e) => setBgContrastHex(e.target.value)}
                   className="native-color-picker-mini"
                 />
@@ -299,6 +321,35 @@ export const ColorStudioView: React.FC = () => {
                   onChange={(e) => setBgContrastHex(e.target.value)}
                   className="hex-direct-input-mini"
                 />
+                <button
+                  className="copy-chip-btn glass-interactive"
+                  onClick={() => {
+                    const prevFg = hexInput
+                    setHexInput(bgContrastHex)
+                    setBgContrastHex(prevFg)
+                    setShaderParams((p) => ({ ...p, tintHex: bgContrastHex }))
+                  }}
+                  title="Swap Foreground & Background colors"
+                >
+                  ⇄ Swap
+                </button>
+              </div>
+
+              {/* Live FG-on-BG Preview */}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  backgroundColor: bgDetails.hex,
+                  color: colorDetails.hex,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 700 }}>Aa — Large Heading Sample (18pt+)</div>
+                <div style={{ fontSize: 12, marginTop: 2 }}>
+                  The quick brown fox jumps over the lazy dog ({colorDetails.hex} on {bgDetails.hex}).
+                </div>
               </div>
             </div>
 
@@ -339,21 +390,53 @@ export const ColorStudioView: React.FC = () => {
             <span className="section-label">HARMONIOUS PALETTES</span>
 
             <div className="harmony-block glass-panel">
-              <span className="harmony-title">Complementary</span>
+              <span className="harmony-title">Complementary (180°)</span>
               <div className="palette-strip">
                 <div
                   className="swatch-item"
-                  style={{ backgroundColor: colorDetails.hex }}
+                  style={{ backgroundColor: colorDetails.hex, cursor: 'pointer' }}
                   onClick={() => copyToClipboard(colorDetails.hex, 'comp_base')}
+                  title="Click to copy HEX"
                 >
-                  <span>{colorDetails.hex}</span>
+                  <span>{copiedKey === 'comp_base' ? 'Copied!' : colorDetails.hex}</span>
                 </div>
                 <div
                   className="swatch-item"
-                  style={{ backgroundColor: harmonies.complementary }}
+                  style={{ backgroundColor: harmonies.complementary, cursor: 'pointer' }}
                   onClick={() => copyToClipboard(harmonies.complementary, 'comp_alt')}
+                  title="Click to copy HEX"
                 >
-                  <span>{harmonies.complementary}</span>
+                  <span>{copiedKey === 'comp_alt' ? 'Copied!' : harmonies.complementary}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="harmony-block glass-panel">
+              <span className="harmony-title">Analogous (±30° Spread)</span>
+              <div className="palette-strip">
+                <div
+                  className="swatch-item"
+                  style={{ backgroundColor: harmonies.analogous[1], cursor: 'pointer' }}
+                  onClick={() => copyToClipboard(harmonies.analogous[1], 'ana_left')}
+                  title="Click to copy HEX"
+                >
+                  <span>{copiedKey === 'ana_left' ? 'Copied!' : harmonies.analogous[1]}</span>
+                </div>
+                <div
+                  className="swatch-item"
+                  style={{ backgroundColor: colorDetails.hex, cursor: 'pointer' }}
+                  onClick={() => copyToClipboard(colorDetails.hex, 'ana_base')}
+                  title="Click to copy HEX"
+                >
+                  <span>{copiedKey === 'ana_base' ? 'Copied!' : colorDetails.hex}</span>
+                </div>
+                <div
+                  className="swatch-item"
+                  style={{ backgroundColor: harmonies.analogous[0], cursor: 'pointer' }}
+                  onClick={() => copyToClipboard(harmonies.analogous[0], 'ana_right')}
+                  title="Click to copy HEX"
+                >
+                  <span>{copiedKey === 'ana_right' ? 'Copied!' : harmonies.analogous[0]}</span>
                 </div>
               </div>
             </div>
@@ -363,13 +446,21 @@ export const ColorStudioView: React.FC = () => {
               <div className="palette-strip">
                 <div
                   className="swatch-item"
-                  style={{ backgroundColor: colorDetails.hex }}
+                  style={{ backgroundColor: colorDetails.hex, cursor: 'pointer' }}
+                  onClick={() => copyToClipboard(colorDetails.hex, 'tri_base')}
+                  title="Click to copy HEX"
                 >
-                  <span>{colorDetails.hex}</span>
+                  <span>{copiedKey === 'tri_base' ? 'Copied!' : colorDetails.hex}</span>
                 </div>
                 {harmonies.triadic.map((h, i) => (
-                  <div key={i} className="swatch-item" style={{ backgroundColor: h }}>
-                    <span>{h}</span>
+                  <div
+                    key={i}
+                    className="swatch-item"
+                    style={{ backgroundColor: h, cursor: 'pointer' }}
+                    onClick={() => copyToClipboard(h, `tri_${i}`)}
+                    title="Click to copy HEX"
+                  >
+                    <span>{copiedKey === `tri_${i}` ? 'Copied!' : h}</span>
                   </div>
                 ))}
               </div>

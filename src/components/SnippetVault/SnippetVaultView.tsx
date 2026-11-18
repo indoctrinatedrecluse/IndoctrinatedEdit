@@ -105,7 +105,31 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
       setSnippets(snippetVaultService.getAllSnippets())
       setIoNotice(res.error ? `Import error: ${res.error}` : `Imported ${res.importedCount} snippet(s)`)
       setTimeout(() => setIoNotice(''), 3000)
+      return
     }
+    // Browser / Web fallback using hidden <input type="file">
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json,.code-snippets'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const text = await file.text()
+      const res = snippetVaultService.importVsCodeSnippets(text)
+      setSnippets(snippetVaultService.getAllSnippets())
+      setIoNotice(res.error ? `Import error: ${res.error}` : `Imported ${res.importedCount} snippet(s)`)
+      setTimeout(() => setIoNotice(''), 3000)
+    }
+    input.click()
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setNewTitle('')
+    setNewDesc('')
+    setNewCode('')
+    setNewTags('custom')
+    setActiveTab('snippets')
   }
 
   const handleDeleteSnippet = (id: string) => {
@@ -282,8 +306,8 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
                     </pre>
 
                     <div className="snippet-tags-row">
-                      {s.tags.map((t) => (
-                        <span key={t} className="tag-pill">
+                      {Array.from(new Set(s.tags)).map((t, tIdx) => (
+                        <span key={`${t}-${tIdx}`} className="tag-pill">
                           <Tag size={9} /> {t}
                         </span>
                       ))}
@@ -388,9 +412,21 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
               />
             </div>
 
-            <button type="submit" className="save-snippet-btn glass-interactive">
-              <Plus size={12} /> Save to Snippet Vault
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="save-snippet-btn glass-interactive" style={{ flex: 1 }}>
+                <Plus size={12} /> {editingId ? 'Update Snippet' : 'Save to Snippet Vault'}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  className="save-snippet-btn glass-interactive"
+                  style={{ background: 'rgba(255,255,255,0.08)' }}
+                  onClick={handleCancelEdit}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
         )}
       </div>

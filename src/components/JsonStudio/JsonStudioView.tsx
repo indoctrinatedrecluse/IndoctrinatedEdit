@@ -216,7 +216,18 @@ export const JsonStudioView: React.FC = () => {
 
             <div className="jq-presets-bar">
               <span className="presets-label">QUICK:</span>
-              {['.', '.users[].name', '.users | map(.role)', '.users | select(.id == 1)', '.features | length', 'keys', 'to_entries'].map((q) => (
+              {[
+                '.',
+                '.users[].name',
+                'users[*].name',
+                'users[?id == `1`].name',
+                'length(users)',
+                '.users | map(.role)',
+                '.users | select(.id == 1)',
+                '.features | length',
+                'keys',
+                'to_entries',
+              ].map((q) => (
                 <button
                   key={q}
                   className="preset-chip glass-interactive"

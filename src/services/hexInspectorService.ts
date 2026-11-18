@@ -110,6 +110,8 @@ class HexInspectorService {
         float32BE: 'N/A',
         float64LE: 'N/A',
         float64BE: 'N/A',
+        int64LE: 'N/A',
+        uint64LE: 'N/A',
         utf8Char: '·',
       }
     }
@@ -156,11 +158,13 @@ class HexInspectorService {
 
     if (isHex) {
       const cleanHex = query.replace(/[^0-9a-fA-F]/g, '')
-      if (cleanHex.length % 2 !== 0) return matches
+      if (cleanHex.length === 0 || cleanHex.length % 2 !== 0) return matches
       const targetBytes: number[] = []
       for (let i = 0; i < cleanHex.length; i += 2) {
         targetBytes.push(parseInt(cleanHex.substring(i, i + 2), 16))
       }
+
+      if (targetBytes.length === 0 || targetBytes.length > bytes.length) return matches
 
       for (let i = 0; i <= bytes.length - targetBytes.length; i++) {
         let match = true
@@ -174,6 +178,7 @@ class HexInspectorService {
       }
     } else {
       const targetBytes = new TextEncoder().encode(query)
+      if (targetBytes.length === 0 || targetBytes.length > bytes.length) return matches
       for (let i = 0; i <= bytes.length - targetBytes.length; i++) {
         let match = true
         for (let j = 0; j < targetBytes.length; j++) {

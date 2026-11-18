@@ -136,19 +136,30 @@ class PreviewService {
     processed = processed.replace(/^##\s+(.*$)/gm, (_, t) => makeHeading(2, t))
     processed = processed.replace(/^#\s+(.*$)/gm, (_, t) => makeHeading(1, t))
 
-    // LaTeX Math Formula Rendering ($$...$$ and $...$)
+    // LaTeX Math Formula Rendering ($$...$$ and $...$) with typographic math formatting
     processed = processed.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
-      return stashBlock(`<div class="latex-math-block glass-panel"><span class="math-tex-display">$$ ${this.escapeHtml(math.trim())} $$</span></div>`)
+      return stashBlock(`<div class="latex-math-block glass-panel"><span class="math-tex-display">${this.formatLatexMath(math.trim())}</span></div>`)
     })
     processed = processed.replace(/\$([^\$\n]+)\$/g, (_, math) => {
-      return stashBlock(`<span class="latex-math-inline">${this.escapeHtml(math)}</span>`)
+      return stashBlock(`<span class="latex-math-inline">${this.formatLatexMath(math.trim())}</span>`)
     })
 
     // Horizontal Rules
     processed = processed.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="preview-hr" />')
 
-    // Blockquotes & GitHub Alerts
-    processed = processed.replace(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*$)/gm, '<div class="github-alert alert-$1 glass-panel"><div class="alert-title">$1</div><div class="alert-body">$2</div></div>')
+    // Multi-line GitHub Alerts (> [!NOTE]\n> line 1\n> line 2) & Blockquotes
+    processed = processed.replace(
+      /^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][^\n]*(?:\r?\n>[ \t]?[^\n]*)*/gm,
+      (block, kind: string) => {
+        const lines = block.split(/\r?\n/)
+        const firstRest = lines[0].replace(/^>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, '').trim()
+        const bodyLines = [
+          ...(firstRest ? [firstRest] : []),
+          ...lines.slice(1).map((l) => l.replace(/^>[ \t]?/, '')),
+        ]
+        return `<div class="github-alert alert-${kind} glass-panel"><div class="alert-title">${kind}</div><div class="alert-body">${bodyLines.join('<br />')}</div></div>`
+      }
+    )
     processed = processed.replace(/^>\s*(.*$)/gm, '<blockquote class="preview-blockquote">$1</blockquote>')
 
     // Bold & Italics
@@ -287,29 +298,90 @@ class PreviewService {
     return 'generic'
   }
 
-  private renderFlowchartSvg(lines: string[]): string {
-    const nodes: { id: string; label: string }[] = []
-    const edges: { from: string; to: string; label?: string }[] = []
+  private formatLatexMath(raw: string): string {
+    let s = this.escapeHtml(raw)
+    const symbols: Record<string, string> = {
+      '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ', '\\epsilon': 'ε',
+      '\\theta': 'θ', '\\lambda': 'λ', '\\mu': 'μ', '\\pi': 'π', '\\sigma': 'σ',
+      '\\tau': 'τ', '\\phi': 'φ', '\\omega': 'ω', '\\Delta': 'Δ', '\\Sigma': 'Σ',
+      '\\Pi': 'Π', '\\Omega': 'Ω', '\\Theta': 'Θ', '\\Lambda': 'Λ',
+      '\\infty': '∞', '\\pm': '±', '\\mp': '∓', '\\times': '×', '\\cdot': '·',
+      '\\div': '÷', '\\le': '≤', '\\leq': '≤', '\\ge': '≥', '\\geq': '≥',
+      '\\neq': '≠', '\\ne': '≠', '\\approx': '≈', '\\equiv': '≡',
+      '\\rightarrow': '→', '\\to': '→', '\\leftarrow': '←', '\\Rightarrow': '⇒', '\\iff': '⇔',
+      '\\sum': '∑', '\\prod': '∏', '\\int': '∫', '\\partial': '∂', '\\nabla': '∇',
+      '\\in': '∈', '\\notin': '∉', '\\subset': '⊂', '\\subseteq': '⊆',
+      '\\forall': '∀', '\\exists': '∃', '\\emptyset': '∅', '\\cup': '∪', '\\cap': '∩',
+    }
+    // Fractions & square roots
+    s = s.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '<span class="math-frac"><sup>$1</sup>&frasl;<sub>$2</sub></span>')
+    s = s.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)')
+    // Named symbols (longest key first to avoid prefix collision like \le vs \leq)
+    const sortedKeys = Object.keys(symbols).sort((a, b) => b.length - a.length)
+    for (const k of sortedKeys) {
+      s = s.split(k).join(symbols[k])
+    }
+    // Superscripts & subscripts
+    s = s.replace(/\^\{([^{}]+)\}/g, '<sup>$1</sup>').replace(/\^([a-zA-Z0-9])/g, '<sup>$1</sup>')
+    s = s.replace(/_\{([^{}]+)\}/g, '<sub>$1</sub>').replace(/_([a-zA-Z0-9])/g, '<sub>$1</sub>')
+    return s
+  }
 
-    for (const line of lines) {
-      // Node definitions: A[Label] or A --> B
-      const edgeMatch = line.match(/([A-Za-z0-9_]+)\s*(?:-->|---|==>)\s*(?:\|([^|]+)\|)?\s*([A-Za-z0-9_]+)/)
-      if (edgeMatch) {
-        const from = edgeMatch[1]
-        const label = edgeMatch[2]
-        const to = edgeMatch[3]
-        edges.push({ from, to, label })
-        if (!nodes.some((n) => n.id === from)) nodes.push({ id: from, label: from })
-        if (!nodes.some((n) => n.id === to)) nodes.push({ id: to, label: to })
+  private renderFlowchartSvg(lines: string[]): string {
+    const headerLine = (lines[0] || '').trim()
+    const dirMatch = headerLine.match(/^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)\b/i)
+    const dir = (dirMatch ? dirMatch[1].toUpperCase() : 'LR')
+    const isVertical = dir === 'TD' || dir === 'TB' || dir === 'BT'
+
+    const nodes: { id: string; label: string; subgraph?: string }[] = []
+    const edges: { from: string; to: string; label?: string }[] = []
+    const subgraphs: Array<{ title: string; nodeIds: string[] }> = []
+    let activeSubgraph: { title: string; nodeIds: string[] } | null = null
+
+    const upsertNode = (id: string, label?: string) => {
+      let existing = nodes.find((n) => n.id === id)
+      if (!existing) {
+        existing = { id, label: label || id, subgraph: activeSubgraph?.title }
+        nodes.push(existing)
+      } else if (label && existing.label === existing.id) {
+        existing.label = label
+      }
+      if (activeSubgraph && !activeSubgraph.nodeIds.includes(id)) {
+        activeSubgraph.nodeIds.push(id)
+      }
+    }
+
+    for (const rawLine of lines.slice(1)) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('%%')) continue
+      const subMatch = line.match(/^subgraph\s+(.+)$/i)
+      if (subMatch) {
+        activeSubgraph = { title: subMatch[1].replace(/^["']|["']$/g, '').trim(), nodeIds: [] }
+        subgraphs.push(activeSubgraph)
+        continue
+      }
+      if (line === 'end') {
+        activeSubgraph = null
+        continue
       }
 
-      const nodeMatch = line.match(/([A-Za-z0-9_]+)\[([^\]]+)\]/)
-      if (nodeMatch) {
-        const id = nodeMatch[1]
-        const label = nodeMatch[2]
-        const existing = nodes.find((n) => n.id === id)
-        if (existing) existing.label = label
-        else nodes.push({ id, label })
+      // Extract ALL labeled node definitions on the line: A[Label], B(Label), C{Label}
+      const multiNodeRe = /([A-Za-z0-9_]+)\s*(?:\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})/g
+      let nm: RegExpExecArray | null
+      while ((nm = multiNodeRe.exec(line)) !== null) {
+        upsertNode(nm[1], (nm[2] || nm[3] || nm[4] || nm[1]).trim())
+      }
+
+      // Edge: A[...] --> |lbl| B[...]
+      const edgeRe = /([A-Za-z0-9_]+)(?:\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\}))?\s*(?:-->|---|==>|\.->)\s*(?:\|([^|]+)\|)?\s*([A-Za-z0-9_]+)/g
+      let em: RegExpExecArray | null
+      while ((em = edgeRe.exec(line)) !== null) {
+        const from = em[1]
+        const label = em[2]?.trim()
+        const to = em[3]
+        edges.push({ from, to, label })
+        upsertNode(from)
+        upsertNode(to)
       }
     }
 
@@ -318,47 +390,114 @@ class PreviewService {
       edges.push({ from: 'Start', to: 'Process', label: 'init' }, { from: 'Process', to: 'End', label: 'complete' })
     }
 
-    const nodeWidth = 140
-    const nodeHeight = 44
-    const gapX = 180
-    const startX = 40
-    const startY = 40
+    // Assign topological ranks (levels) from edges so TD/LR layouts branch naturally
+    const inDeg = new Map<string, number>(nodes.map((n) => [n.id, 0]))
+    const adj = new Map<string, string[]>(nodes.map((n) => [n.id, []]))
+    for (const e of edges) {
+      adj.get(e.from)?.push(e.to)
+      inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1)
+    }
+    const levelOf = new Map<string, number>()
+    const queue = nodes.filter((n) => (inDeg.get(n.id) || 0) === 0).map((n) => n.id)
+    if (queue.length === 0) queue.push(nodes[0].id)
+    queue.forEach((id) => levelOf.set(id, 0))
+    let qi = 0
+    while (qi < queue.length) {
+      const u = queue[qi++]
+      const lv = levelOf.get(u) || 0
+      for (const v of adj.get(u) || []) {
+        if (!levelOf.has(v)) {
+          levelOf.set(v, lv + 1)
+          queue.push(v)
+        }
+      }
+    }
+    nodes.forEach((n, i) => {
+      if (!levelOf.has(n.id)) levelOf.set(n.id, i)
+    })
 
-    const svgWidth = Math.max(400, startX + nodes.length * gapX + 60)
-    const svgHeight = 160
+    const levels = new Map<number, typeof nodes>()
+    for (const n of nodes) {
+      const lv = levelOf.get(n.id) || 0
+      const bucket = levels.get(lv) || []
+      bucket.push(n)
+      levels.set(lv, bucket)
+    }
 
-    let nodesSvg = ''
-    nodes.forEach((node, i) => {
-      const cx = startX + i * gapX
-      const cy = startY + 20
-      nodesSvg += `
-        <g class="mermaid-node" transform="translate(${cx}, ${cy})">
-          <rect width="${nodeWidth}" height="${nodeHeight}" rx="10" fill="rgba(10, 132, 255, 0.15)" stroke="#0A84FF" stroke-width="1.5" />
-          <text x="${nodeWidth / 2}" y="${nodeHeight / 2 + 5}" fill="#F0F6FC" font-size="12" font-weight="600" text-anchor="middle">${this.escapeHtml(node.label)}</text>
+    const nodeWidth = 152
+    const nodeHeight = 42
+    const gapX = 185
+    const gapY = 82
+    const padX = 36
+    const padY = 36
+
+    const pos = new Map<string, { x: number; y: number }>()
+    const sortedLevelKeys = Array.from(levels.keys()).sort((a, b) => a - b)
+    let maxX = 400
+    let maxY = 160
+
+    sortedLevelKeys.forEach((lv, lvIdx) => {
+      const bucket = levels.get(lv) || []
+      bucket.forEach((node, slotIdx) => {
+        const x = isVertical ? padX + slotIdx * gapX : padX + lvIdx * gapX
+        const y = isVertical ? padY + lvIdx * gapY : padY + slotIdx * gapY
+        pos.set(node.id, { x, y })
+        maxX = Math.max(maxX, x + nodeWidth + padX)
+        maxY = Math.max(maxY, y + nodeHeight + padY)
+      })
+    })
+
+    let subgraphsSvg = ''
+    for (const sg of subgraphs) {
+      const pts = sg.nodeIds.map((id) => pos.get(id)).filter(Boolean) as Array<{ x: number; y: number }>
+      if (pts.length === 0) continue
+      const minSx = Math.min(...pts.map((p) => p.x)) - 14
+      const minSy = Math.min(...pts.map((p) => p.y)) - 22
+      const maxSx = Math.max(...pts.map((p) => p.x + nodeWidth)) + 14
+      const maxSy = Math.max(...pts.map((p) => p.y + nodeHeight)) + 12
+      subgraphsSvg += `
+        <g class="mermaid-subgraph">
+          <rect x="${minSx}" y="${minSy}" width="${maxSx - minSx}" height="${maxSy - minSy}" rx="10" fill="rgba(191, 90, 242, 0.08)" stroke="rgba(191, 90, 242, 0.45)" stroke-dasharray="5 3" stroke-width="1.2" />
+          <text x="${minSx + 10}" y="${minSy + 14}" fill="#BF5AF2" font-size="10.5" font-weight="700">${this.escapeHtml(sg.title)}</text>
+        </g>`
+    }
+
+    let edgesSvg = ''
+    edges.forEach((edge) => {
+      const p1 = pos.get(edge.from)
+      const p2 = pos.get(edge.to)
+      if (!p1 || !p2) return
+      const x1 = isVertical ? p1.x + nodeWidth / 2 : p1.x + nodeWidth
+      const y1 = isVertical ? p1.y + nodeHeight : p1.y + nodeHeight / 2
+      const x2 = isVertical ? p2.x + nodeWidth / 2 : p2.x
+      const y2 = isVertical ? p2.y : p2.y + nodeHeight / 2
+      const angle = Math.atan2(y2 - y1, x2 - x1)
+      const ax1 = x2 - 8 * Math.cos(angle - Math.PI / 6)
+      const ay1 = y2 - 8 * Math.sin(angle - Math.PI / 6)
+      const ax2 = x2 - 8 * Math.cos(angle + Math.PI / 6)
+      const ay2 = y2 - 8 * Math.sin(angle + Math.PI / 6)
+      edgesSvg += `
+        <g class="mermaid-edge">
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#64D2FF" stroke-width="1.6" stroke-dasharray="3 3" />
+          <polygon points="${x2},${y2} ${ax1.toFixed(1)},${ay1.toFixed(1)} ${ax2.toFixed(1)},${ay2.toFixed(1)}" fill="#64D2FF" />
+          ${edge.label ? `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" fill="#94A3B8" font-size="10" text-anchor="middle">${this.escapeHtml(edge.label)}</text>` : ''}
         </g>
       `
     })
 
-    let edgesSvg = ''
-    edges.forEach((edge) => {
-      const fromIdx = nodes.findIndex((n) => n.id === edge.from)
-      const toIdx = nodes.findIndex((n) => n.id === edge.to)
-      if (fromIdx !== -1 && toIdx !== -1) {
-        const x1 = startX + fromIdx * gapX + nodeWidth
-        const y1 = startY + 20 + nodeHeight / 2
-        const x2 = startX + toIdx * gapX
-        const y2 = startY + 20 + nodeHeight / 2
-        edgesSvg += `
-          <g class="mermaid-edge">
-            <line x1="${x1}" y1="${y1}" x2="${x2 - 8}" y2="${y2}" stroke="#64D2FF" stroke-width="1.8" stroke-dasharray="3 3" />
-            <polygon points="${x2},${y2} ${x2 - 8},${y2 - 4} ${x2 - 8},${y2 + 4}" fill="#64D2FF" />
-            ${edge.label ? `<text x="${(x1 + x2) / 2}" y="${y1 - 8}" fill="#94A3B8" font-size="10" text-anchor="middle">${this.escapeHtml(edge.label)}</text>` : ''}
-          </g>
-        `
-      }
+    let nodesSvg = ''
+    nodes.forEach((node) => {
+      const p = pos.get(node.id)!
+      nodesSvg += `
+        <g class="mermaid-node" transform="translate(${p.x}, ${p.y})">
+          <rect width="${nodeWidth}" height="${nodeHeight}" rx="10" fill="rgba(10, 132, 255, 0.15)" stroke="#0A84FF" stroke-width="1.5" />
+          <text x="${nodeWidth / 2}" y="${nodeHeight / 2 + 4}" fill="#F0F6FC" font-size="11.5" font-weight="600" text-anchor="middle">${this.escapeHtml(node.label.slice(0, 22))}</text>
+        </g>
+      `
     })
 
-    return `<svg viewBox="0 0 ${svgWidth} ${svgHeight}" width="100%" height="160" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px; font-family: var(--font-ui);">
+    return `<svg viewBox="0 0 ${maxX} ${maxY}" width="100%" height="${Math.min(480, maxY)}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px; font-family: var(--font-ui);">
+      ${subgraphsSvg}
       ${edgesSvg}
       ${nodesSvg}
     </svg>`
@@ -366,18 +505,18 @@ class PreviewService {
 
   private renderSequenceSvg(lines: string[]): string {
     const actors: string[] = []
-    const messages: { from: string; to: string; text: string }[] = []
+    const messages: { from: string; to: string; text: string; dashed: boolean }[] = []
 
     for (const line of lines) {
       const actorMatch = line.match(/^(?:actor|participant)\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?/i)
       if (actorMatch) {
         if (!actors.includes(actorMatch[1])) actors.push(actorMatch[1])
       }
-      const msgMatch = line.match(/([A-Za-z0-9_]+)\s*(?:->>|-->>|->|-->)\s*([A-Za-z0-9_]+)\s*:\s*(.*)/)
+      const msgMatch = line.match(/([A-Za-z0-9_]+)\s*(-->>|-->|->>|->)\s*([A-Za-z0-9_]+)\s*:\s*(.*)/)
       if (msgMatch) {
-        messages.push({ from: msgMatch[1], to: msgMatch[2], text: msgMatch[3] })
+        messages.push({ from: msgMatch[1], to: msgMatch[3], text: msgMatch[4], dashed: msgMatch[2].startsWith('--') })
         if (!actors.includes(msgMatch[1])) actors.push(msgMatch[1])
-        if (!actors.includes(msgMatch[2])) actors.push(msgMatch[2])
+        if (!actors.includes(msgMatch[3])) actors.push(msgMatch[3])
       }
     }
 
@@ -387,7 +526,7 @@ class PreviewService {
     const gap = 140
     const startX = 50
     const svgWidth = Math.max(450, startX + actors.length * gap + 50)
-    const svgHeight = Math.max(200, 100 + messages.length * 40)
+    const svgHeight = Math.max(200, 100 + messages.length * 42)
 
     let actorsSvg = ''
     actors.forEach((act, i) => {
@@ -395,7 +534,7 @@ class PreviewService {
       actorsSvg += `
         <g transform="translate(${cx}, 20)">
           <rect width="${actorWidth}" height="32" rx="6" fill="rgba(191, 90, 242, 0.2)" stroke="#BF5AF2" stroke-width="1.2" />
-          <text x="${actorWidth / 2}" y="20" fill="#FFF" font-size="12" font-weight="bold" text-anchor="middle">${act}</text>
+          <text x="${actorWidth / 2}" y="20" fill="#FFF" font-size="12" font-weight="bold" text-anchor="middle">${this.escapeHtml(act)}</text>
           <line x1="${actorWidth / 2}" y1="32" x2="${actorWidth / 2}" y2="${svgHeight - 20}" stroke="rgba(255,255,255,0.15)" stroke-dasharray="4 4" />
         </g>
       `
@@ -408,14 +547,28 @@ class PreviewService {
       if (fromIdx !== -1 && toIdx !== -1) {
         const x1 = startX + fromIdx * gap + actorWidth / 2
         const x2 = startX + toIdx * gap + actorWidth / 2
-        const y = 80 + idx * 36
-        msgsSvg += `
-          <g>
-            <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#30D158" stroke-width="1.5" />
-            <polygon points="${x2},${y} ${x2 - 6},${y - 4} ${x2 - 6},${y + 4}" fill="#30D158" />
-            <text x="${(x1 + x2) / 2}" y="${y - 6}" fill="#E2E8F0" font-size="11" text-anchor="middle">${this.escapeHtml(msg.text)}</text>
-          </g>
-        `
+        const y = 80 + idx * 38
+        const dashAttr = msg.dashed ? ' stroke-dasharray="5 3"' : ''
+        if (fromIdx === toIdx) {
+          // Self-call loop arrow
+          msgsSvg += `
+            <g>
+              <path d="M ${x1} ${y} L ${x1 + 36} ${y} L ${x1 + 36} ${y + 16} L ${x1 + 6} ${y + 16}" fill="none" stroke="#64D2FF" stroke-width="1.5"${dashAttr} />
+              <polygon points="${x1},${y + 16} ${x1 + 7},${y + 12} ${x1 + 7},${y + 20}" fill="#64D2FF" />
+              <text x="${x1 + 42}" y="${y + 11}" fill="#E2E8F0" font-size="10.5" text-anchor="start">${this.escapeHtml(msg.text)}</text>
+            </g>
+          `
+        } else {
+          const dir = x2 > x1 ? 1 : -1
+          const arrowPts = `${x2},${y} ${x2 - dir * 7},${y - 4} ${x2 - dir * 7},${y + 4}`
+          msgsSvg += `
+            <g>
+              <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${msg.dashed ? '#64D2FF' : '#30D158'}" stroke-width="1.5"${dashAttr} />
+              <polygon points="${arrowPts}" fill="${msg.dashed ? '#64D2FF' : '#30D158'}" />
+              <text x="${(x1 + x2) / 2}" y="${y - 6}" fill="#E2E8F0" font-size="11" text-anchor="middle">${this.escapeHtml(msg.text)}</text>
+            </g>
+          `
+        }
       }
     })
 
@@ -647,6 +800,64 @@ class PreviewService {
           }
         })
         return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">${svg}</svg>`
+      }
+    }
+
+    if (type === 'gantt') {
+      let title = 'Project Schedule'
+      let currentSection = 'Default'
+      const tasks: Array<{ label: string; section: string; status: string; durationDays: number }> = []
+      for (const raw of lines) {
+        const l = raw.trim()
+        if (!l || l.startsWith('gantt') || l.startsWith('dateFormat') || l.startsWith('%%')) continue
+        if (l.toLowerCase().startsWith('title ')) {
+          title = l.slice(6).trim()
+          continue
+        }
+        if (l.toLowerCase().startsWith('section ')) {
+          currentSection = l.slice(8).trim()
+          continue
+        }
+        const colonIdx = l.indexOf(':')
+        if (colonIdx !== -1) {
+          const label = l.slice(0, colonIdx).trim()
+          const meta = l.slice(colonIdx + 1).trim()
+          const status = /\bcrit\b/i.test(meta) ? 'crit' : /\bdone\b/i.test(meta) ? 'done' : /\bactive\b/i.test(meta) ? 'active' : 'normal'
+          const durMatch = meta.match(/(\d+)\s*([dhw])/i)
+          const durationDays = durMatch
+            ? parseInt(durMatch[1], 10) * (durMatch[2].toLowerCase() === 'w' ? 7 : 1)
+            : 5
+          tasks.push({ label, section: currentSection, status, durationDays })
+        }
+      }
+      if (tasks.length > 0) {
+        const labelW = 160
+        const barAreaW = 360
+        const rowH = 28
+        const svgW = labelW + barAreaW + 30
+        const svgH = 44 + tasks.length * rowH + 16
+        const totalUnits = Math.max(10, tasks.reduce((acc, t) => acc + t.durationDays, 0))
+        let cursor = 0
+        let rowsSvg = `<text x="${svgW / 2}" y="24" fill="#F8FAFC" font-size="13" font-weight="bold" text-anchor="middle">${this.escapeHtml(title)}</text>`
+        const statusColors: Record<string, string> = {
+          done: '#30D158',
+          active: '#0A84FF',
+          crit: '#FF453A',
+          normal: '#BF5AF2',
+        }
+        tasks.forEach((t, idx) => {
+          const y = 40 + idx * rowH
+          const bx = labelW + Math.round((cursor / totalUnits) * barAreaW)
+          const bw = Math.max(24, Math.round((t.durationDays / totalUnits) * barAreaW))
+          cursor += t.durationDays
+          const col = statusColors[t.status] || '#0A84FF'
+          rowsSvg += `
+            <text x="${labelW - 10}" y="${y + 15}" fill="#CBD5E1" font-size="10.5" text-anchor="end">${this.escapeHtml(t.label.slice(0, 22))}</text>
+            <rect x="${bx}" y="${y + 3}" width="${bw}" height="18" rx="4" fill="${col}44" stroke="${col}" stroke-width="1.2" />
+            <text x="${bx + bw / 2}" y="${y + 15}" fill="#FFF" font-size="9.5" text-anchor="middle">${t.durationDays}d</text>
+          `
+        })
+        return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">${rowsSvg}</svg>`
       }
     }
 

@@ -509,7 +509,7 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
 
         {/* 4. MARKDOWN & GENERAL PROSE VIEW */}
         {previewType !== 'pdf' && previewType !== 'docx' && previewType !== 'html' && (
-          <div className="preview-viewport-wrapper" style={{ width: getViewportWidth() }}>
+          <div className="preview-viewport-wrapper" style={{ width: '100%' }}>
             <div
               className="markdown-rendered-view glass-panel"
               dangerouslySetInnerHTML={{

@@ -211,6 +211,61 @@
   color: #FDE047;
 }
 
+.diff-studio-root .diff-split-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  width: 100%;
+}
+
+.diff-studio-root .split-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.diff-studio-root .split-column-header {
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.diff-studio-root .split-line-row {
+  display: flex;
+  align-items: center;
+  padding: 1px 6px;
+  min-height: 18px;
+  border-left: 3px solid transparent;
+}
+
+.diff-studio-root .split-line-row.added {
+  background: rgba(48, 209, 88, 0.12);
+  border-left-color: #30D158;
+  color: #A3E635;
+}
+
+.diff-studio-root .split-line-row.deleted {
+  background: rgba(255, 69, 58, 0.12);
+  border-left-color: #FF453A;
+  color: #F87171;
+}
+
+.diff-studio-root .split-line-row.modified {
+  background: rgba(255, 214, 10, 0.12);
+  border-left-color: #FFD60A;
+  color: #FDE047;
+}
+
+.diff-studio-root .split-line-row.empty-placeholder {
+  background: rgba(255, 255, 255, 0.02);
+  opacity: 0.4;
+}
+
 .diff-studio-root .line-num {
   width: 28px;
   font-size: 9.5px;

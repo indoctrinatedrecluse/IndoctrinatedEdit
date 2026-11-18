@@ -390,8 +390,9 @@ class DiffStudioService {
     const lines = fullText.split(/\r?\n/)
     const before = lines.slice(0, target.startLine - 1)
     const after = lines.slice(target.endLine)
+    const middle = replacement ? replacement.split(/\r?\n/) : []
 
-    return [...before, replacement, ...after].join('\n')
+    return [...before, ...middle, ...after].join('\n')
   }
 }
 

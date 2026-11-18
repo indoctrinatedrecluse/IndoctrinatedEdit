@@ -32,18 +32,101 @@ class JsonStudioService {
     const t0 = performance.now()
     const q = query.trim()
 
-    if (!q || q === '.') {
+    if (!q || q === '.' || q === '@') {
       return { result: data, executionTimeMs: Math.round((performance.now() - t0) * 100) / 100 }
     }
 
     try {
-      // 1. Array index or key access: e.g. .users, .users[0], .items[].name
       let current = data
 
-      // Handle simple pipe chains: .users | length, .items | keys
-      const pipes = q.split('|').map((s) => s.trim())
+      // Pre-expand JMESPath filter expressions `[?id == `1`]` or `[?role == 'admin']` into pipe + select() BEFORE splitting pipes
+      // Also support trailing field access after filter like `users[?id == `1`].name` -> `users | select(.id == 1) | .name`
+      const normalizedQuery = q
+        .replace(/\[\?\s*([^\]]+)\](?:\.([a-zA-Z0-9_.\[\]]+))?/g, (_, filterExpr: string, tail?: string) => {
+          // In JMESPath, backticks wrap raw JSON literals (`1`, `true`, `"foo"`)
+          const normCond = filterExpr.replace(/`([^`]+)`/g, '$1').trim()
+          const cleanCond = normCond.startsWith('.') ? normCond : `.${normCond.replace(/^@\.?/, '')}`
+          return ` | select(${cleanCond})${tail ? ` | .${tail}` : ''}`
+        })
+        .replace(/\[\*\]/g, '[]')
 
-      for (const segment of pipes) {
+      // Quote and paren-safe pipe split
+      const pipes: string[] = []
+      let buf = ''
+      let inQuotes = false
+      let quoteChar = ''
+      let parenDepth = 0
+      for (let i = 0; i < normalizedQuery.length; i++) {
+        const ch = normalizedQuery[i]
+        if (inQuotes) {
+          buf += ch
+          if (ch === quoteChar && normalizedQuery[i - 1] !== '\\') inQuotes = false
+        } else if (ch === '"' || ch === "'") {
+          inQuotes = true
+          quoteChar = ch
+          buf += ch
+        } else if (ch === '(') {
+          parenDepth++
+          buf += ch
+        } else if (ch === ')') {
+          if (parenDepth > 0) parenDepth--
+          buf += ch
+        } else if (ch === '|' && parenDepth === 0) {
+          pipes.push(buf.trim())
+          buf = ''
+        } else {
+          buf += ch
+        }
+      }
+      if (buf.trim()) pipes.push(buf.trim())
+
+      const builtinFilters = new Set(['length', 'keys', 'type', 'reverse', 'unique', 'values', 'to_entries', 'flatten'])
+
+      for (let segment of pipes) {
+        if (!segment || segment === '.' || segment === '@') continue
+
+        // JMESPath function wrapping: length(users), length(@), keys(@), etc.
+        const fnMatch = segment.match(/^(length|keys|values|type|reverse|flatten)\s*\((.*)\)$/)
+        if (fnMatch) {
+          const fnName = fnMatch[1]
+          const innerArg = fnMatch[2].trim()
+          const target = innerArg && innerArg !== '@' && innerArg !== '.' ? this.queryJq(current, innerArg).result : current
+          if (fnName === 'length') {
+            current = Array.isArray(target)
+              ? target.length
+              : typeof target === 'object' && target !== null
+                ? Object.keys(target).length
+                : String(target ?? '').length
+            continue
+          } else if (fnName === 'keys') {
+            current = typeof target === 'object' && target !== null ? Object.keys(target) : []
+            continue
+          } else if (fnName === 'values') {
+            current = typeof target === 'object' && target !== null ? Object.values(target) : []
+            continue
+          } else if (fnName === 'type') {
+            current = target === null ? 'null' : Array.isArray(target) ? 'array' : typeof target
+            continue
+          } else if (fnName === 'reverse') {
+            current = Array.isArray(target) ? [...target].reverse() : target
+            continue
+          } else if (fnName === 'flatten') {
+            current = Array.isArray(target) ? target.flat() : target
+            continue
+          }
+        }
+
+        const isBuiltin =
+          builtinFilters.has(segment) ||
+          segment.startsWith('map(') ||
+          segment.startsWith('sort_by(') ||
+          segment.startsWith('select(')
+
+        // Support JMESPath root property access without leading dot: users[0] -> .users[0]
+        if (!isBuiltin && !segment.startsWith('.') && /^[a-zA-Z_$\[]/.test(segment)) {
+          segment = segment.startsWith('[') ? `.${segment}` : `.${segment}`
+        }
+
         if (segment === 'length') {
           current = Array.isArray(current) ? current.length : typeof current === 'object' && current !== null ? Object.keys(current).length : String(current).length
         } else if (segment === 'keys') {
@@ -390,9 +473,19 @@ class JsonStudioService {
     return [headers.join(','), ...rows].join('\n')
   }
 
+  private escapeXml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  }
+
   private toXml(obj: any, tag = 'root'): string {
-    if (obj === null || obj === undefined) return `<${tag}/>`
-    if (typeof obj !== 'object') return `<${tag}>${obj}</${tag}>`
+    const cleanTag = tag.replace(/[^a-zA-Z0-9_.-]/g, '_') || 'item'
+    if (obj === null || obj === undefined) return `<${cleanTag}/>`
+    if (typeof obj !== 'object') return `<${cleanTag}>${this.escapeXml(String(obj))}</${cleanTag}>`
 
     if (Array.isArray(obj)) {
       return obj.map((item) => this.toXml(item, 'item')).join('\n')
@@ -401,24 +494,74 @@ class JsonStudioService {
     const inner = Object.entries(obj)
       .map(([k, v]) => this.toXml(v, k))
       .join('\n  ')
-    return `<${tag}>\n  ${inner}\n</${tag}>`
+    return `<${cleanTag}>\n  ${inner}\n</${cleanTag}>`
   }
 
   private parseSimpleYaml(yamlStr: string): any {
-    const lines = yamlStr.split('\n')
-    const result: any = {}
-    for (const line of lines) {
-      const match = line.match(/^\s*([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
-      if (match) {
-        const k = match[1]
-        let v = match[2].trim()
-        if (v === 'true') result[k] = true
-        else if (v === 'false') result[k] = false
-        else if (!isNaN(Number(v)) && v !== '') result[k] = Number(v)
-        else result[k] = v.replace(/^['"]|['"]$/g, '')
+    const lines = yamlStr.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#'))
+    const root: Record<string, any> = {}
+    const stack: Array<{ indent: number; target: any; parentObj?: any; parentKey?: string }> = [
+      { indent: -1, target: root },
+    ]
+
+    const parseVal = (raw: string): any => {
+      const v = raw.trim()
+      if (v === 'true') return true
+      if (v === 'false') return false
+      if (v === 'null' || v === '~') return null
+      if (v !== '' && /^[+-]?\d+(\.\d+)?$/.test(v)) return Number(v)
+      return v.replace(/^['"]|['"]$/g, '')
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i]
+      const indent = raw.search(/\S/)
+      const trimmed = raw.trim()
+
+      while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+        stack.pop()
+      }
+
+      const current = stack[stack.length - 1]
+
+      if (trimmed.startsWith('- ')) {
+        const itemStr = trimmed.slice(2).trim()
+        if (!Array.isArray(current.target)) {
+          if (current.parentObj && current.parentKey) {
+            current.parentObj[current.parentKey] = []
+            current.target = current.parentObj[current.parentKey]
+          }
+        }
+        if (Array.isArray(current.target)) {
+          const colonIdx = itemStr.indexOf(':')
+          if (colonIdx !== -1 && !itemStr.startsWith('"') && !itemStr.startsWith("'")) {
+            const k = itemStr.slice(0, colonIdx).trim()
+            const val = parseVal(itemStr.slice(colonIdx + 1))
+            const obj = { [k]: val }
+            current.target.push(obj)
+            stack.push({ indent, target: obj })
+          } else {
+            current.target.push(parseVal(itemStr))
+          }
+        }
+        continue
+      }
+
+      const colonIdx = trimmed.indexOf(':')
+      if (colonIdx !== -1 && typeof current.target === 'object' && !Array.isArray(current.target)) {
+        const k = trimmed.slice(0, colonIdx).trim()
+        const rawVal = trimmed.slice(colonIdx + 1).trim()
+        if (rawVal === '') {
+          const next = lines[i + 1]?.trim()
+          const container = next?.startsWith('- ') ? [] : {}
+          current.target[k] = container
+          stack.push({ indent, target: container, parentObj: current.target, parentKey: k })
+        } else {
+          current.target[k] = parseVal(rawVal)
+        }
       }
     }
-    return result
+    return root
   }
 }
 

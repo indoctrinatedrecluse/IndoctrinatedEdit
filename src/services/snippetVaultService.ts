@@ -174,6 +174,7 @@ echo "Executing safe script..."`,
   public addCustomSnippet(snippet: Omit<CodeSnippet, 'id' | 'isCustom' | 'createdAt'>): CodeSnippet {
     const newSnippet: CodeSnippet = {
       ...snippet,
+      tags: Array.from(new Set((snippet.tags || []).map((t) => t.trim()).filter(Boolean))),
       id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       isCustom: true,
       createdAt: new Date().toLocaleDateString(),
@@ -189,7 +190,11 @@ echo "Executing safe script..."`,
   ): CodeSnippet | null {
     const idx = this.customSnippets.findIndex((s) => s.id === id)
     if (idx === -1) return null
-    this.customSnippets[idx] = { ...this.customSnippets[idx], ...updates }
+    const cleanedUpdates = {
+      ...updates,
+      ...(updates.tags ? { tags: Array.from(new Set(updates.tags.map((t) => t.trim()).filter(Boolean))) } : {}),
+    }
+    this.customSnippets[idx] = { ...this.customSnippets[idx], ...cleanedUpdates }
     this.saveToStorage()
     return this.customSnippets[idx]
   }

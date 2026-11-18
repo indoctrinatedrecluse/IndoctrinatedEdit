@@ -149,47 +149,182 @@ class RegexService {
 
   public explainRegex(pattern: string): RegexTokenExplanation[] {
     const explanations: RegexTokenExplanation[] = []
-
     if (!pattern) return explanations
 
-    if (pattern.startsWith('^')) {
-      explanations.push({ token: '^', description: 'Asserts the start of the string or line.', category: 'anchor' })
-    }
-    if (pattern.endsWith('$')) {
-      explanations.push({ token: '$', description: 'Asserts the end of the string or line.', category: 'anchor' })
-    }
-    if (pattern.includes('\\b')) {
-      explanations.push({ token: '\\b', description: 'Word boundary assertion.', category: 'anchor' })
-    }
-    if (pattern.includes('\\d')) {
-      explanations.push({ token: '\\d', description: 'Matches any digit character [0-9].', category: 'class' })
-    }
-    if (pattern.includes('\\w')) {
-      explanations.push({ token: '\\w', description: 'Matches any word character (alphanumeric & underscore).', category: 'class' })
-    }
-    if (pattern.includes('\\s')) {
-      explanations.push({ token: '\\s', description: 'Matches any whitespace character (space, tab, newline).', category: 'class' })
-    }
-    if (pattern.includes('+')) {
-      explanations.push({ token: '+', description: 'Matches 1 or more of preceding token (greedy).', category: 'quantifier' })
-    }
-    if (pattern.includes('*')) {
-      explanations.push({ token: '*', description: 'Matches 0 or more of preceding token (greedy).', category: 'quantifier' })
-    }
-    if (pattern.includes('?')) {
-      explanations.push({ token: '?', description: 'Matches 0 or 1 of preceding token (optional or lazy modifier).', category: 'quantifier' })
-    }
-    if (pattern.includes('(') && pattern.includes(')')) {
-      explanations.push({ token: '(...)', description: 'Capturing group for isolated extraction.', category: 'group' })
-    }
-    if (pattern.includes('[') && pattern.includes(']')) {
-      explanations.push({ token: '[...]', description: 'Character set matching any character in the bracketed list.', category: 'class' })
+    let i = 0
+    let literalBuf = ''
+    const flushLiteral = () => {
+      if (literalBuf) {
+        explanations.push({
+          token: literalBuf,
+          description: `Matches the literal characters "${literalBuf}".`,
+          category: 'literal',
+        })
+        literalBuf = ''
+      }
     }
 
-    if (explanations.length === 0) {
-      explanations.push({ token: pattern, description: 'Literal string match.', category: 'literal' })
+    const escapeDescriptions: Record<string, { desc: string; cat: RegexTokenExplanation['category'] }> = {
+      d: { desc: 'Matches any digit character [0-9].', cat: 'class' },
+      D: { desc: 'Matches any non-digit character [^0-9].', cat: 'class' },
+      w: { desc: 'Matches any word character [a-zA-Z0-9_].', cat: 'class' },
+      W: { desc: 'Matches any non-word character.', cat: 'class' },
+      s: { desc: 'Matches any whitespace character (space, tab, newline).', cat: 'class' },
+      S: { desc: 'Matches any non-whitespace character.', cat: 'class' },
+      b: { desc: 'Asserts a word boundary position.', cat: 'anchor' },
+      B: { desc: 'Asserts a non-word boundary position.', cat: 'anchor' },
+      n: { desc: 'Matches a newline character (LF).', cat: 'literal' },
+      r: { desc: 'Matches a carriage return character (CR).', cat: 'literal' },
+      t: { desc: 'Matches a horizontal tab character.', cat: 'literal' },
     }
 
+    while (i < pattern.length) {
+      const ch = pattern[i]
+
+      // Escaped sequence
+      if (ch === '\\' && i + 1 < pattern.length) {
+        flushLiteral()
+        const next = pattern[i + 1]
+        const info = escapeDescriptions[next]
+        if (info) {
+          explanations.push({ token: `\\${next}`, description: info.desc, category: info.cat })
+        } else if (/^\d$/.test(next)) {
+          explanations.push({ token: `\\${next}`, description: `Backreference to capturing group #${next}.`, category: 'group' })
+        } else {
+          explanations.push({ token: `\\${next}`, description: `Matches the escaped literal character "${next}".`, category: 'literal' })
+        }
+        i += 2
+        continue
+      }
+
+      // Character class [...]
+      if (ch === '[') {
+        flushLiteral()
+        let j = i + 1
+        while (j < pattern.length) {
+          if (pattern[j] === '\\') {
+            j += 2
+            continue
+          }
+          if (pattern[j] === ']') break
+          j++
+        }
+        const cls = pattern.slice(i, Math.min(pattern.length, j + 1))
+        const negated = cls.startsWith('[^')
+        explanations.push({
+          token: cls,
+          description: negated
+            ? `Negated character class: matches any character NOT in ${cls.slice(2, -1)}.`
+            : `Character class: matches any single character in ${cls.slice(1, -1)}.`,
+          category: 'class',
+        })
+        i = j + 1
+        continue
+      }
+
+      // Groups & lookarounds
+      if (ch === '(') {
+        flushLiteral()
+        if (pattern.slice(i, i + 3) === '(?:') {
+          explanations.push({ token: '(?:', description: 'Starts a non-capturing group.', category: 'group' })
+          i += 3
+        } else if (pattern.slice(i, i + 3) === '(?=') {
+          explanations.push({ token: '(?=', description: 'Starts a positive lookahead assertion.', category: 'anchor' })
+          i += 3
+        } else if (pattern.slice(i, i + 3) === '(?!') {
+          explanations.push({ token: '(?!', description: 'Starts a negative lookahead assertion.', category: 'anchor' })
+          i += 3
+        } else if (pattern.slice(i, i + 4) === '(?<=') {
+          explanations.push({ token: '(?<=', description: 'Starts a positive lookbehind assertion.', category: 'anchor' })
+          i += 4
+        } else if (pattern.slice(i, i + 4) === '(?<!') {
+          explanations.push({ token: '(?<!', description: 'Starts a negative lookbehind assertion.', category: 'anchor' })
+          i += 4
+        } else if (pattern.slice(i, i + 3) === '(?<') {
+          const endName = pattern.indexOf('>', i + 3)
+          if (endName !== -1) {
+            const name = pattern.slice(i + 3, endName)
+            explanations.push({ token: `(?<${name}>`, description: `Starts named capturing group "${name}".`, category: 'group' })
+            i = endName + 1
+          } else {
+            explanations.push({ token: '(', description: 'Starts a capturing group.', category: 'group' })
+            i++
+          }
+        } else {
+          explanations.push({ token: '(', description: 'Starts a capturing group.', category: 'group' })
+          i++
+        }
+        continue
+      }
+
+      if (ch === ')') {
+        flushLiteral()
+        explanations.push({ token: ')', description: 'Closes the preceding group.', category: 'group' })
+        i++
+        continue
+      }
+
+      // Quantifiers {m}, {m,}, {m,n}
+      if (ch === '{') {
+        const qMatch = pattern.slice(i).match(/^\{(\d+)(?:,(\d*))?\}(\?)?/)
+        if (qMatch) {
+          flushLiteral()
+          const lazy = Boolean(qMatch[3])
+          let desc = ''
+          if (qMatch[2] === undefined) desc = `Matches exactly ${qMatch[1]} times.`
+          else if (qMatch[2] === '') desc = `Matches ${qMatch[1]} or more times${lazy ? ' (lazy)' : ' (greedy)'}.`
+          else desc = `Matches between ${qMatch[1]} and ${qMatch[2]} times${lazy ? ' (lazy)' : ' (greedy)'}.`
+          explanations.push({ token: qMatch[0], description: desc, category: 'quantifier' })
+          i += qMatch[0].length
+          continue
+        }
+      }
+
+      if (ch === '+' || ch === '*' || ch === '?') {
+        flushLiteral()
+        const isLazy = pattern[i + 1] === '?'
+        const tok = isLazy ? `${ch}?` : ch
+        const desc =
+          ch === '+'
+            ? `Matches 1 or more of preceding token${isLazy ? ' (lazy)' : ' (greedy)'}.`
+            : ch === '*'
+              ? `Matches 0 or more of preceding token${isLazy ? ' (lazy)' : ' (greedy)'}.`
+              : `Matches 0 or 1 of preceding token${isLazy ? ' (lazy optional)' : ' (optional)'}.`
+        explanations.push({ token: tok, description: desc, category: 'quantifier' })
+        i += isLazy ? 2 : 1
+        continue
+      }
+
+      if (ch === '^') {
+        flushLiteral()
+        explanations.push({ token: '^', description: 'Asserts the start of the string or line.', category: 'anchor' })
+        i++
+        continue
+      }
+      if (ch === '$') {
+        flushLiteral()
+        explanations.push({ token: '$', description: 'Asserts the end of the string or line.', category: 'anchor' })
+        i++
+        continue
+      }
+      if (ch === '|') {
+        flushLiteral()
+        explanations.push({ token: '|', description: 'Alternation (OR): matches either the left or right branch.', category: 'group' })
+        i++
+        continue
+      }
+      if (ch === '.') {
+        flushLiteral()
+        explanations.push({ token: '.', description: 'Wildcard: matches any single character except line terminators.', category: 'class' })
+        i++
+        continue
+      }
+
+      literalBuf += ch
+      i++
+    }
+
+    flushLiteral()
     return explanations
   }
 
@@ -320,6 +455,14 @@ class RegexService {
         sample: '2026-09-19 or 2026-09-19T12:00:00.000Z',
       }
     }
+    if (q.includes('password') || q.includes('passphrase')) {
+      return {
+        pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#^])[A-Za-z\\d@$!%*?&#^]{12,}$',
+        flags: 'gm',
+        explanation: 'Validates strong passwords (12+ chars with uppercase, lowercase, digit, and special symbol).',
+        sample: 'Str0ng#Pass2026!\nweakpass',
+      }
+    }
     if (q.includes('jwt') || q.includes('token') || q.includes('bearer')) {
       return {
         pattern: 'eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+',
@@ -372,16 +515,28 @@ class RegexService {
 
   public generateSnippet(pattern: string, flags: string, language: 'typescript' | 'python' | 'go' | 'rust'): string {
     const escaped = pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    const inlineFlags = [
+      flags.includes('i') ? 'i' : '',
+      flags.includes('m') ? 'm' : '',
+      flags.includes('s') ? 's' : '',
+    ].join('')
+    const inlinePrefix = inlineFlags ? `(?${inlineFlags})` : ''
+
+    const pyFlags: string[] = []
+    if (flags.includes('i')) pyFlags.push('re.IGNORECASE')
+    if (flags.includes('m')) pyFlags.push('re.MULTILINE')
+    if (flags.includes('s')) pyFlags.push('re.DOTALL')
+    const pyFlagsExpr = pyFlags.length > 0 ? pyFlags.join(' | ') : '0'
 
     switch (language) {
       case 'typescript':
         return `const regex = new RegExp("${escaped}", "${flags}");\nconst matches = [...text.matchAll(regex)];\nfor (const match of matches) {\n  console.log('Match:', match[0]);\n}`
       case 'python':
-        return `import re\n\npattern = r"${pattern}"\nflags = 0\nmatches = re.finditer(pattern, text)\nfor m in matches:\n    print(f"Match: {m.group(0)}")`
+        return `import re\n\npattern = r"${pattern}"\nflags = ${pyFlagsExpr}\nmatches = re.finditer(pattern, text, flags)\nfor m in matches:\n    print(f"Match: {m.group(0)}")`
       case 'go':
-        return `package main\n\nimport (\n\t"fmt"\n\t"regexp"\n)\n\nfunc main() {\n\tre := regexp.MustCompile(\`${pattern}\`)\n\tmatches := re.FindAllString(text, -1)\n\tfmt.Println(matches)\n}`
+        return `package main\n\nimport (\n\t"fmt"\n\t"regexp"\n)\n\nfunc main() {\n\tre := regexp.MustCompile(\`${inlinePrefix}${pattern}\`)\n\tmatches := re.FindAllString(text, -1)\n\tfmt.Println(matches)\n}`
       case 'rust':
-        return `use regex::Regex;\n\nlet re = Regex::new(r"${pattern}").unwrap();\nfor cap in re.captures_iter(text) {\n    println!("Match: {}", &cap[0]);\n}`
+        return `use regex::Regex;\n\nlet re = Regex::new(r"${inlinePrefix}${pattern}").unwrap();\nfor cap in re.captures_iter(text) {\n    println!("Match: {}", &cap[0]);\n}`
       default:
         return `/${pattern}/${flags}`
     }

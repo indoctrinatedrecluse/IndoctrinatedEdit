@@ -55,6 +55,8 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
   const [activeTab, setActiveTab] = useState<'diff' | 'merge' | 'patch'>('diff')
   const [diffViewMode, setDiffViewMode] = useState<'split' | 'unified'>('split')
   const [gitDiffStatus, setGitDiffStatus] = useState<string>('')
+  const [isComparingGitHead, setIsComparingGitHead] = useState<boolean>(false)
+  const [appliedNotice, setAppliedNotice] = useState<string | null>(null)
   
   // Diff Inputs
   const [origText, setOrigText] = useState<string>(() => activeFileContent || sampleOriginal)
@@ -71,12 +73,16 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
 
   useEffect(() => {
     if (activeFileContent) {
-      setOrigText(activeFileContent)
+      if (!isComparingGitHead) {
+        setOrigText(activeFileContent)
+      } else {
+        setModText(activeFileContent)
+      }
       if (activeFileContent.includes('<<<<<<<') && activeFileContent.includes('>>>>>>>')) {
         setConflictInput(activeFileContent)
       }
     }
-  }, [activeFileContent])
+  }, [activeFileContent, isComparingGitHead])
 
   useEffect(() => {
     const res = diffStudioService.computeDiff(origText, modText)
@@ -91,7 +97,18 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
   const handleResolve = (conflictId: string, resolution: 'accept-current' | 'accept-incoming' | 'accept-both') => {
     const resolved = diffStudioService.resolveConflict(conflictInput, conflictId, resolution)
     setConflictInput(resolved)
-    onApplyToEditor?.(resolved)
+    // Only auto-apply if the active file was the actual source of this conflict text
+    if (activeFileContent && activeFileContent.includes('<<<<<<<') && activeFileContent.includes('>>>>>>>')) {
+      onApplyToEditor?.(resolved)
+    }
+  }
+
+  const handleApplyResolutionToEditor = () => {
+    if (onApplyToEditor) {
+      onApplyToEditor(conflictInput)
+      setAppliedNotice('Applied resolved merge buffer to active editor.')
+      setTimeout(() => setAppliedNotice(null), 2500)
+    }
   }
 
   const handleCompareWithGitHead = async () => {
@@ -113,6 +130,7 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
       if (res.exitCode === 0) {
         setOrigText(res.stdout)
         setModText(activeFileContent || '')
+        setIsComparingGitHead(true)
         setGitDiffStatus(`Comparing HEAD:${relPath} → Working Tree`)
       } else {
         setGitDiffStatus(res.stderr.trim() || 'File not found in Git HEAD')
@@ -254,34 +272,80 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
               </div>
 
               <div className={`diff-lines-container ${diffViewMode}`}>
-                {diffLines.map((line, idx) => (
-                  <div key={idx} className={`diff-line-row ${line.type}`}>
-                    <span className="line-num left">{line.leftLineNumber || ''}</span>
-                    <span className="line-num right">{line.rightLineNumber || ''}</span>
-                    <span className="line-marker">
-                      {line.type === 'added' ? '+' : line.type === 'deleted' ? '-' : line.type === 'modified' ? '~' : ' '}
-                    </span>
-                    <span className="line-text">
-                      {line.type === 'modified' && line.charChanges ? (
-                        <span className="char-diff-wrapper">
-                          <span className="char-left">
-                            {line.charChanges.left?.map((c, cIdx) => (
-                              <span key={cIdx} className={`char-chunk ${c.type}`}>{c.text}</span>
-                            ))}
+                {diffViewMode === 'split' ? (
+                  <div className="diff-split-container">
+                    <div className="split-column left">
+                      <div className="split-column-header">ORIGINAL</div>
+                      {diffLines.map((line, idx) => (
+                        <div key={idx} className={`split-line-row ${line.type === 'added' ? 'empty-placeholder' : line.type}`}>
+                          <span className="line-num">{line.leftLineNumber || ''}</span>
+                          <span className="line-marker">{line.type === 'deleted' ? '-' : line.type === 'modified' ? '~' : ' '}</span>
+                          <span className="line-text">
+                            {line.type === 'modified' && line.charChanges?.left ? (
+                              <span>
+                                {line.charChanges.left.map((c, cIdx) => (
+                                  <span key={cIdx} className={`char-chunk ${c.type}`}>{c.text}</span>
+                                ))}
+                              </span>
+                            ) : (
+                              line.leftContent ?? ''
+                            )}
                           </span>
-                          <span className="char-arrow">➔</span>
-                          <span className="char-right">
-                            {line.charChanges.right?.map((c, cIdx) => (
-                              <span key={cIdx} className={`char-chunk ${c.type}`}>{c.text}</span>
-                            ))}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="split-column right">
+                      <div className="split-column-header">MODIFIED</div>
+                      {diffLines.map((line, idx) => (
+                        <div key={idx} className={`split-line-row ${line.type === 'deleted' ? 'empty-placeholder' : line.type}`}>
+                          <span className="line-num">{line.rightLineNumber || ''}</span>
+                          <span className="line-marker">{line.type === 'added' ? '+' : line.type === 'modified' ? '~' : ' '}</span>
+                          <span className="line-text">
+                            {line.type === 'modified' && line.charChanges?.right ? (
+                              <span>
+                                {line.charChanges.right.map((c, cIdx) => (
+                                  <span key={cIdx} className={`char-chunk ${c.type}`}>{c.text}</span>
+                                ))}
+                              </span>
+                            ) : (
+                              line.rightContent ?? ''
+                            )}
                           </span>
-                        </span>
-                      ) : (
-                        line.rightContent ?? line.leftContent ?? ''
-                      )}
-                    </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  diffLines.map((line, idx) => (
+                    <div key={idx} className={`diff-line-row ${line.type}`}>
+                      <span className="line-num left">{line.leftLineNumber || ''}</span>
+                      <span className="line-num right">{line.rightLineNumber || ''}</span>
+                      <span className="line-marker">
+                        {line.type === 'added' ? '+' : line.type === 'deleted' ? '-' : line.type === 'modified' ? '~' : ' '}
+                      </span>
+                      <span className="line-text">
+                        {line.type === 'modified' && line.charChanges ? (
+                          <span className="char-diff-wrapper">
+                            <span className="char-left">
+                              {line.charChanges.left?.map((c, cIdx) => (
+                                <span key={cIdx} className={`char-chunk ${c.type}`}>{c.text}</span>
+                              ))}
+                            </span>
+                            <span className="char-arrow">➔</span>
+                            <span className="char-right">
+                              {line.charChanges.right?.map((c, cIdx) => (
+                                <span key={cIdx} className={`char-chunk ${c.type}`}>{c.text}</span>
+                              ))}
+                            </span>
+                          </span>
+                        ) : (
+                          line.rightContent ?? line.leftContent ?? ''
+                        )}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -291,7 +355,21 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
         {activeTab === 'merge' && (
           <div className="merge-section">
             <div className="merge-instructions glass-panel">
-              <div className="inst-title">GIT MERGE CONFLICT RESOLVER</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="inst-title">GIT MERGE CONFLICT RESOLVER</div>
+                {onApplyToEditor && (
+                  <button
+                    className="c-btn accept-current"
+                    onClick={handleApplyResolutionToEditor}
+                    title="Apply the current merge buffer to your active editor file"
+                  >
+                    Apply to Active Editor
+                  </button>
+                )}
+              </div>
+              {appliedNotice && (
+                <div style={{ color: '#30D158', fontSize: 11, marginTop: 4 }}>{appliedNotice}</div>
+              )}
               <p className="inst-desc">
                 Paste file content containing conflict markers (<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>) to inspect and resolve conflicts with one click.
               </p>

@@ -17,9 +17,13 @@ interface HexInspectorViewProps {
   activeFileContent?: string
 }
 
-const sampleBinaryBytes = new TextEncoder().encode(
-  `\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00>\x00\x01\x00\x00\x00\x80\x10@\x00\x00\x00\x00\x00IndoctrinatedEdit Binary Inspector`
-)
+const sampleBinaryBytes = new Uint8Array([
+  0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x02, 0x00, 0x3e, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x80, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ...new TextEncoder().encode('IndoctrinatedEdit Binary Inspector'),
+])
 
 const ROWS_PER_PAGE = 64
 
@@ -104,7 +108,7 @@ export const HexInspectorView: React.FC<HexInspectorViewProps> = ({
     const set = new Set<number>()
     if (searchMatches.length === 0) return set
     const matchLen = searchIsHex
-      ? Math.max(1, (searchQuery.replace(/\s+/g, '').length / 2) | 0)
+      ? Math.max(1, Math.floor(searchQuery.replace(/[^0-9a-fA-F]/g, '').length / 2))
       : Math.max(1, new TextEncoder().encode(searchQuery).length)
     for (const startOffset of searchMatches) {
       for (let i = 0; i < matchLen; i++) set.add(startOffset + i)

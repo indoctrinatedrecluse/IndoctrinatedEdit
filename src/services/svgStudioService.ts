@@ -19,6 +19,11 @@ export interface SvgSpriteSymbol {
   content: string
 }
 
+export interface SvgPathCommand {
+  type: 'M' | 'L' | 'C' | 'Q' | 'Z'
+  values: number[]
+}
+
 class SvgStudioService {
   private defaultSampleSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
   <!-- Indoctrinated Shield Neo-Glow Icon -->
@@ -190,6 +195,52 @@ export const ${componentName}: React.FC<${componentName}Props> = ({ size, ...pro
       .join('\n')
 
     return `<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">\n${symbolTags}\n</svg>`
+  }
+
+  /**
+   * Parse absolute SVG path commands (M, L, C, Q, Z) for interactive Bezier/anchor editing.
+   */
+  public parsePathCommands(d: string): SvgPathCommand[] {
+    const cmds: SvgPathCommand[] = []
+    const tokenRe = /([MLCQZmlcqz])([^MLCQZmlcqz]*)/g
+    let m: RegExpExecArray | null
+    let curX = 0
+    let curY = 0
+
+    while ((m = tokenRe.exec(d)) !== null) {
+      const rawType = m[1]
+      const upper = rawType.toUpperCase() as SvgPathCommand['type']
+      const isRel = rawType !== upper
+      const nums = (m[2].match(/[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g) || []).map(Number)
+
+      if (upper === 'Z') {
+        cmds.push({ type: 'Z', values: [] })
+        continue
+      }
+      const arity = upper === 'C' ? 6 : upper === 'Q' ? 4 : 2
+      for (let i = 0; i + arity <= nums.length; i += arity) {
+        const chunk = nums.slice(i, i + arity)
+        if (isRel) {
+          for (let k = 0; k < chunk.length; k += 2) {
+            chunk[k] += curX
+            chunk[k + 1] += curY
+          }
+        }
+        curX = chunk[chunk.length - 2]
+        curY = chunk[chunk.length - 1]
+        cmds.push({ type: upper === 'M' && i > 0 ? 'L' : upper, values: chunk.map((v) => Math.round(v * 10) / 10) })
+      }
+    }
+    return cmds
+  }
+
+  /**
+   * Serialize parsed SvgPathCommand[] back to an SVG `d` attribute string.
+   */
+  public serializePathCommands(cmds: SvgPathCommand[]): string {
+    return cmds
+      .map((c) => (c.type === 'Z' ? 'Z' : `${c.type} ${c.values.map((v) => Math.round(v * 10) / 10).join(' ')}`))
+      .join(' ')
   }
 }
 
