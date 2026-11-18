@@ -61,6 +61,7 @@ export const JsonStudioView: React.FC = () => {
   // Transform state
   const [transFrom, setTransFrom] = useState<'json' | 'yaml'>('json')
   const [transTo, setTransTo] = useState<'json' | 'yaml' | 'csv' | 'xml'>('yaml')
+  const [transformInput, setTransformInput] = useState<string>('')
 
   // Expanded Tree Nodes (matches buildJsonTree root id "$_root")
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({ $_root: true })
@@ -98,10 +99,11 @@ export const JsonStudioView: React.FC = () => {
     }
   }, [parsedData, schemaText])
 
-  // Transformed output
+  // Transformed output (uses custom transformInput when transFrom === 'yaml' or edited)
+  const effectiveTransformInput = transFrom === 'yaml' && transformInput.trim() ? transformInput : (transformInput.trim() ? transformInput : rawJson)
   const transformedOutput = useMemo(() => {
-    return jsonStudioService.transformFormat(rawJson, transFrom, transTo)
-  }, [rawJson, transFrom, transTo])
+    return jsonStudioService.transformFormat(effectiveTransformInput, transFrom, transTo)
+  }, [effectiveTransformInput, transFrom, transTo])
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text)
@@ -214,7 +216,7 @@ export const JsonStudioView: React.FC = () => {
 
             <div className="jq-presets-bar">
               <span className="presets-label">QUICK:</span>
-              {['.', '.users', '.users[].name', '.features', '.features | length', 'keys'].map((q) => (
+              {['.', '.users[].name', '.users | map(.role)', '.users | select(.id == 1)', '.features | length', 'keys', 'to_entries'].map((q) => (
                 <button
                   key={q}
                   className="preset-chip glass-interactive"
@@ -229,7 +231,7 @@ export const JsonStudioView: React.FC = () => {
               <div className="json-input-box glass-panel">
                 <div className="panel-head">
                   <span>INPUT JSON</span>
-                  {!parsedData && <span className="syntax-err">Syntax Error</span>}
+                  {!parsedState.ok && <span className="syntax-err">Syntax Error</span>}
                 </div>
                 <textarea
                   className="json-textarea"
@@ -274,7 +276,7 @@ export const JsonStudioView: React.FC = () => {
               <span>HIERARCHICAL TREE EXPLORER</span>
               <button
                 className="expand-all-btn glass-interactive"
-                onClick={() => setExpandedNodes({ $: true })}
+                onClick={() => setExpandedNodes({ $_root: true })}
               >
                 Reset Collapse
               </button>
@@ -360,6 +362,19 @@ export const JsonStudioView: React.FC = () => {
                 {copiedKey === 'transform_copy' ? <Check size={11} color="#30D158" /> : <Copy size={11} />}
                 <span>Copy Output</span>
               </button>
+            </div>
+
+            <div className="json-input-box glass-panel" style={{ marginBottom: '8px' }}>
+              <div className="panel-head">
+                <span>SOURCE {transFrom.toUpperCase()} INPUT (leave blank to use main JSON)</span>
+              </div>
+              <textarea
+                className="json-textarea"
+                value={transformInput}
+                onChange={(e) => setTransformInput(e.target.value)}
+                placeholder={transFrom === 'yaml' ? 'name: IndoctrinatedEdit\nversion: 5.3.0\nfeatures:\n  - lsp\n  - git' : 'Using main JSON payload...'}
+                rows={4}
+              />
             </div>
 
             <div className="transformed-box glass-panel">

@@ -22,6 +22,7 @@ import { sanitizeHtml, sanitizeSvg, escapeHtml } from '../../utils/security'
 import './LivePreviewView.css'
 
 interface LivePreviewViewProps {
+  activeFilePath?: string
   activeFileName?: string
   activeFileContent?: string
   onClose?: () => void
@@ -31,6 +32,7 @@ interface LivePreviewViewProps {
 type ViewportMode = 'full' | 'desktop' | 'tablet' | 'mobile'
 
 export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
+  activeFilePath,
   activeFileName = 'README.md',
   activeFileContent = '',
 }) => {
@@ -54,35 +56,78 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
   const [docxRawText, setDocxRawText] = useState<string>('')
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const pdfIframeRef = useRef<HTMLIFrameElement | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
 
-  // Update preview on content change
+  // Update preview on content or active file path change
   useEffect(() => {
     let isCancelled = false
     const type = previewService.getPreviewType(activeFileName)
     setPreviewType(type)
 
+    // Revoke any previous PDF Blob URL to prevent memory leaks
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current)
+      blobUrlRef.current = null
+    }
+
     if (type === 'pdf') {
-      const res = previewService.renderPdf(activeFileContent || samplePdfDataUrl, activeFileName)
-      if (!isCancelled) {
+      const loadPdf = async () => {
+        let source: string | ArrayBuffer = activeFileContent || samplePdfDataUrl
+        if (activeFilePath && window.electronAPI?.workspace?.readFileBinary) {
+          try {
+            const bytes = await window.electronAPI.workspace.readFileBinary(activeFilePath, 25 * 1024 * 1024)
+            if (bytes && bytes.length > 0) {
+              const copy = new Uint8Array(bytes.length)
+              copy.set(bytes)
+              source = copy.buffer
+            }
+          } catch {
+            // Fall back to string content
+          }
+        }
+        const res = previewService.renderPdf(source, activeFileName)
+        if (isCancelled) {
+          if (res.pdfUrl.startsWith('blob:')) URL.revokeObjectURL(res.pdfUrl)
+          return
+        }
+        if (res.pdfUrl.startsWith('blob:')) {
+          blobUrlRef.current = res.pdfUrl
+        }
         setPdfUrl(res.pdfUrl)
         setMetadata(res.metadata)
         setPdfExtractedText(res.extractedText)
       }
+      loadPdf()
     } else if (type === 'docx') {
-      previewService
-        .renderDocx(activeFileContent || sampleDocxPlaceholder, activeFileName)
-        .then((res) => {
+      const loadDocx = async () => {
+        let source: string | ArrayBuffer = activeFileContent || sampleDocxPlaceholder
+        if (activeFilePath && window.electronAPI?.workspace?.readFileBinary) {
+          try {
+            const bytes = await window.electronAPI.workspace.readFileBinary(activeFilePath, 25 * 1024 * 1024)
+            if (bytes && bytes.length > 0) {
+              const copy = new Uint8Array(bytes.length)
+              copy.set(bytes)
+              source = copy.buffer
+            }
+          } catch {
+            // Fall back to string content
+          }
+        }
+        try {
+          const res = await previewService.renderDocx(source, activeFileName)
           if (!isCancelled) {
             setRenderedHtml(res.html)
             setMetadata(res.metadata)
             setDocxRawText(res.textContent)
           }
-        })
-        .catch((err) => {
+        } catch (err) {
           if (!isCancelled) {
             setRenderedHtml(`<div class="docx-error glass-panel"><p>Error reading Word document: ${escapeHtml(String(err))}</p></div>`)
           }
-        })
+        }
+      }
+      loadDocx()
     } else if (type === 'html') {
       const content = activeFileContent || sampleHtml
       setRenderedHtml(content)
@@ -115,8 +160,12 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
 
     return () => {
       isCancelled = true
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
     }
-  }, [activeFileName, activeFileContent])
+  }, [activeFilePath, activeFileName, activeFileContent])
 
   const copyRenderedContent = () => {
     const textToCopy =
@@ -132,7 +181,37 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
   }
 
   const handlePrint = () => {
-    window.print()
+    if (previewType === 'pdf' && pdfIframeRef.current?.contentWindow) {
+      pdfIframeRef.current.contentWindow.print()
+      return
+    }
+    if (previewType === 'html' && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.print()
+      return
+    }
+    // Print rendered DOCX / Markdown / SVG in an isolated hidden iframe so we don't print the entire IDE chrome
+    const printFrame = document.createElement('iframe')
+    printFrame.style.position = 'fixed'
+    printFrame.style.right = '0'
+    printFrame.style.bottom = '0'
+    printFrame.style.width = '0'
+    printFrame.style.height = '0'
+    printFrame.style.border = '0'
+    document.body.appendChild(printFrame)
+    const doc = printFrame.contentDocument
+    if (doc) {
+      doc.open()
+      doc.write(`<!DOCTYPE html><html><head><title>${escapeHtml(activeFileName)}</title><style>body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#111;line-height:1.5;}pre{background:#f3f4f6;padding:12px;border-radius:6px;overflow:auto;}svg{max-width:100%;}</style></head><body>${previewType === 'svg' ? sanitizeSvg(renderedHtml) : sanitizeHtml(renderedHtml)}</body></html>`)
+      doc.close()
+      setTimeout(() => {
+        printFrame.contentWindow?.focus()
+        printFrame.contentWindow?.print()
+        setTimeout(() => printFrame.remove(), 1000)
+      }, 100)
+    } else {
+      printFrame.remove()
+      window.print()
+    }
   }
 
   const getViewportWidth = (): string => {
@@ -382,6 +461,7 @@ export const LivePreviewView: React.FC<LivePreviewViewProps> = ({
               >
                 {pdfUrl ? (
                   <iframe
+                    ref={pdfIframeRef}
                     title={`PDF Viewer - ${activeFileName}`}
                     src={`${pdfUrl}#toolbar=1&navpanes=1`}
                     className="pdf-embed-frame glass-panel"

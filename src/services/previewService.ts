@@ -213,7 +213,7 @@ class PreviewService {
       return this.renderFlowchartSvg(lines)
     } else if (type === 'sequence') {
       return this.renderSequenceSvg(lines)
-    } else if (type === 'class' || type === 'er') {
+    } else if (type === 'class') {
       return this.renderClassDiagramSvg(lines)
     } else {
       return this.renderGenericDiagramSvg(lines, type)
@@ -369,11 +369,11 @@ class PreviewService {
     const messages: { from: string; to: string; text: string }[] = []
 
     for (const line of lines) {
-      const actorMatch = line.match(/^actor\s+([A-Za-z0-9_]+)/i) || line.match(/^participant\s+([A-Za-z0-9_]+)/i)
+      const actorMatch = line.match(/^(?:actor|participant)\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?/i)
       if (actorMatch) {
         if (!actors.includes(actorMatch[1])) actors.push(actorMatch[1])
       }
-      const msgMatch = line.match(/([A-Za-z0-9_]+)\s*->>\s*([A-Za-z0-9_]+)\s*:\s*(.*)/)
+      const msgMatch = line.match(/([A-Za-z0-9_]+)\s*(?:->>|-->>|->|-->)\s*([A-Za-z0-9_]+)\s*:\s*(.*)/)
       if (msgMatch) {
         messages.push({ from: msgMatch[1], to: msgMatch[2], text: msgMatch[3] })
         if (!actors.includes(msgMatch[1])) actors.push(msgMatch[1])
@@ -425,29 +425,231 @@ class PreviewService {
     </svg>`
   }
 
-  private renderClassDiagramSvg(_lines: string[]): string {
-    return `<svg viewBox="0 0 450 140" width="100%" height="140" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">
-      <g transform="translate(40, 20)">
-        <rect width="160" height="90" rx="8" fill="rgba(255, 214, 10, 0.12)" stroke="#FFD60A" stroke-width="1.4" />
-        <rect width="160" height="26" fill="rgba(255, 214, 10, 0.25)" />
-        <text x="80" y="18" fill="#FFF" font-size="12" font-weight="bold" text-anchor="middle">&lt;&lt;Entity&gt;&gt; User</text>
-        <text x="12" y="46" fill="#94A3B8" font-size="10">+ id: UUID [PK]</text>
-        <text x="12" y="62" fill="#94A3B8" font-size="10">+ email: string</text>
-        <text x="12" y="78" fill="#94A3B8" font-size="10">+ role: Role</text>
-      </g>
-      <g transform="translate(250, 20)">
-        <rect width="160" height="90" rx="8" fill="rgba(100, 210, 255, 0.12)" stroke="#64D2FF" stroke-width="1.4" />
-        <rect width="160" height="26" fill="rgba(100, 210, 255, 0.25)" />
-        <text x="80" y="18" fill="#FFF" font-size="12" font-weight="bold" text-anchor="middle">&lt;&lt;Entity&gt;&gt; Session</text>
-        <text x="12" y="46" fill="#94A3B8" font-size="10">+ token: string [PK]</text>
-        <text x="12" y="62" fill="#94A3B8" font-size="10">+ userId: UUID [FK]</text>
-        <text x="12" y="78" fill="#94A3B8" font-size="10">+ expiresAt: Date</text>
-      </g>
-      <line x1="200" y1="65" x2="250" y2="65" stroke="#FFF" stroke-width="1.5" stroke-dasharray="3 3" />
-    </svg>`
+  private renderClassDiagramSvg(lines: string[]): string {
+    const classes: Array<{ name: string; members: string[] }> = []
+    const relations: Array<{ from: string; to: string; kind: string }> = []
+    let currentClass: { name: string; members: string[] } | null = null
+
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (!line || line.startsWith('classDiagram') || line.startsWith('%%')) continue
+      const clsStart = line.match(/^class\s+([A-Za-z0-9_]+)\s*\{?$/)
+      if (clsStart) {
+        currentClass = { name: clsStart[1], members: [] }
+        classes.push(currentClass)
+        continue
+      }
+      if (line === '}' && currentClass) {
+        currentClass = null
+        continue
+      }
+      if (currentClass) {
+        currentClass.members.push(line)
+        continue
+      }
+      const rel = line.match(/^([A-Za-z0-9_]+)\s*(<\|--|--\|>|<\|\.\.|\.\.\|>|-->|--)\s*([A-Za-z0-9_]+)/)
+      if (rel) {
+        relations.push({ from: rel[1], to: rel[3], kind: rel[2] })
+        if (!classes.some((c) => c.name === rel[1])) classes.push({ name: rel[1], members: [] })
+        if (!classes.some((c) => c.name === rel[3])) classes.push({ name: rel[3], members: [] })
+      }
+    }
+
+    if (classes.length === 0) {
+      classes.push({ name: 'EmptyClass', members: ['+init()'] })
+    }
+
+    const boxW = 190
+    const gapX = 220
+    const maxMembers = Math.max(2, ...classes.map((c) => c.members.length))
+    const boxH = 38 + Math.min(maxMembers, 10) * 16 + 10
+    const svgW = Math.max(460, 40 + classes.length * gapX + 40)
+    const svgH = Math.max(150, boxH + 60)
+    const palette = ['#FFD60A', '#64D2FF', '#BF5AF2', '#30D158', '#FF9F0A']
+
+    let relSvg = ''
+    relations.forEach((r) => {
+      const i1 = classes.findIndex((c) => c.name === r.from)
+      const i2 = classes.findIndex((c) => c.name === r.to)
+      if (i1 !== -1 && i2 !== -1) {
+        const x1 = 30 + i1 * gapX + boxW / 2
+        const x2 = 30 + i2 * gapX + boxW / 2
+        const y = 24 + boxH
+        relSvg += `<path d="M ${x1} ${y} C ${x1} ${y + 24}, ${x2} ${y + 24}, ${x2} ${y}" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="${r.kind.includes('.') ? '4 3' : ''}" />`
+      }
+    })
+
+    let boxesSvg = ''
+    classes.forEach((c, idx) => {
+      const x = 30 + idx * gapX
+      const color = palette[idx % palette.length]
+      const membersText = c.members
+        .slice(0, 10)
+        .map((m, mi) => `<text x="10" y="${46 + mi * 16}" fill="#CBD5E1" font-size="10.5" font-family="monospace">${this.escapeHtml(m.slice(0, 26))}</text>`)
+        .join('')
+      boxesSvg += `
+        <g transform="translate(${x}, 20)">
+          <rect width="${boxW}" height="${boxH}" rx="8" fill="rgba(15, 23, 42, 0.75)" stroke="${color}" stroke-width="1.4" />
+          <rect width="${boxW}" height="28" rx="8" fill="${color}33" />
+          <text x="${boxW / 2}" y="19" fill="#FFF" font-size="12" font-weight="bold" text-anchor="middle">${this.escapeHtml(c.name)}</text>
+          ${membersText}
+        </g>`
+    })
+
+    return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">${relSvg}${boxesSvg}</svg>`
   }
 
   private renderGenericDiagramSvg(lines: string[], type: string): string {
+    // Parse real ER entities, State transitions, or GitGraph commits dynamically!
+    if (type === 'er') {
+      const entities: Array<{ name: string; fields: string[] }> = []
+      const rels: Array<{ a: string; b: string; label: string }> = []
+      let cur: { name: string; fields: string[] } | null = null
+      for (const raw of lines) {
+        const l = raw.trim()
+        if (!l || l.startsWith('erDiagram')) continue
+        const entStart = l.match(/^([A-Za-z0-9_]+)\s*\{$/)
+        if (entStart) {
+          cur = { name: entStart[1], fields: [] }
+          entities.push(cur)
+          continue
+        }
+        if (l === '}' && cur) {
+          cur = null
+          continue
+        }
+        if (cur) {
+          cur.fields.push(l)
+          continue
+        }
+        const rel = l.match(/^([A-Za-z0-9_]+)\s+[|o}{.-]+\s+([A-Za-z0-9_]+)\s*:\s*(.*)$/)
+        if (rel) {
+          rels.push({ a: rel[1], b: rel[2], label: rel[3] })
+          if (!entities.some((e) => e.name === rel[1])) entities.push({ name: rel[1], fields: [] })
+          if (!entities.some((e) => e.name === rel[2])) entities.push({ name: rel[2], fields: [] })
+        }
+      }
+      if (entities.length > 0) {
+        const boxW = 175
+        const gap = 205
+        const maxF = Math.max(2, ...entities.map((e) => e.fields.length))
+        const boxH = 34 + Math.min(maxF, 8) * 15 + 10
+        const svgW = Math.max(460, 30 + entities.length * gap + 30)
+        const svgH = Math.max(150, boxH + 65)
+        const relSvg = rels
+          .map((r) => {
+            const i1 = entities.findIndex((e) => e.name === r.a)
+            const i2 = entities.findIndex((e) => e.name === r.b)
+            if (i1 === -1 || i2 === -1) return ''
+            const x1 = 24 + i1 * gap + boxW / 2
+            const x2 = 24 + i2 * gap + boxW / 2
+            const y = 22 + boxH
+            return `<path d="M ${x1} ${y} Q ${(x1 + x2) / 2} ${y + 32} ${x2} ${y}" fill="none" stroke="#30D158" stroke-width="1.4" />
+              <text x="${(x1 + x2) / 2}" y="${y + 24}" fill="#94A3B8" font-size="9.5" text-anchor="middle">${this.escapeHtml(r.label)}</text>`
+          })
+          .join('')
+        const entSvg = entities
+          .map((e, idx) => {
+            const x = 24 + idx * gap
+            const fSvg = e.fields
+              .slice(0, 8)
+              .map((f, fi) => `<text x="10" y="${44 + fi * 15}" fill="#CBD5E1" font-size="10" font-family="monospace">${this.escapeHtml(f.slice(0, 24))}</text>`)
+              .join('')
+            return `<g transform="translate(${x}, 20)">
+              <rect width="${boxW}" height="${boxH}" rx="8" fill="rgba(16, 24, 40, 0.8)" stroke="#30D158" stroke-width="1.3" />
+              <rect width="${boxW}" height="26" rx="8" fill="rgba(48, 209, 88, 0.2)" />
+              <text x="${boxW / 2}" y="17" fill="#FFF" font-size="11.5" font-weight="bold" text-anchor="middle">${this.escapeHtml(e.name)}</text>
+              ${fSvg}
+            </g>`
+          })
+          .join('')
+        return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">${relSvg}${entSvg}</svg>`
+      }
+    }
+
+    if (type === 'state') {
+      const states: string[] = []
+      const transitions: Array<{ from: string; to: string; label?: string }> = []
+      for (const raw of lines) {
+        const m = raw.trim().match(/^(\[\*\]|[A-Za-z0-9_]+)\s*-->\s*(\[\*\]|[A-Za-z0-9_]+)(?:\s*:\s*(.*))?$/)
+        if (m) {
+          const from = m[1] === '[*]' ? 'Start' : m[1]
+          const to = m[2] === '[*]' ? 'End' : m[2]
+          transitions.push({ from, to, label: m[3] })
+          if (!states.includes(from)) states.push(from)
+          if (!states.includes(to)) states.push(to)
+        }
+      }
+      if (states.length > 0) {
+        const gap = 155
+        const svgW = Math.max(460, 40 + states.length * gap)
+        const svgH = 150
+        const edgeSvg = transitions
+          .map((t) => {
+            const i1 = states.indexOf(t.from)
+            const i2 = states.indexOf(t.to)
+            const x1 = 30 + i1 * gap + 60
+            const x2 = 30 + i2 * gap + 60
+            const y = 72
+            return `<path d="M ${x1} ${y} Q ${(x1 + x2) / 2} ${i1 < i2 ? 24 : 122} ${x2} ${y}" fill="none" stroke="#BF5AF2" stroke-width="1.5" />`
+          })
+          .join('')
+        const nodeSvg = states
+          .map((s, i) => `<g transform="translate(${30 + i * gap}, 52)">
+            <rect width="120" height="38" rx="19" fill="rgba(191, 90, 242, 0.18)" stroke="#BF5AF2" stroke-width="1.4" />
+            <text x="60" y="23" fill="#FFF" font-size="11" font-weight="600" text-anchor="middle">${this.escapeHtml(s.slice(0, 16))}</text>
+          </g>`)
+          .join('')
+        return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">${edgeSvg}${nodeSvg}</svg>`
+      }
+    }
+
+    if (type === 'git') {
+      const commits: Array<{ id: string; branch: string; tag?: string }> = []
+      let curBranch = 'main'
+      const branchTracks = new Map<string, number>([['main', 0]])
+      for (const raw of lines) {
+        const l = raw.trim()
+        const br = l.match(/^(?:branch|checkout)\s+([A-Za-z0-9_/-]+)/)
+        if (br) {
+          curBranch = br[1]
+          if (!branchTracks.has(curBranch)) branchTracks.set(curBranch, branchTracks.size)
+          continue
+        }
+        const cm = l.match(/^commit(?:\s+id:\s*"([^"]+)")?(?:.*tag:\s*"([^"]+)")?/)
+        if (cm) {
+          commits.push({ id: cm[1] || `c${commits.length + 1}`, branch: curBranch, tag: cm[2] })
+        }
+        const mg = l.match(/^merge\s+([A-Za-z0-9_/-]+)(?:\s+id:\s*"([^"]+)")?/)
+        if (mg) {
+          commits.push({ id: mg[2] || `merge ${mg[1]}`, branch: curBranch })
+        }
+      }
+      if (commits.length > 0) {
+        const colors = ['#0A84FF', '#30D158', '#BF5AF2', '#FF9F0A', '#64D2FF']
+        const stepX = 90
+        const svgW = Math.max(460, 50 + commits.length * stepX)
+        const svgH = Math.max(120, 45 + branchTracks.size * 38)
+        let svg = ''
+        commits.forEach((c, idx) => {
+          const lane = branchTracks.get(c.branch) || 0
+          const cx = 44 + idx * stepX
+          const cy = 36 + lane * 36
+          const color = colors[lane % colors.length]
+          if (idx > 0) {
+            const prevLane = branchTracks.get(commits[idx - 1].branch) || 0
+            svg += `<line x1="${44 + (idx - 1) * stepX}" y1="${36 + prevLane * 36}" x2="${cx}" y2="${cy}" stroke="${color}" stroke-width="2" />`
+          }
+          svg += `<circle cx="${cx}" cy="${cy}" r="7" fill="${color}" stroke="#FFF" stroke-width="1.5" />`
+          svg += `<text x="${cx}" y="${cy + 20}" fill="#CBD5E1" font-size="9.5" text-anchor="middle">${this.escapeHtml(c.id.slice(0, 12))}</text>`
+          if (c.tag) {
+            svg += `<text x="${cx}" y="${cy - 12}" fill="#FFD60A" font-size="9" font-weight="bold" text-anchor="middle">${this.escapeHtml(c.tag)}</text>`
+          }
+        })
+        return `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">${svg}</svg>`
+      }
+    }
+
     return `<svg viewBox="0 0 400 100" width="100%" height="100" xmlns="http://www.w3.org/2000/svg" style="background: rgba(0,0,0,0.3); border-radius: 8px;">
       <rect x="20" y="20" width="360" height="60" rx="8" fill="rgba(10, 132, 255, 0.15)" stroke="#0A84FF" stroke-width="1.2" />
       <text x="200" y="45" fill="#64D2FF" font-size="13" font-weight="bold" text-anchor="middle">Mermaid ${type.toUpperCase()} Diagram</text>

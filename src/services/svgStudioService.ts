@@ -76,19 +76,43 @@ class SvgStudioService {
    * Generates a React TypeScript component from SVG markup.
    */
   public generateReactComponent(svgMarkup: string, componentName = 'IconAsset'): string {
-    // Strip HTML comments (invalid in JSX) and convert hyphenated SVG attributes to React camelCase
+    // Strip HTML comments (invalid in JSX), convert multi-hyphen SVG attributes to camelCase, and convert inline style="" to JSX style={{}}
     let jsx = svgMarkup
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/\bclass=/g, 'className=')
       .replace(/\bxmlns:xlink=/g, 'xmlnsXlink=')
       .replace(/\bxlink:href=/g, 'xlinkHref=')
-      .replace(/\b([a-z]+)-([a-z][a-zA-Z]*)=/g, (match, p1, p2) => {
-        if (p1 === 'data' || p1 === 'aria') return match
-        return `${p1}${p2[0].toUpperCase()}${p2.slice(1)}=`
+      .replace(/\bstyle="([^"]*)"/g, (_, styleStr: string) => {
+        const entries = styleStr
+          .split(';')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((decl) => {
+            const idx = decl.indexOf(':')
+            if (idx === -1) return null
+            const k = decl
+              .slice(0, idx)
+              .trim()
+              .replace(/-([a-z])/g, (_, ch) => ch.toUpperCase())
+            const v = decl.slice(idx + 1).trim().replace(/'/g, "\\'")
+            return `${k}: '${v}'`
+          })
+          .filter(Boolean)
+        return `style={{ ${entries.join(', ')} }}`
+      })
+      .replace(/\b([a-z][a-z0-9]*(?:-[a-z0-9]+)+)=/g, (match, attr: string) => {
+        if (attr.startsWith('data-') || attr.startsWith('aria-')) return match
+        const camel = attr.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())
+        return `${camel}=`
       })
 
-    // Inject size -> width/height and {...props} spread cleanly on opening <svg> tag
-    jsx = jsx.replace(/<svg([^>]*)>/, `<svg$1 width={size ?? props.width} height={size ?? props.height} {...props}>`)
+    // Deduplicate width/height on root <svg> before injecting responsive size props
+    jsx = jsx.replace(/<svg([^>]*)>/, (_, attrs: string) => {
+      const cleanedAttrs = attrs
+        .replace(/\s+width\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+height\s*=\s*["'][^"']*["']/gi, '')
+      return `<svg${cleanedAttrs} width={size ?? props.width} height={size ?? props.height} {...props}>`
+    })
 
     return `import React from 'react'
 

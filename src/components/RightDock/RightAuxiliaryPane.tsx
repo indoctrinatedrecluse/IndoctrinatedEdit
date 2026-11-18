@@ -115,7 +115,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   onClose,
   onOpenLicense,
   onCreateNotebook,
-  activeFilePath: _activeFilePath,
+  activeFilePath,
   activeFileName = 'untitled.ts',
   activeFileContent = '',
   currentSelection,
@@ -529,12 +529,17 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <DiagramStudioView
             activeFileName={activeFileName}
             activeFileContent={activeFileContent}
+            workspaceRoot={workspaceRoot}
+            onOpenFile={onOpenFile}
           />
         )}
         {activeTab === 'bundle' && <BundleAnalyzerView workspaceRoot={workspaceRoot} />}
         {activeTab === 'svg' && (
           isUnlocked ? (
-            <SvgStudioView />
+            <SvgStudioView
+              activeFileName={activeFileName}
+              activeFileContent={activeFileContent}
+            />
           ) : (
             <LockedExtensionView
               extensionName="SVG & Asset Studio"
@@ -557,6 +562,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         {activeTab === 'preview' && (
           <LivePreviewView
+            activeFilePath={activeFilePath}
             activeFileName={activeFileName}
             activeFileContent={activeFileContent}
             isDocked={true}
@@ -566,14 +572,17 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         {activeTab === 'diff' && (
           <DiffStudioView
+            activeFilePath={activeFilePath}
             activeFileName={activeFileName}
             activeFileContent={activeFileContent}
+            workspaceRoot={workspaceRoot}
             onApplyToEditor={onReplaceActiveFileContent || onReplaceSelection}
           />
         )}
 
         {activeTab === 'hex' && (
           <HexInspectorView
+            activeFilePath={activeFilePath}
             activeFileName={activeFileName}
             activeFileContent={activeFileContent}
           />

@@ -14,8 +14,10 @@ import { diffStudioService, DiffLine, DiffSummary, MergeConflictBlock } from '..
 import './DiffStudioView.css'
 
 interface DiffStudioViewProps {
+  activeFilePath?: string
   activeFileName?: string
   activeFileContent?: string
+  workspaceRoot?: string
   onApplyToEditor?: (newContent: string) => void
 }
 
@@ -44,12 +46,15 @@ const sampleConflictText = `function authenticateUser(token: string) {
 }`
 
 export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
+  activeFilePath,
   activeFileName = 'welcome.ts',
   activeFileContent = '',
+  workspaceRoot,
   onApplyToEditor,
 }) => {
   const [activeTab, setActiveTab] = useState<'diff' | 'merge' | 'patch'>('diff')
   const [diffViewMode, setDiffViewMode] = useState<'split' | 'unified'>('split')
+  const [gitDiffStatus, setGitDiffStatus] = useState<string>('')
   
   // Diff Inputs
   const [origText, setOrigText] = useState<string>(() => activeFileContent || sampleOriginal)
@@ -87,6 +92,34 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
     const resolved = diffStudioService.resolveConflict(conflictInput, conflictId, resolution)
     setConflictInput(resolved)
     onApplyToEditor?.(resolved)
+  }
+
+  const handleCompareWithGitHead = async () => {
+    if (!activeFilePath || !window.electronAPI?.workspace?.execCommand) {
+      setGitDiffStatus('Open a file inside a Git repository to compare with HEAD.')
+      return
+    }
+    const cwd = workspaceRoot || activeFilePath.replace(/[\\/][^\\/]+$/, '')
+    const normRoot = cwd.replace(/\\/g, '/').replace(/\/$/, '')
+    const normFile = activeFilePath.replace(/\\/g, '/')
+    const relPath = normFile.startsWith(normRoot + '/') ? normFile.slice(normRoot.length + 1) : activeFileName
+    const safeRel = relPath.replace(/["`$]/g, '')
+    setGitDiffStatus('Loading HEAD revision...')
+    try {
+      const res = await window.electronAPI.workspace.execCommand({
+        command: `git show "HEAD:${safeRel}"`,
+        cwd,
+      })
+      if (res.exitCode === 0) {
+        setOrigText(res.stdout)
+        setModText(activeFileContent || '')
+        setGitDiffStatus(`Comparing HEAD:${relPath} → Working Tree`)
+      } else {
+        setGitDiffStatus(res.stderr.trim() || 'File not found in Git HEAD')
+      }
+    } catch (err: any) {
+      setGitDiffStatus(err?.message || 'Git comparison failed')
+    }
   }
 
   const copyToClipboard = (text: string) => {
@@ -156,13 +189,25 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
                 </button>
               </div>
 
-              {diffSummary && (
-                <div className="diff-stats-pill">
-                  <span className="stat-add">+{diffSummary.additions}</span>
-                  <span className="stat-del">-{diffSummary.deletions}</span>
-                  <span className="stat-mod">~{diffSummary.modifications}</span>
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  className="copy-btn glass-interactive"
+                  onClick={handleCompareWithGitHead}
+                  title="Load Git HEAD version of active file into Original pane and compare against working buffer"
+                >
+                  <GitCompare size={11} /> Compare vs Git HEAD
+                </button>
+                {gitDiffStatus && (
+                  <span style={{ fontSize: '0.68rem', color: '#64D2FF' }}>{gitDiffStatus}</span>
+                )}
+                {diffSummary && (
+                  <div className="diff-stats-pill">
+                    <span className="stat-add">+{diffSummary.additions}</span>
+                    <span className="stat-del">-{diffSummary.deletions}</span>
+                    <span className="stat-mod">~{diffSummary.modifications}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Side-by-Side Text Inputs Accordion */}
@@ -298,6 +343,12 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
                         <div className="branch-tag">HEAD: {c.currentLabel}</div>
                         <pre className="branch-pre">{c.currentText}</pre>
                       </div>
+                      {c.baseText !== undefined && (
+                        <div className="branch-box" style={{ borderColor: 'rgba(100, 210, 255, 0.3)' }}>
+                          <div className="branch-tag">BASE (common ancestor)</div>
+                          <pre className="branch-pre">{c.baseText}</pre>
+                        </div>
+                      )}
                       <div className="branch-box incoming">
                         <div className="branch-tag">INCOMING: {c.incomingLabel}</div>
                         <pre className="branch-pre">{c.incomingText}</pre>

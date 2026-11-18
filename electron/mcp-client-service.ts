@@ -159,6 +159,16 @@ export class McpStdioSession {
     return Array.isArray(res?.prompts) ? res.prompts : []
   }
 
+  public async readResource(uri: string): Promise<any> {
+    await this.initialize()
+    return this.sendRequest('resources/read', { uri })
+  }
+
+  public async getPrompt(name: string, args: Record<string, string> = {}): Promise<any> {
+    await this.initialize()
+    return this.sendRequest('prompts/get', { name, arguments: args })
+  }
+
   public async callTool(name: string, args: Record<string, any> = {}): Promise<any> {
     await this.initialize()
     return this.sendRequest('tools/call', { name, arguments: args })
@@ -244,6 +254,107 @@ class McpClientManager {
     }
   }
 
+  public async readResource(
+    spec: McpStdioServerSpec,
+    uri: string
+  ): Promise<{ success: boolean; result?: any; error?: string }> {
+    try {
+      const result = await this.getOrCreate(spec).readResource(uri)
+      return { success: true, result }
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) }
+    }
+  }
+
+  public async getPrompt(
+    spec: McpStdioServerSpec,
+    name: string,
+    args: Record<string, string> = {}
+  ): Promise<{ success: boolean; result?: any; error?: string }> {
+    try {
+      const result = await this.getOrCreate(spec).getPrompt(name, args)
+      return { success: true, result }
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) }
+    }
+  }
+
+  /**
+   * CORS-free JSON-RPC 2.0 POST for Streamable-HTTP / SSE MCP endpoints from Electron main process.
+   * Supports both `application/json` and `text/event-stream` (`data: {...}`) responses.
+   */
+  public async httpRpc(options: {
+    url: string
+    headers?: Record<string, string>
+    method: string
+    params?: Record<string, any>
+    timeoutMs?: number
+  }): Promise<{ success: boolean; result?: any; latencyMs?: number; error?: string }> {
+    const start = Date.now()
+    try {
+      const timeoutMs = Math.min(Math.max(options.timeoutMs || 15000, 1000), 120000)
+      const res = await fetch(options.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          ...(options.headers || {}),
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          method: options.method,
+          params: options.params || {},
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      const latencyMs = Date.now() - start
+      if (!res.ok) {
+        return { success: false, latencyMs, error: `HTTP ${res.status}: ${res.statusText}` }
+      }
+      const contentType = res.headers.get('content-type') || ''
+      const rawText = await res.text()
+      let payload: any = null
+      if (contentType.includes('text/event-stream') || rawText.trimStart().startsWith('data:')) {
+        const dataLines = rawText
+          .split(/\r?\n/)
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice(5).trim())
+          .filter((l) => l && l !== '[DONE]')
+        for (let i = dataLines.length - 1; i >= 0; i--) {
+          try {
+            const parsed = JSON.parse(dataLines[i])
+            if (parsed && (parsed.result !== undefined || parsed.error !== undefined)) {
+              payload = parsed
+              break
+            }
+          } catch {
+            // keep scanning SSE frames
+          }
+        }
+      } else {
+        payload = rawText.trim() ? JSON.parse(rawText) : {}
+      }
+      if (!payload) {
+        return { success: true, latencyMs, result: { raw: rawText } }
+      }
+      if (payload.error) {
+        return {
+          success: false,
+          latencyMs,
+          error: payload.error.message || JSON.stringify(payload.error),
+        }
+      }
+      return { success: true, latencyMs, result: payload.result ?? payload }
+    } catch (err: any) {
+      return {
+        success: false,
+        latencyMs: Date.now() - start,
+        error: err?.message || String(err),
+      }
+    }
+  }
+
   public disconnect(serverId: string): boolean {
     const session = this.sessions.get(serverId)
     if (session) {
@@ -269,8 +380,15 @@ export function setupMcpClientIPC(ipcMain: IpcMain): void {
   ipcMain.handle('mcp:listTools', (_, spec: McpStdioServerSpec) => mcpClientManager.listTools(spec))
   ipcMain.handle('mcp:listResources', (_, spec: McpStdioServerSpec) => mcpClientManager.listResources(spec))
   ipcMain.handle('mcp:listPrompts', (_, spec: McpStdioServerSpec) => mcpClientManager.listPrompts(spec))
+  ipcMain.handle('mcp:readResource', (_, spec: McpStdioServerSpec, uri: string) =>
+    mcpClientManager.readResource(spec, uri)
+  )
+  ipcMain.handle('mcp:getPrompt', (_, spec: McpStdioServerSpec, name: string, args?: Record<string, string>) =>
+    mcpClientManager.getPrompt(spec, name, args)
+  )
   ipcMain.handle('mcp:callTool', (_, spec: McpStdioServerSpec, toolName: string, args?: Record<string, any>) =>
     mcpClientManager.callTool(spec, toolName, args)
   )
+  ipcMain.handle('mcp:httpRpc', (_, options) => mcpClientManager.httpRpc(options))
   ipcMain.handle('mcp:disconnect', (_, serverId: string) => mcpClientManager.disconnect(serverId))
 }

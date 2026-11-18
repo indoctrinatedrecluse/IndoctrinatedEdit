@@ -27,12 +27,14 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
   const [scratchpad, setScratchpad] = useState<string>(() => snippetVaultService.getScratchpad())
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // New Snippet Form
+  // New / Edit Snippet Form
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [newTitle, setNewTitle] = useState('')
   const [newLang, setNewLang] = useState('typescript')
   const [newDesc, setNewDesc] = useState('')
   const [newTags, setNewTags] = useState('custom')
   const [newCode, setNewCode] = useState('')
+  const [ioNotice, setIoNotice] = useState<string>('')
 
   const handleScratchpadChange = (text: string) => {
     setScratchpad(text)
@@ -49,20 +51,61 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
     e.preventDefault()
     if (!newTitle.trim() || !newCode.trim()) return
 
-    snippetVaultService.addCustomSnippet({
+    const payload = {
       title: newTitle.trim(),
       language: newLang.trim(),
       description: newDesc.trim() || 'Custom user snippet',
       tags: newTags.split(',').map((t) => t.trim()).filter(Boolean),
       code: newCode.trim(),
-    })
+    }
+
+    if (editingId) {
+      snippetVaultService.updateCustomSnippet(editingId, payload)
+      setEditingId(null)
+    } else {
+      snippetVaultService.addCustomSnippet(payload)
+    }
 
     setSnippets(snippetVaultService.getAllSnippets())
     setNewTitle('')
     setNewDesc('')
     setNewCode('')
-    setNewTags('')
+    setNewTags('custom')
     setActiveTab('snippets')
+  }
+
+  const handleEditSnippet = (s: CodeSnippet) => {
+    setEditingId(s.id)
+    setNewTitle(s.title)
+    setNewLang(s.language)
+    setNewDesc(s.description)
+    setNewTags(s.tags.join(', '))
+    setNewCode(s.code)
+    setActiveTab('new')
+  }
+
+  const handleExportCodeSnippets = () => {
+    const json = snippetVaultService.exportVsCodeSnippets(false)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'indoctrinated.code-snippets'
+    a.click()
+    URL.revokeObjectURL(url)
+    setIoNotice('Exported .code-snippets file')
+    setTimeout(() => setIoNotice(''), 2500)
+  }
+
+  const handleImportCodeSnippets = async () => {
+    if (window.electronAPI?.openFileDialog) {
+      const opened = await window.electronAPI.openFileDialog()
+      if (!opened) return
+      const res = snippetVaultService.importVsCodeSnippets(opened.content)
+      setSnippets(snippetVaultService.getAllSnippets())
+      setIoNotice(res.error ? `Import error: ${res.error}` : `Imported ${res.importedCount} snippet(s)`)
+      setTimeout(() => setIoNotice(''), 3000)
+    }
   }
 
   const handleDeleteSnippet = (id: string) => {
@@ -114,12 +157,35 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
 
         <button
           className={`vault-nav-btn glass-interactive ${activeTab === 'new' ? 'active' : ''}`}
-          onClick={() => setActiveTab('new')}
+          onClick={() => {
+            setEditingId(null)
+            setActiveTab('new')
+          }}
         >
           <Plus size={12} />
-          <span>New Snippet</span>
+          <span>{editingId ? 'Edit Snippet' : 'New Snippet'}</span>
+        </button>
+
+        <button
+          className="vault-nav-btn glass-interactive"
+          onClick={handleImportCodeSnippets}
+          title="Import VS Code .code-snippets JSON file"
+        >
+          <span>Import JSON</span>
+        </button>
+        <button
+          className="vault-nav-btn glass-interactive"
+          onClick={handleExportCodeSnippets}
+          title="Export all snippets as VS Code .code-snippets"
+        >
+          <span>Export JSON</span>
         </button>
       </div>
+      {ioNotice && (
+        <div style={{ padding: '4px 10px', fontSize: '0.7rem', color: '#30D158', background: 'rgba(48, 209, 88, 0.1)', borderBottom: '1px solid rgba(48, 209, 88, 0.25)' }}>
+          {ioNotice}
+        </div>
+      )}
 
       {/* Main Body */}
       <div className="vault-body-viewport">
@@ -189,13 +255,22 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
                           {copiedId === s.id ? <Check size={11} color="#30D158" /> : <Copy size={11} />}
                         </button>
                         {s.isCustom && (
-                          <button
-                            className="snippet-tool-btn delete glass-interactive"
-                            onClick={() => handleDeleteSnippet(s.id)}
-                            title="Delete custom snippet"
-                          >
-                            <Trash2 size={11} />
-                          </button>
+                          <>
+                            <button
+                              className="snippet-tool-btn glass-interactive"
+                              onClick={() => handleEditSnippet(s)}
+                              title="Edit custom snippet"
+                            >
+                              <FileEdit size={11} />
+                            </button>
+                            <button
+                              className="snippet-tool-btn delete glass-interactive"
+                              onClick={() => handleDeleteSnippet(s.id)}
+                              title="Delete custom snippet"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -246,7 +321,7 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
         {/* TAB 3: CREATE CUSTOM SNIPPET */}
         {activeTab === 'new' && (
           <form className="new-snippet-form glass-panel" onSubmit={handleCreateSnippet}>
-            <div className="form-title">CREATE NEW CODE SNIPPET</div>
+            <div className="form-title">{editingId ? 'EDIT CUSTOM SNIPPET' : 'CREATE NEW CODE SNIPPET'}</div>
 
             <div className="form-group">
               <label>Title</label>

@@ -183,6 +183,17 @@ echo "Executing safe script..."`,
     return newSnippet
   }
 
+  public updateCustomSnippet(
+    id: string,
+    updates: Partial<Omit<CodeSnippet, 'id' | 'isCustom' | 'createdAt'>>
+  ): CodeSnippet | null {
+    const idx = this.customSnippets.findIndex((s) => s.id === id)
+    if (idx === -1) return null
+    this.customSnippets[idx] = { ...this.customSnippets[idx], ...updates }
+    this.saveToStorage()
+    return this.customSnippets[idx]
+  }
+
   public deleteCustomSnippet(id: string): boolean {
     const prevLen = this.customSnippets.length
     this.customSnippets = this.customSnippets.filter((s) => s.id !== id)
@@ -191,6 +202,59 @@ echo "Executing safe script..."`,
       return true
     }
     return false
+  }
+
+  /**
+   * Exports all snippets in standard VS Code `.code-snippets` JSON format.
+   */
+  public exportVsCodeSnippets(onlyCustom = false): string {
+    const list = onlyCustom ? this.customSnippets : this.getAllSnippets()
+    const out: Record<string, { scope: string; prefix: string; body: string[]; description: string }> = {}
+    for (const s of list) {
+      out[s.title] = {
+        scope: s.language,
+        prefix: s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        body: s.code.split(/\r?\n/),
+        description: s.description,
+      }
+    }
+    return JSON.stringify(out, null, 2)
+  }
+
+  /**
+   * Imports standard VS Code `.code-snippets` JSON into custom snippets.
+   */
+  public importVsCodeSnippets(jsonText: string): { importedCount: number; error?: string } {
+    try {
+      const parsed = JSON.parse(jsonText)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { importedCount: 0, error: 'Expected a JSON object mapping snippet names to definitions.' }
+      }
+      let importedCount = 0
+      for (const [title, def] of Object.entries(parsed)) {
+        if (!def || typeof def !== 'object') continue
+        const d = def as any
+        const bodyLines = Array.isArray(d.body) ? d.body.join('\n') : typeof d.body === 'string' ? d.body : ''
+        if (!bodyLines.trim()) continue
+        const scopeRaw = String(d.scope || 'typescript').split(',')[0].trim() || 'typescript'
+        const prefixTags = Array.isArray(d.prefix)
+          ? d.prefix.map(String)
+          : typeof d.prefix === 'string' && d.prefix.trim()
+          ? [d.prefix.trim()]
+          : ['imported']
+        this.addCustomSnippet({
+          title,
+          language: scopeRaw,
+          description: String(d.description || 'Imported VS Code snippet'),
+          tags: prefixTags,
+          code: bodyLines,
+        })
+        importedCount++
+      }
+      return { importedCount }
+    } catch (err: any) {
+      return { importedCount: 0, error: err?.message || 'Invalid JSON' }
+    }
   }
 
   public getScratchpad(): string {

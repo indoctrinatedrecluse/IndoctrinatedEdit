@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Copy,
   Check,
@@ -14,13 +14,38 @@ import {
 import { sanitizeSvg } from '../../utils/security'
 import './SvgStudioView.css'
 
-export const SvgStudioView: React.FC = () => {
+interface SvgStudioViewProps {
+  activeFileName?: string
+  activeFileContent?: string
+}
+
+export const SvgStudioView: React.FC<SvgStudioViewProps> = ({
+  activeFileName,
+  activeFileContent,
+}) => {
   const [activeTab, setActiveTab] = useState<'canvas' | 'optimize' | 'export'>('canvas')
-  const [svgInput, setSvgInput] = useState<string>(() => svgStudioService.getDefaultSvg())
+  const [svgInput, setSvgInput] = useState<string>(() =>
+    activeFileName?.toLowerCase().endsWith('.svg') && activeFileContent?.includes('<svg')
+      ? activeFileContent
+      : svgStudioService.getDefaultSvg()
+  )
   const [primaryColor, setPrimaryColor] = useState<string>('#0A84FF')
   const [secondaryColor, setSecondaryColor] = useState<string>('#BF5AF2')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [exportFormat, setExportFormat] = useState<'react' | 'datauri' | 'css' | 'minified'>('react')
+  const [componentName, setComponentName] = useState<string>('CustomVectorIcon')
+
+  useEffect(() => {
+    if (activeFileName?.toLowerCase().endsWith('.svg') && activeFileContent?.includes('<svg')) {
+      setSvgInput(activeFileContent)
+      const base = activeFileName.replace(/\.svg$/i, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim()
+      const pascal = base
+        .split(/\s+/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join('')
+      if (pascal) setComponentName(pascal.endsWith('Icon') ? pascal : `${pascal}Icon`)
+    }
+  }, [activeFileName, activeFileContent])
 
   // Live Recolor SVG
   const displaySvg = useMemo(() => {
@@ -36,7 +61,7 @@ export const SvgStudioView: React.FC = () => {
   const exportedSnippet = useMemo(() => {
     switch (exportFormat) {
       case 'react':
-        return svgStudioService.generateReactComponent(optResult.optimizedSvg, 'NeoShieldIcon')
+        return svgStudioService.generateReactComponent(optResult.optimizedSvg, componentName || 'CustomIcon')
       case 'datauri':
         return svgStudioService.toDataUri(optResult.optimizedSvg)
       case 'css':
@@ -44,7 +69,7 @@ export const SvgStudioView: React.FC = () => {
       case 'minified':
         return optResult.optimizedSvg
     }
-  }, [exportFormat, optResult])
+  }, [exportFormat, optResult, componentName])
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text)
@@ -60,6 +85,29 @@ export const SvgStudioView: React.FC = () => {
     a.download = `optimized_asset_${Date.now()}.svg`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleExportPng = () => {
+    const svgBlob = new Blob([displaySvg], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth || 512
+      canvas.height = img.naturalHeight || 512
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const pngUrl = canvas.toDataURL('image/png')
+        const a = document.createElement('a')
+        a.href = pngUrl
+        a.download = `${componentName || 'asset'}_${Date.now()}.png`
+        a.click()
+      }
+      URL.revokeObjectURL(url)
+    }
+    img.onerror = () => URL.revokeObjectURL(url)
+    img.src = url
   }
 
   return (
@@ -154,6 +202,14 @@ export const SvgStudioView: React.FC = () => {
                 <Download size={12} />
                 <span>Save SVG</span>
               </button>
+              <button
+                className="dl-svg-btn glass-interactive"
+                onClick={handleExportPng}
+                title="Rasterize and download as PNG"
+              >
+                <Download size={12} />
+                <span>Export PNG</span>
+              </button>
             </div>
           </div>
 
@@ -223,6 +279,17 @@ export const SvgStudioView: React.FC = () => {
           <div className="exported-output-card glass-panel">
             <div className="card-top-head">
               <span>{exportFormat.toUpperCase()} Code Snippet</span>
+              {exportFormat === 'react' && (
+                <input
+                  type="text"
+                  value={componentName}
+                  onChange={(e) => setComponentName(e.target.value)}
+                  className="hex-text-input"
+                  style={{ width: '140px', marginLeft: 'auto', marginRight: '8px' }}
+                  placeholder="ComponentName"
+                  title="React TSX Component Name"
+                />
+              )}
               <button
                 className="copy-btn glass-interactive"
                 onClick={() => copyToClipboard(exportedSnippet, 'export_snippet')}

@@ -401,10 +401,13 @@ describe('Terminal terminate entry points are all wired to the same teardown', (
 
   it('tears terminals down when the app window is closed or the app quits', () => {
     const src = mainSrc()
-    const count = src.split('terminalService.killAll()').length - 1
+    const directKillCount = src.split('terminalService.killAll()').length - 1
+    const disposeHelperCalls = src.split('disposeAllSubsystems()').length - 1
 
-    // window:close IPC handler + win.on('close') + before-quit + will-quit + window-all-closed
-    expect(count).toBeGreaterThanOrEqual(5)
+    // Either direct terminalService.killAll() or centralized disposeAllSubsystems() (which calls terminalService.killAll())
+    // must cover: window:close IPC handler + win.on('close') + before-quit + will-quit + window-all-closed
+    expect(directKillCount).toBeGreaterThanOrEqual(2)
+    expect(directKillCount + disposeHelperCalls).toBeGreaterThanOrEqual(5)
     expect(src).toContain("win.on('close'")
     expect(src).toContain("app.on('before-quit'")
     expect(src).toContain("app.on('will-quit'")

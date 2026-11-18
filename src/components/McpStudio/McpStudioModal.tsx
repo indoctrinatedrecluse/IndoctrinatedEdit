@@ -54,8 +54,15 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
   const [rawConfigJson, setRawConfigJson] = useState<string>('')
   const [copiedConfig, setCopiedConfig] = useState<boolean>(false)
 
-  // Ping status
+  // Ping & discovery status
   const [pingingServerId, setPingingServerId] = useState<string | null>(null)
+  const [discoveringServerId, setDiscoveringServerId] = useState<string | null>(null)
+  const [envOrHeadersJson, setEnvOrHeadersJson] = useState<string>('{}')
+
+  // Interactive Resource & Prompt preview
+  const [previewTitle, setPreviewTitle] = useState<string>('')
+  const [previewContent, setPreviewContent] = useState<string>('')
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false)
 
   const refreshData = useCallback(() => {
     const sList = McpService.getServers()
@@ -69,9 +76,11 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
       if (prevId && sList.some((s) => s.id === prevId)) return prevId
       if (sList.length > 0) {
         setEditingServer({ ...sList[0] })
+        setEnvOrHeadersJson(JSON.stringify(sList[0].transport === 'sse' ? (sList[0].headers || {}) : (sList[0].env || {}), null, 2))
         return sList[0].id
       }
       setEditingServer({})
+      setEnvOrHeadersJson('{}')
       return null
     })
   }, [])
@@ -92,6 +101,7 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
   const handleSelectServer = (s: McpServerConfig) => {
     setSelectedServerId(s.id)
     setEditingServer({ ...s })
+    setEnvOrHeadersJson(JSON.stringify(s.transport === 'sse' ? (s.headers || {}) : (s.env || {}), null, 2))
   }
 
   const handleAddNewServer = () => {
@@ -112,11 +122,27 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
     McpService.saveServer(newServer)
     setSelectedServerId(newId)
     setEditingServer({ ...newServer })
+    setEnvOrHeadersJson('{}')
     notificationService.notifySuccess('MCP Studio', `Created server "${newServer.name}"`)
   }
 
   const handleSaveServer = () => {
     if (!selectedServerId || !editingServer.name) return
+    let parsedMap: Record<string, string> = {}
+    if (envOrHeadersJson.trim()) {
+      try {
+        const obj = JSON.parse(envOrHeadersJson)
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          for (const [k, v] of Object.entries(obj)) {
+            parsedMap[k] = String(v)
+          }
+        }
+      } catch (e: any) {
+        notificationService.notifyError('MCP Studio', `Invalid JSON in Env/Headers: ${e.message}`)
+        return
+      }
+    }
+    const isSse = editingServer.transport === 'sse'
     McpService.saveServer({
       id: selectedServerId,
       name: editingServer.name || 'MCP Server',
@@ -124,9 +150,9 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
       transport: editingServer.transport || 'stdio',
       command: editingServer.command || 'npx',
       args: editingServer.args || [],
-      env: editingServer.env || {},
+      env: isSse ? (editingServer.env || {}) : parsedMap,
       url: editingServer.url,
-      headers: editingServer.headers,
+      headers: isSse ? parsedMap : (editingServer.headers || {}),
       enabled: editingServer.enabled !== false,
       timeoutMs: Number(editingServer.timeoutMs) || 15000,
     })
@@ -151,6 +177,47 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
     } else {
       notificationService.notifyError('MCP Ping', `Ping failed: ${res.error}`)
     }
+  }
+
+  const handleDiscoverServer = async (id: string) => {
+    setDiscoveringServerId(id)
+    const res = await McpService.discoverServerCapabilitiesAsync(id)
+    setDiscoveringServerId(null)
+    if (res.success) {
+      notificationService.notifySuccess(
+        'MCP Discovery',
+        `Discovered ${res.tools.length} tool(s), ${res.resources.length} resource(s), ${res.prompts.length} prompt(s).`
+      )
+    } else {
+      notificationService.notifyError('MCP Discovery', res.error || 'Discovery failed')
+    }
+  }
+
+  const handleDisconnectServer = async (id: string) => {
+    await McpService.disconnectServer(id)
+    notificationService.notifyInfo('MCP Studio', `Disconnected server "${id}".`)
+  }
+
+  const handleReadResource = async (r: McpResource) => {
+    setPreviewTitle(`Resource: ${r.uri}`)
+    setPreviewLoading(true)
+    setPreviewContent('')
+    const res = await McpService.readResourceAsync(r.serverId, r.uri)
+    setPreviewLoading(false)
+    setPreviewContent(res.success ? res.content : `Error: ${res.error || 'Failed to read resource'}`)
+  }
+
+  const handleGetPrompt = async (p: McpPrompt) => {
+    setPreviewTitle(`Prompt: ${p.name}`)
+    setPreviewLoading(true)
+    setPreviewContent('')
+    const defaultArgs: Record<string, string> = {}
+    for (const arg of p.arguments || []) {
+      defaultArgs[arg.name] = arg.name === 'targetLanguage' ? 'typescript' : 'conventional'
+    }
+    const res = await McpService.getPromptAsync(p.serverId, p.name, defaultArgs)
+    setPreviewLoading(false)
+    setPreviewContent(res.success ? res.content : `Error: ${res.error || 'Failed to render prompt'}`)
   }
 
   const handleSelectToolForTesting = (tool: McpToolDefinition) => {
@@ -372,11 +439,27 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
                       <div className="form-actions">
                         <button
                           className="secondary-btn-sm"
+                          onClick={() => handleDiscoverServer(selectedServerId)}
+                          disabled={discoveringServerId === selectedServerId}
+                          title="Query tools/list, resources/list, and prompts/list from live server"
+                        >
+                          <Sparkles className={`w-3.5 h-3.5 ${discoveringServerId === selectedServerId ? 'animate-spin' : ''}`} />
+                          <span>{discoveringServerId === selectedServerId ? 'Discovering...' : 'Discover'}</span>
+                        </button>
+                        <button
+                          className="secondary-btn-sm"
                           onClick={() => handlePingServer(selectedServerId)}
                           disabled={pingingServerId === selectedServerId}
                         >
                           <RotateCw className={`w-3.5 h-3.5 ${pingingServerId === selectedServerId ? 'animate-spin' : ''}`} />
-                          <span>{pingingServerId === selectedServerId ? 'Pinging...' : 'Ping Server'}</span>
+                          <span>{pingingServerId === selectedServerId ? 'Pinging...' : 'Ping'}</span>
+                        </button>
+                        <button
+                          className="secondary-btn-sm"
+                          onClick={() => handleDisconnectServer(selectedServerId)}
+                          title="Terminate active stdio session"
+                        >
+                          <span>Disconnect</span>
                         </button>
                         <button
                           className="danger-btn-sm"
@@ -483,6 +566,17 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
                           />
                         </label>
                       )}
+
+                      <label className="form-field full-width">
+                        <span>{editingServer.transport === 'sse' ? 'HTTP Headers (JSON)' : 'Environment Variables (JSON)'}</span>
+                        <textarea
+                          value={envOrHeadersJson}
+                          onChange={(e) => setEnvOrHeadersJson(e.target.value)}
+                          placeholder={editingServer.transport === 'sse' ? '{"Authorization": "Bearer ..."}' : '{"API_KEY": "..."}'}
+                          className="glass-textarea font-mono"
+                          rows={3}
+                        />
+                      </label>
                     </div>
 
                     <div className="form-footer">
@@ -609,47 +703,75 @@ export const McpStudioModal: React.FC<McpStudioModalProps> = ({ isOpen, onClose 
 
           {/* TAB 3: RESOURCES & PROMPTS */}
           {activeTab === 'resources' && (
-            <div className="mcp-resources-view">
-              <div className="resources-column">
-                <div className="section-title">CONTEXT RESOURCES ({resources.length})</div>
-                <div className="resource-list">
-                  {resources.map((r) => (
-                    <div key={r.uri} className="resource-card">
-                      <div className="resource-uri font-mono">{r.uri}</div>
-                      <div className="resource-name">{r.name}</div>
-                      <div className="resource-meta">
-                        <span className="mime-badge">{r.mimeType || 'text/plain'}</span>
-                        <span className="server-badge">{r.serverName}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%' }}>
+              <div className="mcp-resources-view" style={{ flex: 1, minHeight: 0 }}>
+                <div className="resources-column">
+                  <div className="section-title">CONTEXT RESOURCES ({resources.length})</div>
+                  <div className="resource-list">
+                    {resources.map((r) => (
+                      <div key={`${r.serverId}-${r.uri}`} className="resource-card">
+                        <div className="resource-uri font-mono">{r.uri}</div>
+                        <div className="resource-name">{r.name}</div>
+                        <div className="resource-meta" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <span className="mime-badge">{r.mimeType || 'text/plain'}</span>
+                            <span className="server-badge">{r.serverName}</span>
+                          </div>
+                          <button className="secondary-btn-sm" onClick={() => handleReadResource(r)}>
+                            <Play className="w-3 h-3" />
+                            <span>Read</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {resources.length === 0 && (
-                    <div className="empty-text">No resources exposed by active servers.</div>
-                  )}
+                    ))}
+                    {resources.length === 0 && (
+                      <div className="empty-text">No resources exposed by active servers.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="resources-column">
+                  <div className="section-title">PROMPT TEMPLATES ({prompts.length})</div>
+                  <div className="resource-list">
+                    {prompts.map((p) => (
+                      <div key={`${p.serverId}-${p.name}`} className="resource-card">
+                        <div className="prompt-name">{p.name}</div>
+                        <div className="prompt-desc">{p.description}</div>
+                        <div className="resource-meta" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                          <div className="prompt-args">
+                            {p.arguments?.map((a) => (
+                              <span key={a.name} className="arg-tag">
+                                {a.name} {a.required ? '*' : ''}
+                              </span>
+                            ))}
+                          </div>
+                          <button className="secondary-btn-sm" onClick={() => handleGetPrompt(p)}>
+                            <Play className="w-3 h-3" />
+                            <span>Render</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {prompts.length === 0 && (
+                      <div className="empty-text">No prompt templates exposed.</div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="resources-column">
-                <div className="section-title">PROMPT TEMPLATES ({prompts.length})</div>
-                <div className="resource-list">
-                  {prompts.map((p) => (
-                    <div key={p.name} className="resource-card">
-                      <div className="prompt-name">{p.name}</div>
-                      <div className="prompt-desc">{p.description}</div>
-                      <div className="prompt-args">
-                        {p.arguments?.map((a) => (
-                          <span key={a.name} className="arg-tag">
-                            {a.name} {a.required ? '*' : ''}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {prompts.length === 0 && (
-                    <div className="empty-text">No prompt templates exposed.</div>
-                  )}
+              {(previewTitle || previewLoading) && (
+                <div className="output-section" style={{ flexShrink: 0, maxHeight: '190px', overflow: 'auto' }}>
+                  <div className="section-title-row">
+                    <span>{previewTitle || 'LOADING...'}</span>
+                    <button className="secondary-btn-sm" onClick={() => { setPreviewTitle(''); setPreviewContent('') }}>
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <pre className="output-box font-mono" style={{ maxHeight: '130px', overflow: 'auto' }}>
+                    {previewLoading ? 'Fetching from MCP server...' : previewContent}
+                  </pre>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

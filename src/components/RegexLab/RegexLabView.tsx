@@ -119,6 +119,13 @@ export const RegexLabView: React.FC = () => {
         </div>
       </div>
 
+      {result && !result.isValid && result.error && (
+        <div style={{ margin: '0 0 8px 0', padding: '6px 10px', borderRadius: '6px', background: 'rgba(255, 69, 58, 0.14)', border: '1px solid rgba(255, 69, 58, 0.35)', color: '#FF6961', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <AlertTriangle size={12} />
+          <span>Invalid regex pattern: {result.error}</span>
+        </div>
+      )}
+
       {/* Mode Sub-Navigation Tabs */}
       <div
         className="regex-subnav-strip"

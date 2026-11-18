@@ -130,6 +130,7 @@ export interface ElectronWorkspaceToolsAPI {
     duplicates: Array<{ name: string; versions: string[] }>
   }>
   readFileBinary: (filePath: string, maxBytes?: number) => Promise<Uint8Array>
+  writeFileBinary: (filePath: string, bytes: Uint8Array | number[]) => Promise<boolean>
 }
 
 export interface ElectronMcpStdioSpec {
@@ -146,7 +147,10 @@ export interface ElectronMcpAPI {
   listTools: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; tools: any[]; error?: string }>
   listResources: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; resources: any[]; error?: string }>
   listPrompts: (spec: ElectronMcpStdioSpec) => Promise<{ success: boolean; prompts: any[]; error?: string }>
+  readResource: (spec: ElectronMcpStdioSpec, uri: string) => Promise<{ success: boolean; result?: any; error?: string }>
+  getPrompt: (spec: ElectronMcpStdioSpec, name: string, args?: Record<string, string>) => Promise<{ success: boolean; result?: any; error?: string }>
   callTool: (spec: ElectronMcpStdioSpec, toolName: string, args?: Record<string, any>) => Promise<{ success: boolean; result?: any; error?: string }>
+  httpRpc: (options: { url: string; headers?: Record<string, string>; method: string; params?: Record<string, any>; timeoutMs?: number }) => Promise<{ success: boolean; result?: any; latencyMs?: number; error?: string }>
   disconnect: (serverId: string) => Promise<boolean>
 }
 
@@ -546,6 +550,7 @@ const api: ElectronAPI = {
     searchText: (options) => ipcRenderer.invoke('workspace:searchText', options),
     scanBundle: (rootDir) => ipcRenderer.invoke('workspace:scanBundle', rootDir),
     readFileBinary: (filePath, maxBytes) => ipcRenderer.invoke('workspace:readFileBinary', filePath, maxBytes),
+    writeFileBinary: (filePath, bytes) => ipcRenderer.invoke('workspace:writeFileBinary', filePath, bytes),
   },
 
   mcp: {
@@ -553,7 +558,10 @@ const api: ElectronAPI = {
     listTools: (spec) => ipcRenderer.invoke('mcp:listTools', spec),
     listResources: (spec) => ipcRenderer.invoke('mcp:listResources', spec),
     listPrompts: (spec) => ipcRenderer.invoke('mcp:listPrompts', spec),
+    readResource: (spec, uri) => ipcRenderer.invoke('mcp:readResource', spec, uri),
+    getPrompt: (spec, name, args) => ipcRenderer.invoke('mcp:getPrompt', spec, name, args),
     callTool: (spec, toolName, args) => ipcRenderer.invoke('mcp:callTool', spec, toolName, args),
+    httpRpc: (options) => ipcRenderer.invoke('mcp:httpRpc', options),
     disconnect: (serverId) => ipcRenderer.invoke('mcp:disconnect', serverId),
   },
 

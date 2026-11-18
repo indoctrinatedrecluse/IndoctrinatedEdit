@@ -30,6 +30,8 @@ import './DiagramStudioView.css'
 interface DiagramStudioViewProps {
   activeFileName?: string
   activeFileContent?: string
+  workspaceRoot?: string
+  onOpenFile?: (filePath: string) => void
 }
 
 type StudioMode = 'mermaid' | 'depgraph'
@@ -37,6 +39,8 @@ type StudioMode = 'mermaid' | 'depgraph'
 export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
   activeFileName = 'App.tsx',
   activeFileContent = '',
+  workspaceRoot,
+  onOpenFile,
 }) => {
   const [studioMode, setStudioMode] = useState<StudioMode>('depgraph')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('arch_microservices')
@@ -48,15 +52,60 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual')
 
-  // Dependency Graph State
-  const [graphData, _setGraphData] = useState<ArchitectureGraph>(() =>
+  // Dependency Graph State (live workspace scan when workspaceRoot is available)
+  const [graphData, setGraphData] = useState<ArchitectureGraph>(() =>
     architectureGraphService.generateSampleGraph()
   )
+  const [isLiveWorkspaceGraph, setIsLiveWorkspaceGraph] = useState<boolean>(false)
+  const [isScanningGraph, setIsScanningGraph] = useState<boolean>(false)
   const [selectedNode, setSelectedNode] = useState<DependencyNode | null>(null)
   const [filterQuery, setFilterQuery] = useState<string>('')
   const [highlightCircular, setHighlightCircular] = useState<boolean>(true)
+  const [nodeFullPaths, setNodeFullPaths] = useState<Record<string, string>>({})
 
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const handleScanWorkspaceGraph = async () => {
+    if (!workspaceRoot || !window.electronAPI?.workspace?.findFiles || !window.electronAPI?.readFile) {
+      return
+    }
+    setIsScanningGraph(true)
+    try {
+      const files = await window.electronAPI.workspace.findFiles({
+        rootDir: workspaceRoot,
+        maxDepth: 6,
+        maxFiles: 120,
+        includeExtensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py'],
+      })
+      const fileContents: Record<string, string> = {}
+      const fullPathMap: Record<string, string> = {}
+      for (const f of files.slice(0, 90)) {
+        try {
+          const content = await window.electronAPI.readFile(f.path)
+          const key = f.relativePath.replace(/\\/g, '/')
+          fileContents[key] = content
+          fullPathMap[key] = f.path
+        } catch {
+          // skip unreadable files
+        }
+      }
+      if (Object.keys(fileContents).length > 0) {
+        const built = architectureGraphService.buildDependencyGraph(fileContents)
+        setGraphData(built)
+        setNodeFullPaths(fullPathMap)
+        setIsLiveWorkspaceGraph(true)
+        setSelectedNode(null)
+      }
+    } finally {
+      setIsScanningGraph(false)
+    }
+  }
+
+  useEffect(() => {
+    if (workspaceRoot && window.electronAPI?.workspace?.findFiles) {
+      handleScanWorkspaceGraph()
+    }
+  }, [workspaceRoot])
 
   const templates = useMemo(() => {
     return diagramStudioService.getTemplates()
@@ -312,6 +361,17 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
             </div>
 
             <div className="dep-toggles">
+              {workspaceRoot && (
+                <button
+                  className="cycle-toggle-btn active"
+                  onClick={handleScanWorkspaceGraph}
+                  disabled={isScanningGraph}
+                  title="Scan real workspace module imports"
+                >
+                  <Sparkles size={11} />
+                  <span>{isScanningGraph ? 'Scanning...' : isLiveWorkspaceGraph ? 'LIVE · Rescan' : 'Scan Workspace'}</span>
+                </button>
+              )}
               <button
                 className={`cycle-toggle-btn ${highlightCircular ? 'active' : ''}`}
                 onClick={() => setHighlightCircular(!highlightCircular)}
@@ -482,6 +542,16 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
                     <FileQuestion size={11} color="#FF9F0A" />
                     <span>Unreferenced / Orphan File (0 callers)</span>
                   </div>
+                )}
+                {onOpenFile && nodeFullPaths[selectedNode.path] && (
+                  <button
+                    className="cycle-toggle-btn active"
+                    style={{ marginTop: '6px', width: '100%', justifyContent: 'center' }}
+                    onClick={() => onOpenFile(nodeFullPaths[selectedNode.path])}
+                  >
+                    <Code2 size={11} />
+                    <span>Open File in Editor</span>
+                  </button>
                 )}
               </div>
             )}

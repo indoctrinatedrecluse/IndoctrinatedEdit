@@ -382,6 +382,16 @@ export async function readFileBinary(filePath: string, maxBytes = 4 * 1024 * 102
   }
 }
 
+/**
+ * Write raw binary bytes directly to disk without UTF-8 re-encoding (for Hex Inspector saves).
+ */
+export async function writeFileBinary(filePath: string, bytes: Uint8Array | number[]): Promise<boolean> {
+  const buf = bytes instanceof Uint8Array ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength) : Buffer.from(bytes)
+  await fs.mkdir(path.dirname(filePath), { recursive: true })
+  await fs.writeFile(filePath, buf)
+  return true
+}
+
 export function setupWorkspaceToolsIPC(ipcMain: IpcMain): void {
   ipcMain.handle('workspace:execCommand', async (_, options) => {
     return execWorkspaceCommand(options)
@@ -401,6 +411,10 @@ export function setupWorkspaceToolsIPC(ipcMain: IpcMain): void {
 
   ipcMain.handle('workspace:readFileBinary', async (_, filePath: string, maxBytes?: number) => {
     return readFileBinary(filePath, maxBytes)
+  })
+
+  ipcMain.handle('workspace:writeFileBinary', async (_, filePath: string, bytes: Uint8Array | number[]) => {
+    return writeFileBinary(filePath, bytes)
   })
 }
 

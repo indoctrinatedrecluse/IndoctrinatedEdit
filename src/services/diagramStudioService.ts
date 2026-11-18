@@ -165,29 +165,101 @@ class DiagramStudioService {
   }
 
   /**
-   * Generates a Mermaid sequence or class diagram from a source code snippet.
+   * Generates a real Mermaid class or dependency diagram by parsing classes, methods,
+   * interfaces, structs, and imports from source code.
    */
   public generateDiagramFromCode(fileName: string, content: string): string {
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
-    
-    // Class diagram for TypeScript / JavaScript
-    if (ext === 'ts' || ext === 'tsx' || ext === 'js') {
-      const classMatches = Array.from(content.matchAll(/class\s+([A-Za-z0-9_]+)(?:\s+extends\s+([A-Za-z0-9_]+))?/g))
-      const interfaceMatches = Array.from(content.matchAll(/interface\s+([A-Za-z0-9_]+)/g))
+
+    // TypeScript / JavaScript real class & method extractor
+    if (['ts', 'tsx', 'js', 'jsx'].includes(ext)) {
+      const classRegex = /class\s+([A-Za-z0-9_]+)(?:\s+extends\s+([A-Za-z0-9_]+))?(?:\s+implements\s+([A-Za-z0-9_,\s]+))?\s*\{/g
+      const interfaceRegex = /interface\s+([A-Za-z0-9_]+)(?:\s+extends\s+([A-Za-z0-9_,\s]+))?\s*\{/g
+      const classMatches = Array.from(content.matchAll(classRegex))
+      const interfaceMatches = Array.from(content.matchAll(interfaceRegex))
+
+      const extractBlockBody = (startIdx: number): string => {
+        let depth = 0
+        let i = startIdx
+        while (i < content.length) {
+          if (content[i] === '{') depth++
+          else if (content[i] === '}') {
+            depth--
+            if (depth === 0) return content.slice(startIdx + 1, i)
+          }
+          i++
+        }
+        return content.slice(startIdx + 1, Math.min(content.length, startIdx + 2000))
+      }
 
       if (classMatches.length > 0 || interfaceMatches.length > 0) {
         let code = 'classDiagram\n'
         for (const m of classMatches) {
           const className = m[1]
           const extendsName = m[2]
-          code += `    class ${className} {\n        +execute()\n        +dispose()\n    }\n`
-          if (extendsName) {
-            code += `    ${extendsName} <|-- ${className}\n`
+          const body = extractBlockBody((m.index || 0) + m[0].length - 1)
+          const methods = Array.from(
+            body.matchAll(/^\s*(?:(public|private|protected)\s+)?(?:static\s+)?(?:async\s+)?([a-zA-Z_]\w*)\s*\(([^)]*)\)/gm)
+          )
+            .filter((mm) => !['if', 'for', 'while', 'switch', 'catch', 'return'].includes(mm[2]))
+            .slice(0, 12)
+          code += `    class ${className} {\n`
+          if (methods.length > 0) {
+            for (const mm of methods) {
+              const vis = mm[1] === 'private' ? '-' : mm[1] === 'protected' ? '#' : '+'
+              code += `        ${vis}${mm[2]}()\n`
+            }
+          } else {
+            code += `        +constructor()\n`
+          }
+          code += `    }\n`
+          if (extendsName) code += `    ${extendsName} <|-- ${className}\n`
+          if (m[3]) {
+            for (const impl of m[3].split(',').map((s) => s.trim()).filter(Boolean)) {
+              code += `    ${impl} <|.. ${className}\n`
+            }
           }
         }
         for (const m of interfaceMatches) {
           const iface = m[1]
-          code += `    class ${iface} {\n        <<interface>>\n    }\n`
+          const body = extractBlockBody((m.index || 0) + m[0].length - 1)
+          const fields = Array.from(body.matchAll(/^\s*([a-zA-Z_]\w*)\??\s*:\s*([^;\n]+)/gm)).slice(0, 8)
+          code += `    class ${iface} {\n        <<interface>>\n`
+          for (const f of fields) {
+            code += `        +${f[1]}: ${f[2].trim().slice(0, 24)}\n`
+          }
+          code += `    }\n`
+        }
+        return code
+      }
+
+      // Function & import dependency flowchart for functional TS/JS modules
+      const imports = Array.from(content.matchAll(/import\s+.*?from\s+['"]([^'"]+)['"]/g)).map((m) => m[1]).slice(0, 8)
+      const funcs = Array.from(content.matchAll(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/g)).map((m) => m[1]).slice(0, 8)
+      if (imports.length > 0 || funcs.length > 0) {
+        const modId = fileName.replace(/[^a-zA-Z0-9_]/g, '_')
+        let code = `graph TD\n    ${modId}["${fileName}"]\n`
+        imports.forEach((imp, i) => {
+          code += `    imp${i}["${imp}"] --> ${modId}\n`
+        })
+        funcs.forEach((fn, i) => {
+          code += `    ${modId} --> fn${i}["${fn}()"]\n`
+        })
+        return code
+      }
+    }
+
+    // Python real class & def parser
+    if (ext === 'py') {
+      const pyClasses = Array.from(content.matchAll(/^class\s+([A-Za-z0-9_]+)(?:\(([A-Za-z0-9_,\s]*)\))?:/gm))
+      if (pyClasses.length > 0) {
+        let code = 'classDiagram\n'
+        for (const m of pyClasses) {
+          code += `    class ${m[1]} {\n`
+          const defs = Array.from(content.slice(m.index || 0, (m.index || 0) + 1200).matchAll(/^\s+def\s+([A-Za-z0-9_]+)\s*\(/gm)).slice(0, 8)
+          for (const d of defs) code += `        +${d[1]}()\n`
+          code += `    }\n`
+          if (m[2]?.trim()) code += `    ${m[2].split(',')[0].trim()} <|-- ${m[1]}\n`
         }
         return code
       }

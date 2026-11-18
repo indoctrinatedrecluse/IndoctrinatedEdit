@@ -37,97 +37,155 @@ export interface MergeConflictBlock {
 
 class DiffStudioService {
   /**
-   * Compute line-by-line diff between two text strings
+   * Compute optimal line-by-line diff between two text strings using LCS dynamic programming
+   * with fast common prefix/suffix trimming.
    */
   public computeDiff(originalText: string, modifiedText: string): { lines: DiffLine[]; summary: DiffSummary } {
     const origLines = originalText.split(/\r?\n/)
     const modLines = modifiedText.split(/\r?\n/)
 
+    let prefix = 0
+    while (prefix < origLines.length && prefix < modLines.length && origLines[prefix] === modLines[prefix]) {
+      prefix++
+    }
+    let suffix = 0
+    while (
+      suffix < origLines.length - prefix &&
+      suffix < modLines.length - prefix &&
+      origLines[origLines.length - 1 - suffix] === modLines[modLines.length - 1 - suffix]
+    ) {
+      suffix++
+    }
+
+    const aMid = origLines.slice(prefix, origLines.length - suffix)
+    const bMid = modLines.slice(prefix, modLines.length - suffix)
+
+    // Build LCS ops for the differing middle region (with fallback for huge files > 1500 lines)
+    type RawOp = { op: 'eq' | 'del' | 'add'; aIdx?: number; bIdx?: number }
+    const midOps: RawOp[] = []
+
+    if (aMid.length * bMid.length <= 2_500_000) {
+      const n = aMid.length
+      const m = bMid.length
+      const dp = new Int32Array((n + 1) * (m + 1))
+      const stride = m + 1
+      for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+          if (aMid[i] === bMid[j]) {
+            dp[i * stride + j] = dp[(i + 1) * stride + (j + 1)] + 1
+          } else {
+            const down = dp[(i + 1) * stride + j]
+            const right = dp[i * stride + (j + 1)]
+            dp[i * stride + j] = down >= right ? down : right
+          }
+        }
+      }
+      let i = 0
+      let j = 0
+      while (i < n || j < m) {
+        if (i < n && j < m && aMid[i] === bMid[j]) {
+          midOps.push({ op: 'eq', aIdx: prefix + i, bIdx: prefix + j })
+          i++
+          j++
+        } else if (i < n && (j === m || dp[(i + 1) * stride + j] >= dp[i * stride + (j + 1)])) {
+          midOps.push({ op: 'del', aIdx: prefix + i })
+          i++
+        } else {
+          midOps.push({ op: 'add', bIdx: prefix + j })
+          j++
+        }
+      }
+    } else {
+      for (let i = 0; i < aMid.length; i++) midOps.push({ op: 'del', aIdx: prefix + i })
+      for (let j = 0; j < bMid.length; j++) midOps.push({ op: 'add', bIdx: prefix + j })
+    }
+
     const lines: DiffLine[] = []
-    let origIdx = 0
-    let modIdx = 0
     let additions = 0
     let deletions = 0
     let modifications = 0
     let unchanged = 0
 
-    // Build standard line mapping
-    while (origIdx < origLines.length || modIdx < modLines.length) {
-      const origLine = origLines[origIdx]
-      const modLine = modLines[modIdx]
+    for (let k = 0; k < prefix; k++) {
+      lines.push({
+        type: 'unchanged',
+        leftLineNumber: k + 1,
+        rightLineNumber: k + 1,
+        leftContent: origLines[k],
+        rightContent: modLines[k],
+      })
+      unchanged++
+    }
 
-      if (origIdx < origLines.length && modIdx < modLines.length) {
-        if (origLine === modLine) {
-          lines.push({
-            type: 'unchanged',
-            leftLineNumber: origIdx + 1,
-            rightLineNumber: modIdx + 1,
-            leftContent: origLine,
-            rightContent: modLine,
-          })
-          unchanged++
-          origIdx++
-          modIdx++
-        } else {
-          // Lookahead for match
-          const matchMod = modLines.indexOf(origLine, modIdx)
-          const matchOrig = origLines.indexOf(modLine, origIdx)
-
-          if (matchMod !== -1 && (matchOrig === -1 || matchMod - modIdx <= matchOrig - origIdx)) {
-            // Lines added in modified
-            while (modIdx < matchMod) {
-              lines.push({
-                type: 'added',
-                rightLineNumber: modIdx + 1,
-                rightContent: modLines[modIdx],
-              })
-              additions++
-              modIdx++
-            }
-          } else if (matchOrig !== -1) {
-            // Lines deleted from original
-            while (origIdx < matchOrig) {
-              lines.push({
-                type: 'deleted',
-                leftLineNumber: origIdx + 1,
-                leftContent: origLines[origIdx],
-              })
-              deletions++
-              origIdx++
-            }
-          } else {
-            // Line was modified
-            const charDiff = this.computeCharDiff(origLine, modLine)
-            lines.push({
-              type: 'modified',
-              leftLineNumber: origIdx + 1,
-              rightLineNumber: modIdx + 1,
-              leftContent: origLine,
-              rightContent: modLine,
-              charChanges: charDiff,
-            })
-            modifications++
-            origIdx++
-            modIdx++
-          }
-        }
-      } else if (origIdx < origLines.length) {
+    // Coalesce adjacent del+add runs into paired `modified` lines with character diffs
+    let idx = 0
+    while (idx < midOps.length) {
+      const cur = midOps[idx]
+      if (cur.op === 'eq') {
+        lines.push({
+          type: 'unchanged',
+          leftLineNumber: cur.aIdx! + 1,
+          rightLineNumber: cur.bIdx! + 1,
+          leftContent: origLines[cur.aIdx!],
+          rightContent: modLines[cur.bIdx!],
+        })
+        unchanged++
+        idx++
+        continue
+      }
+      const dels: number[] = []
+      const adds: number[] = []
+      while (idx < midOps.length && midOps[idx].op === 'del') {
+        dels.push(midOps[idx].aIdx!)
+        idx++
+      }
+      while (idx < midOps.length && midOps[idx].op === 'add') {
+        adds.push(midOps[idx].bIdx!)
+        idx++
+      }
+      const paired = Math.min(dels.length, adds.length)
+      for (let p = 0; p < paired; p++) {
+        const leftText = origLines[dels[p]]
+        const rightText = modLines[adds[p]]
+        lines.push({
+          type: 'modified',
+          leftLineNumber: dels[p] + 1,
+          rightLineNumber: adds[p] + 1,
+          leftContent: leftText,
+          rightContent: rightText,
+          charChanges: this.computeCharDiff(leftText, rightText),
+        })
+        modifications++
+      }
+      for (let p = paired; p < dels.length; p++) {
         lines.push({
           type: 'deleted',
-          leftLineNumber: origIdx + 1,
-          leftContent: origLines[origIdx],
+          leftLineNumber: dels[p] + 1,
+          leftContent: origLines[dels[p]],
         })
         deletions++
-        origIdx++
-      } else if (modIdx < modLines.length) {
+      }
+      for (let p = paired; p < adds.length; p++) {
         lines.push({
           type: 'added',
-          rightLineNumber: modIdx + 1,
-          rightContent: modLines[modIdx],
+          rightLineNumber: adds[p] + 1,
+          rightContent: modLines[adds[p]],
         })
         additions++
-        modIdx++
       }
+    }
+
+    for (let k = 0; k < suffix; k++) {
+      const aPos = origLines.length - suffix + k
+      const bPos = modLines.length - suffix + k
+      lines.push({
+        type: 'unchanged',
+        leftLineNumber: aPos + 1,
+        rightLineNumber: bPos + 1,
+        leftContent: origLines[aPos],
+        rightContent: modLines[bPos],
+      })
+      unchanged++
     }
 
     const totalLines = origLines.length + modLines.length
@@ -195,25 +253,64 @@ class DiffStudioService {
   }
 
   /**
-   * Generate standard unified patch (.diff / .patch)
+   * Generate standard multi-hunk unified patch (-U3 context) compatible with `git apply`
    */
-  public generateUnifiedPatch(filename: string, originalText: string, modifiedText: string): string {
+  public generateUnifiedPatch(filename: string, originalText: string, modifiedText: string, contextLines = 3): string {
     const diff = this.computeDiff(originalText, modifiedText)
-    const now = new Date().toISOString()
-    const header = [
-      `--- a/${filename}\t${now}`,
-      `+++ b/${filename}\t${now}`,
-      `@@ -1,${originalText.split('\n').length} +1,${modifiedText.split('\n').length} @@`,
-    ]
+    const flat: Array<{ kind: ' ' | '-' | '+'; text: string; oldLine: number; newLine: number }> = []
+    let oldCursor = 1
+    let newCursor = 1
+    for (const l of diff.lines) {
+      if (l.type === 'unchanged') {
+        flat.push({ kind: ' ', text: l.leftContent ?? '', oldLine: oldCursor++, newLine: newCursor++ })
+      } else if (l.type === 'deleted') {
+        flat.push({ kind: '-', text: l.leftContent ?? '', oldLine: oldCursor++, newLine: newCursor })
+      } else if (l.type === 'added') {
+        flat.push({ kind: '+', text: l.rightContent ?? '', oldLine: oldCursor, newLine: newCursor++ })
+      } else if (l.type === 'modified') {
+        flat.push({ kind: '-', text: l.leftContent ?? '', oldLine: oldCursor++, newLine: newCursor })
+        flat.push({ kind: '+', text: l.rightContent ?? '', oldLine: oldCursor, newLine: newCursor++ })
+      }
+    }
 
-    const body = diff.lines.map((l) => {
-      if (l.type === 'added') return `+${l.rightContent ?? ''}`
-      if (l.type === 'deleted') return `-${l.leftContent ?? ''}`
-      if (l.type === 'modified') return `-${l.leftContent ?? ''}\n+${l.rightContent ?? ''}`
-      return ` ${l.leftContent ?? ''}`
+    const changeIndices: number[] = []
+    flat.forEach((f, idx) => {
+      if (f.kind !== ' ') changeIndices.push(idx)
     })
 
-    return [...header, ...body].join('\n')
+    const out: string[] = [`--- a/${filename}`, `+++ b/${filename}`]
+    if (changeIndices.length === 0) return out.join('\n')
+
+    // Group changes within 2*contextLines into standard unified hunks
+    const ranges: Array<[number, number]> = []
+    let hStart = Math.max(0, changeIndices[0] - contextLines)
+    let hEnd = Math.min(flat.length - 1, changeIndices[0] + contextLines)
+    for (let i = 1; i < changeIndices.length; i++) {
+      const nextStart = Math.max(0, changeIndices[i] - contextLines)
+      const nextEnd = Math.min(flat.length - 1, changeIndices[i] + contextLines)
+      if (nextStart <= hEnd + 1) {
+        hEnd = Math.max(hEnd, nextEnd)
+      } else {
+        ranges.push([hStart, hEnd])
+        hStart = nextStart
+        hEnd = nextEnd
+      }
+    }
+    ranges.push([hStart, hEnd])
+
+    for (const [s, e] of ranges) {
+      const slice = flat.slice(s, e + 1)
+      const oldStart = slice[0]?.oldLine ?? 1
+      const newStart = slice[0]?.newLine ?? 1
+      const oldCount = slice.filter((x) => x.kind !== '+').length
+      const newCount = slice.filter((x) => x.kind !== '-').length
+      out.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`)
+      for (const item of slice) {
+        out.push(`${item.kind}${item.text}`)
+      }
+    }
+
+    return out.join('\n')
   }
 
   /**

@@ -1412,7 +1412,7 @@ class CryptoDevToolsService {
       validTo: validToDate.toISOString().split('T')[0],
       isExpired: daysRemaining <= 0,
       daysRemaining,
-      san: commonName !== 'unknown' ? [commonName] : [],
+      san: commonName !== 'unknown' ? [commonName] : isCert ? ['CN unavailable (truncated PEM)'] : [],
       algorithm: 'N/A (Non-DER input)',
       serialNumber: 'N/A',
       fingerprintSha256: this.sha256Hex(clean || 'empty'),

@@ -98,6 +98,46 @@ class JsonStudioService {
           current = [...current].reverse()
         } else if (segment === 'unique' && Array.isArray(current)) {
           current = Array.from(new Set(current.map((v) => JSON.stringify(v)))).map((s) => JSON.parse(s))
+        } else if (segment === 'values') {
+          current = current && typeof current === 'object' ? Object.values(current) : []
+        } else if (segment === 'to_entries' && current && typeof current === 'object' && !Array.isArray(current)) {
+          current = Object.entries(current).map(([key, value]) => ({ key, value }))
+        } else if (segment === 'flatten' && Array.isArray(current)) {
+          current = current.flat()
+        } else if (segment.startsWith('map(') && segment.endsWith(')') && Array.isArray(current)) {
+          const innerExpr = segment.slice(4, -1).trim()
+          current = current.map((item) => this.queryJq(item, innerExpr).result)
+        } else if (segment.startsWith('sort_by(') && segment.endsWith(')') && Array.isArray(current)) {
+          const innerExpr = segment.slice(8, -1).trim()
+          current = [...current].sort((a, b) => {
+            const va = this.queryJq(a, innerExpr).result
+            const vb = this.queryJq(b, innerExpr).result
+            if (va === vb) return 0
+            return va > vb ? 1 : -1
+          })
+        } else if (segment.startsWith('select(') && segment.endsWith(')')) {
+          const cond = segment.slice(7, -1).trim()
+          const cmp = cond.match(/^(\.[a-zA-Z0-9_.\[\]]+)\s*(==|!=|>=|<=|>|<)\s*(.+)$/)
+          const evalPred = (item: any): boolean => {
+            if (!cmp) return Boolean(this.queryJq(item, cond).result)
+            const lhs = this.queryJq(item, cmp[1]).result
+            let rhs: any = cmp[3].trim()
+            try {
+              rhs = JSON.parse(rhs)
+            } catch {
+              rhs = rhs.replace(/^['"]|['"]$/g, '')
+            }
+            switch (cmp[2]) {
+              case '==': return lhs === rhs
+              case '!=': return lhs !== rhs
+              case '>': return lhs > rhs
+              case '<': return lhs < rhs
+              case '>=': return lhs >= rhs
+              case '<=': return lhs <= rhs
+              default: return false
+            }
+          }
+          current = Array.isArray(current) ? current.filter(evalPred) : evalPred(current) ? current : null
         } else {
           return {
             result: null,
@@ -235,6 +275,47 @@ class JsonStudioService {
     if (schema.enum && Array.isArray(schema.enum)) {
       if (!schema.enum.includes(data)) {
         errors.push({ path, message: `Value "${data}" is not one of allowed enum values: [${schema.enum.join(', ')}].` })
+      }
+    }
+
+    // String length & regex pattern validation
+    if (typeof data === 'string') {
+      if (schema.minLength !== undefined && data.length < schema.minLength) {
+        errors.push({ path, message: `String length ${data.length} is less than minLength ${schema.minLength}.` })
+      }
+      if (schema.maxLength !== undefined && data.length > schema.maxLength) {
+        errors.push({ path, message: `String length ${data.length} exceeds maxLength ${schema.maxLength}.` })
+      }
+      if (typeof schema.pattern === 'string') {
+        try {
+          if (!new RegExp(schema.pattern).test(data)) {
+            errors.push({ path, message: `String does not match pattern /${schema.pattern}/.` })
+          }
+        } catch {
+          // ignore invalid regex pattern in schema
+        }
+      }
+    }
+
+    // Array items & bounds validation
+    if (Array.isArray(data)) {
+      if (schema.minItems !== undefined && data.length < schema.minItems) {
+        errors.push({ path, message: `Array has ${data.length} items, minimum is ${schema.minItems}.` })
+      }
+      if (schema.maxItems !== undefined && data.length > schema.maxItems) {
+        errors.push({ path, message: `Array has ${data.length} items, maximum is ${schema.maxItems}.` })
+      }
+      if (schema.items && typeof schema.items === 'object') {
+        data.forEach((item, idx) => this.validateNode(item, schema.items, `${path}[${idx}]`, errors))
+      }
+    }
+
+    // additionalProperties: false check
+    if (schema.additionalProperties === false && schema.properties && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      for (const k of Object.keys(data)) {
+        if (!(k in schema.properties)) {
+          errors.push({ path: `${path}.${k}`, message: `Additional property "${k}" is not allowed.` })
+        }
       }
     }
   }

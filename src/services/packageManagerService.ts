@@ -152,6 +152,35 @@ class PackageManagerService {
     return result
   }
 
+  private compareSemver(a: string, b: string): number {
+    const pa = a.split('.').map((n) => parseInt(n, 10) || 0)
+    const pb = b.split('.').map((n) => parseInt(n, 10) || 0)
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0)
+    }
+    return 0
+  }
+
+  /**
+   * Real, documented NVD/GHSA advisories checked deterministically offline when `npm audit` has not yet run.
+   */
+  private checkKnownAdvisories(name: string, version: string): { count: number; severity: DependencyItem['highestSeverity']; note?: string } {
+    const advisories: Array<{ pkg: string; fixedIn: string; severity: DependencyItem['highestSeverity']; cve: string }> = [
+      { pkg: 'axios', fixedIn: '0.21.2', severity: 'high', cve: 'CVE-2021-3749' },
+      { pkg: 'lodash', fixedIn: '4.17.21', severity: 'high', cve: 'CVE-2021-23337' },
+      { pkg: 'minimist', fixedIn: '1.2.6', severity: 'critical', cve: 'CVE-2021-44906' },
+      { pkg: 'node-fetch', fixedIn: '2.6.7', severity: 'high', cve: 'CVE-2022-0235' },
+      { pkg: 'json5', fixedIn: '2.2.2', severity: 'high', cve: 'CVE-2022-46175' },
+    ]
+    const clean = version.replace(/[^0-9.].*$/, '')
+    if (!/^\d+\.\d+\.\d+$/.test(clean)) return { count: 0, severity: 'none' }
+    const hit = advisories.find((a) => a.pkg === name && this.compareSemver(clean, a.fixedIn) < 0)
+    if (hit) {
+      return { count: 1, severity: hit.severity, note: `${hit.cve} (fixed in >=${hit.fixedIn})` }
+    }
+    return { count: 0, severity: 'none' }
+  }
+
   private parseNpmPackageJson(filePath: string, content: string): ManifestScanResult {
     const dependencies: DependencyItem[] = []
     try {
@@ -163,6 +192,7 @@ class PackageManagerService {
 
       for (const [name, rawVersion] of Object.entries(allDeps)) {
         const cleanVer = String(rawVersion).trim().replace(/^[\^~>=<]+\s*/, '')
+        const adv = this.checkKnownAdvisories(name, cleanVer)
 
         dependencies.push({
           name,
@@ -171,9 +201,9 @@ class PackageManagerService {
           isOutdated: false,
           ecosystem: 'npm',
           license: this.getMockLicense(name),
-          vulnerabilitiesCount: 0,
-          highestSeverity: 'none',
-          description: `Declared in ${filePath}`,
+          vulnerabilitiesCount: adv.count,
+          highestSeverity: adv.severity,
+          description: adv.note ? `Advisory ${adv.note}` : `Declared in ${filePath}`,
         })
       }
     } catch {

@@ -27,10 +27,31 @@ export interface ByteInspection {
   float32BE: string
   float64LE: string
   float64BE: string
+  int64LE?: string
+  uint64LE?: string
   utf8Char: string
 }
 
 class HexInspectorService {
+  /**
+   * Detect well-known binary container/executable magic headers from leading bytes.
+   */
+  public detectFileMagic(data: Uint8Array | string): string {
+    const b = typeof data === 'string' ? new TextEncoder().encode(data) : data
+    if (b.length < 2) return 'Raw Data'
+    if (b.length >= 4 && b[0] === 0x7f && b[1] === 0x45 && b[2] === 0x4c && b[3] === 0x46) return 'ELF Binary'
+    if (b[0] === 0x4d && b[1] === 0x5a) return 'Windows PE/MZ Executable'
+    if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'PNG Image'
+    if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'JPEG Image'
+    if (b.length >= 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'PDF Document'
+    if (b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05)) return 'ZIP / DOCX / JAR Archive'
+    if (b[0] === 0x1f && b[1] === 0x8b) return 'GZIP Compressed Stream'
+    if (b.length >= 4 && b[0] === 0x00 && b[1] === 0x61 && b[2] === 0x73 && b[3] === 0x6d) return 'WebAssembly (WASM)'
+    if (b.length >= 16 && new TextDecoder().decode(b.slice(0, 15)) === 'SQLite format 3') return 'SQLite 3 Database'
+    if (b.length >= 4 && ((b[0] === 0xfe && b[1] === 0xed && b[2] === 0xfa) || (b[0] === 0xcf && b[1] === 0xfa && b[2] === 0xed))) return 'Mach-O Executable'
+    if (b.length >= 4 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'GIF Image'
+    return 'Text / Binary Buffer'
+  }
   /**
    * Convert string or buffer into formatted 16-byte hex rows
    */
@@ -119,6 +140,8 @@ class HexInspectorService {
       float32BE: canRead4 ? view.getFloat32(safeOffset, false).toFixed(4) : 'N/A',
       float64LE: canRead8 ? view.getFloat64(safeOffset, true).toFixed(4) : 'N/A',
       float64BE: canRead8 ? view.getFloat64(safeOffset, false).toFixed(4) : 'N/A',
+      int64LE: canRead8 && typeof view.getBigInt64 === 'function' ? view.getBigInt64(safeOffset, true).toString() : 'N/A',
+      uint64LE: canRead8 && typeof view.getBigUint64 === 'function' ? view.getBigUint64(safeOffset, true).toString() : 'N/A',
       utf8Char: byteVal >= 32 && byteVal <= 126 ? String.fromCharCode(byteVal) : '·',
     }
   }

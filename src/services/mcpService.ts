@@ -363,6 +363,9 @@ const BUILTIN_SERVER_TOOLS: Record<string, McpToolDefinition[]> = {
 export class McpService {
   private static servers: Map<string, McpServerConfig> = new Map()
   private static memoryGraph: Map<string, McpMemoryEntity> = new Map()
+  private static discoveredTools: Map<string, McpToolDefinition[]> = new Map()
+  private static discoveredResources: Map<string, McpResource[]> = new Map()
+  private static discoveredPrompts: Map<string, McpPrompt[]> = new Map()
   private static serverListeners: Set<(servers: McpServerConfig[]) => void> = new Set()
   private static toolListeners: Set<(tools: McpToolDefinition[]) => void> = new Set()
   private static initialized = false
@@ -472,6 +475,12 @@ export class McpService {
     this.initialize()
     const deleted = this.servers.delete(id)
     if (deleted) {
+      this.discoveredTools.delete(id)
+      this.discoveredResources.delete(id)
+      this.discoveredPrompts.delete(id)
+      if (typeof window !== 'undefined' && window.electronAPI?.mcp?.disconnect) {
+        window.electronAPI.mcp.disconnect(id).catch(() => {})
+      }
       this.persistToStorage()
       this.notifyServerListeners()
       this.notifyToolListeners()
@@ -485,10 +494,350 @@ export class McpService {
     if (server) {
       server.enabled = enabled
       server.status = enabled ? 'connected' : 'disabled'
+      if (!enabled && typeof window !== 'undefined' && window.electronAPI?.mcp?.disconnect) {
+        window.electronAPI.mcp.disconnect(id).catch(() => {})
+      }
       this.persistToStorage()
       this.notifyServerListeners()
       this.notifyToolListeners()
     }
+  }
+
+  static async disconnectServer(id: string): Promise<boolean> {
+    this.initialize()
+    const server = this.servers.get(id)
+    let closed = false
+    if (typeof window !== 'undefined' && window.electronAPI?.mcp?.disconnect) {
+      try {
+        closed = await window.electronAPI.mcp.disconnect(id)
+      } catch {
+        closed = false
+      }
+    }
+    if (server) {
+      server.status = server.enabled ? 'disconnected' : 'disabled'
+      this.notifyServerListeners()
+    }
+    return closed
+  }
+
+  private static async sendHttpRpc(
+    server: McpServerConfig,
+    method: string,
+    params: Record<string, any> = {}
+  ): Promise<{ success: boolean; result?: any; latencyMs?: number; error?: string }> {
+    if (!server.url) {
+      return { success: false, error: `MCP server "${server.name}" has no URL configured.` }
+    }
+    if (typeof window !== 'undefined' && window.electronAPI?.mcp?.httpRpc) {
+      return window.electronAPI.mcp.httpRpc({
+        url: server.url,
+        headers: server.headers,
+        method,
+        params,
+        timeoutMs: server.timeoutMs || 15000,
+      })
+    }
+    const start = Date.now()
+    try {
+      const res = await fetch(server.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          ...(server.headers || {}),
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: `mcp-${Date.now()}`,
+          method,
+          params,
+        }),
+        signal: AbortSignal.timeout(server.timeoutMs || 15000),
+      })
+      const latencyMs = Date.now() - start
+      if (!res.ok) {
+        return { success: false, latencyMs, error: `HTTP ${res.status}: ${res.statusText}` }
+      }
+      const rpcJson = (await res.json()) as any
+      if (rpcJson?.error) {
+        return { success: false, latencyMs, error: rpcJson.error.message || JSON.stringify(rpcJson.error) }
+      }
+      return { success: true, latencyMs, result: rpcJson?.result ?? rpcJson }
+    } catch (err: any) {
+      return { success: false, latencyMs: Date.now() - start, error: err?.message || String(err) }
+    }
+  }
+
+  /**
+   * Dynamically discovers tools, resources, and prompts from a live stdio or SSE/HTTP MCP server.
+   */
+  static async discoverServerCapabilitiesAsync(serverId: string): Promise<{
+    success: boolean
+    tools: McpToolDefinition[]
+    resources: McpResource[]
+    prompts: McpPrompt[]
+    error?: string
+  }> {
+    this.initialize()
+    const server = this.servers.get(serverId)
+    if (!server) {
+      return { success: false, tools: [], resources: [], prompts: [], error: 'Server not found' }
+    }
+
+    if (server.transport === 'builtin') {
+      return {
+        success: true,
+        tools: this.listTools(serverId),
+        resources: this.listResources(serverId),
+        prompts: this.listPrompts(serverId),
+      }
+    }
+
+    const start = Date.now()
+    let rawTools: any[] = []
+    let rawResources: any[] = []
+    let rawPrompts: any[] = []
+    const errors: string[] = []
+
+    if (server.transport === 'stdio' && server.command && typeof window !== 'undefined' && window.electronAPI?.mcp) {
+      const spec = {
+        id: server.id,
+        command: server.command,
+        args: server.args,
+        env: server.env,
+        timeoutMs: server.timeoutMs,
+      }
+      const [tRes, rRes, pRes] = await Promise.all([
+        window.electronAPI.mcp.listTools(spec),
+        window.electronAPI.mcp.listResources(spec),
+        window.electronAPI.mcp.listPrompts(spec),
+      ])
+      if (tRes.success) rawTools = tRes.tools || []
+      else if (tRes.error) errors.push(`tools/list: ${tRes.error}`)
+      if (rRes.success) rawResources = rRes.resources || []
+      if (pRes.success) rawPrompts = pRes.prompts || []
+    } else if (server.transport === 'sse' && server.url) {
+      const [tRes, rRes, pRes] = await Promise.all([
+        this.sendHttpRpc(server, 'tools/list', {}),
+        this.sendHttpRpc(server, 'resources/list', {}),
+        this.sendHttpRpc(server, 'prompts/list', {}),
+      ])
+      if (tRes.success && Array.isArray(tRes.result?.tools)) rawTools = tRes.result.tools
+      else if (!tRes.success && tRes.error) errors.push(`tools/list: ${tRes.error}`)
+      if (rRes.success && Array.isArray(rRes.result?.resources)) rawResources = rRes.result.resources
+      if (pRes.success && Array.isArray(pRes.result?.prompts)) rawPrompts = pRes.result.prompts
+    } else {
+      return {
+        success: false,
+        tools: this.listTools(serverId),
+        resources: this.listResources(serverId),
+        prompts: this.listPrompts(serverId),
+        error: `Live capability discovery requires Electron MCP runtime or a valid SSE URL.`,
+      }
+    }
+
+    const normalizedTools: McpToolDefinition[] = rawTools.map((t: any) => ({
+      name: String(t.name || 'unnamed_tool'),
+      description: t.description ? String(t.description) : undefined,
+      inputSchema: {
+        type: 'object',
+        properties: t.inputSchema?.properties || {},
+        required: Array.isArray(t.inputSchema?.required) ? t.inputSchema.required : [],
+      },
+      serverId: server.id,
+      serverName: server.name,
+    }))
+
+    const normalizedResources: McpResource[] = rawResources.map((r: any) => ({
+      uri: String(r.uri || ''),
+      name: String(r.name || r.uri || 'Resource'),
+      description: r.description ? String(r.description) : undefined,
+      mimeType: r.mimeType ? String(r.mimeType) : undefined,
+      serverId: server.id,
+      serverName: server.name,
+    }))
+
+    const normalizedPrompts: McpPrompt[] = rawPrompts.map((p: any) => ({
+      name: String(p.name || 'prompt'),
+      description: p.description ? String(p.description) : undefined,
+      arguments: Array.isArray(p.arguments) ? p.arguments : [],
+      serverId: server.id,
+      serverName: server.name,
+    }))
+
+    if (errors.length === 0 || normalizedTools.length > 0 || normalizedResources.length > 0 || normalizedPrompts.length > 0) {
+      this.discoveredTools.set(server.id, normalizedTools)
+      this.discoveredResources.set(server.id, normalizedResources)
+      this.discoveredPrompts.set(server.id, normalizedPrompts)
+      server.status = 'connected'
+      server.latencyMs = Date.now() - start
+      server.lastActiveAt = Date.now()
+      server.lastError = undefined
+      this.notifyServerListeners()
+      this.notifyToolListeners()
+      return {
+        success: true,
+        tools: normalizedTools,
+        resources: normalizedResources,
+        prompts: normalizedPrompts,
+      }
+    }
+
+    server.status = 'error'
+    server.lastError = errors.join('; ')
+    this.notifyServerListeners()
+    return {
+      success: false,
+      tools: [],
+      resources: [],
+      prompts: [],
+      error: server.lastError,
+    }
+  }
+
+  static async readResourceAsync(
+    serverId: string,
+    uri: string
+  ): Promise<{ success: boolean; content: string; mimeType?: string; error?: string }> {
+    this.initialize()
+    const server = this.servers.get(serverId)
+    if (!server) return { success: false, content: '', error: `Server "${serverId}" not found.` }
+
+    if (server.transport === 'stdio' && server.command && typeof window !== 'undefined' && window.electronAPI?.mcp?.readResource) {
+      const res = await window.electronAPI.mcp.readResource(
+        { id: server.id, command: server.command, args: server.args, env: server.env, timeoutMs: server.timeoutMs },
+        uri
+      )
+      if (!res.success) return { success: false, content: '', error: res.error }
+      const contents = res.result?.contents
+      if (Array.isArray(contents) && contents.length > 0) {
+        const text = contents.map((c: any) => c.text || (c.blob ? `[binary ${c.blob.length} base64 chars]` : JSON.stringify(c))).join('\n\n')
+        return { success: true, content: text, mimeType: contents[0]?.mimeType }
+      }
+      return { success: true, content: JSON.stringify(res.result ?? {}, null, 2) }
+    }
+
+    if (server.transport === 'sse' && server.url) {
+      const res = await this.sendHttpRpc(server, 'resources/read', { uri })
+      if (!res.success) return { success: false, content: '', error: res.error }
+      const contents = res.result?.contents
+      const text = Array.isArray(contents)
+        ? contents.map((c: any) => c.text || JSON.stringify(c)).join('\n\n')
+        : JSON.stringify(res.result ?? {}, null, 2)
+      return { success: true, content: text, mimeType: Array.isArray(contents) ? contents[0]?.mimeType : undefined }
+    }
+
+    // Built-in resource handlers
+    if (uri === 'git://head' || uri === 'git://status') {
+      if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+        const cmd = uri === 'git://head' ? 'git log -n 1 --stat' : 'git status --short'
+        const out = await window.electronAPI.workspace.execCommand({ command: cmd })
+        return {
+          success: out.exitCode === 0,
+          content: out.stdout.trim() || out.stderr.trim() || '(clean)',
+          mimeType: 'text/plain',
+          error: out.exitCode === 0 ? undefined : out.stderr.trim(),
+        }
+      }
+      return { success: true, content: `Resource ${uri} requires desktop Git CLI environment.`, mimeType: 'text/plain' }
+    }
+
+    if (uri === 'workspace://root' || uri === 'workspace://config') {
+      if (typeof window !== 'undefined' && window.electronAPI?.readFolder) {
+        const res = await window.electronAPI.readFolder('.')
+        const entries = res?.files || []
+        const filtered = uri === 'workspace://config'
+          ? entries.filter((f) => /\.(json|ya?ml|toml|env|config\.\w+)$/i.test(f.name))
+          : entries
+        return {
+          success: true,
+          content: filtered.map((f) => `${f.isDirectory ? '[DIR]' : '[FILE]'} ${f.name}`).join('\n') || '(empty)',
+          mimeType: 'text/plain',
+        }
+      }
+      return { success: true, content: `Resource ${uri} requires desktop filesystem runtime.`, mimeType: 'text/plain' }
+    }
+
+    if (uri.startsWith('gemini-docs://')) {
+      const targetUrl = uri.includes('api-reference')
+        ? 'https://ai.google.dev/api'
+        : 'https://ai.google.dev/gemini-api/docs/sdks'
+      const fetched = await this.callTool('mcp-fetch', 'fetch_markdown', { url: targetUrl })
+      if (fetched.success) {
+        return { success: true, content: fetched.output, mimeType: 'text/markdown' }
+      }
+      return {
+        success: true,
+        content: `# ${uri}\nOfficial docs URL: ${targetUrl}\n(${fetched.content?.[0]?.text || 'Offline'})`,
+        mimeType: 'text/markdown',
+      }
+    }
+
+    return { success: false, content: '', error: `Unsupported resource URI "${uri}" on server "${server.name}".` }
+  }
+
+  static async getPromptAsync(
+    serverId: string,
+    name: string,
+    args: Record<string, string> = {}
+  ): Promise<{ success: boolean; content: string; error?: string }> {
+    this.initialize()
+    const server = this.servers.get(serverId)
+    if (!server) return { success: false, content: '', error: `Server "${serverId}" not found.` }
+
+    if (server.transport === 'stdio' && server.command && typeof window !== 'undefined' && window.electronAPI?.mcp?.getPrompt) {
+      const res = await window.electronAPI.mcp.getPrompt(
+        { id: server.id, command: server.command, args: server.args, env: server.env, timeoutMs: server.timeoutMs },
+        name,
+        args
+      )
+      if (!res.success) return { success: false, content: '', error: res.error }
+      const messages = res.result?.messages
+      if (Array.isArray(messages)) {
+        const rendered = messages
+          .map((m: any) => `[${m.role || 'user'}]\n${m.content?.text || JSON.stringify(m.content)}`)
+          .join('\n\n')
+        return { success: true, content: rendered }
+      }
+      return { success: true, content: JSON.stringify(res.result ?? {}, null, 2) }
+    }
+
+    if (server.transport === 'sse' && server.url) {
+      const res = await this.sendHttpRpc(server, 'prompts/get', { name, arguments: args })
+      if (!res.success) return { success: false, content: '', error: res.error }
+      const messages = res.result?.messages
+      const rendered = Array.isArray(messages)
+        ? messages.map((m: any) => `[${m.role || 'user'}]\n${m.content?.text || JSON.stringify(m.content)}`).join('\n\n')
+        : JSON.stringify(res.result ?? {}, null, 2)
+      return { success: true, content: rendered }
+    }
+
+    // Built-in prompt renderers
+    if (name === 'generate_git_commit_message') {
+      const style = args.style || 'conventional'
+      let diffSnippet = '(No staged diff available — run `git add` first)'
+      if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+        const out = await window.electronAPI.workspace.execCommand({ command: 'git diff --cached --stat' })
+        if (out.exitCode === 0 && out.stdout.trim()) {
+          diffSnippet = out.stdout.trim()
+        }
+      }
+      return {
+        success: true,
+        content: `Write a ${style} commit message summarizing these staged changes:\n\n${diffSnippet}`,
+      }
+    }
+
+    if (name === 'sdk_migration_guide') {
+      const lang = args.targetLanguage || 'typescript'
+      return {
+        success: true,
+        content: `Provide a step-by-step migration guide in ${lang} from the legacy @google/generative-ai / google-generativeai SDK to the unified Google Gen AI SDK (@google/genai / google-genai). Include client initialization, streaming, and function calling examples.`,
+      }
+    }
+
+    return { success: false, content: '', error: `Prompt "${name}" is not available on server "${server.name}".` }
   }
 
   static async pingServer(id: string): Promise<{ success: boolean; latencyMs: number; error?: string }> {
@@ -511,7 +860,24 @@ export class McpService {
       }
 
       if (server.transport === 'sse' && server.url) {
-        // Try pinging SSE endpoint
+        // Prefer CORS-free Electron main-process JSON-RPC ping/initialize
+        if (typeof window !== 'undefined' && window.electronAPI?.mcp?.httpRpc) {
+          const rpcRes = await window.electronAPI.mcp.httpRpc({
+            url: server.url,
+            headers: server.headers,
+            method: 'ping',
+            params: {},
+            timeoutMs: server.timeoutMs || 5000,
+          })
+          const latency = rpcRes.latencyMs ?? (Date.now() - start)
+          server.status = rpcRes.success ? 'connected' : 'error'
+          server.latencyMs = latency
+          server.lastActiveAt = Date.now()
+          server.lastError = rpcRes.error
+          this.notifyServerListeners()
+          return { success: rpcRes.success, latencyMs: latency, error: rpcRes.error }
+        }
+        // Fallback direct fetch when outside Electron
         const res = await fetch(server.url, {
           method: 'GET',
           headers: { Accept: 'text/event-stream, application/json', ...(server.headers || {}) },
@@ -573,14 +939,19 @@ export class McpService {
       : Array.from(this.servers.values()).filter((s) => s.enabled)
 
     for (const s of targetServers) {
+      const discovered = this.discoveredTools.get(s.id)
+      if (discovered && discovered.length > 0) {
+        tools.push(...discovered)
+        continue
+      }
       const builtin = BUILTIN_SERVER_TOOLS[s.id]
       if (builtin) {
         tools.push(...builtin)
       } else {
-        // For custom stdio/SSE servers, expose standard default tools or dynamically introspected tools
+        // Fallback descriptor before dynamic `tools/list` discovery is triggered
         tools.push({
           name: `${s.id}_execute`,
-          description: `Executes tool query or action on MCP server "${s.name}".`,
+          description: `Executes tool query or action on MCP server "${s.name}" (click Discover to load exact schemas).`,
           serverId: s.id,
           serverName: s.name,
           inputSchema: {
@@ -673,6 +1044,11 @@ export class McpService {
       : Array.from(this.servers.values()).filter((s) => s.enabled)
 
     for (const s of targetServers) {
+      const discovered = this.discoveredResources.get(s.id)
+      if (discovered && discovered.length > 0) {
+        resources.push(...discovered)
+        continue
+      }
       if (s.id === 'mcp-filesystem') {
         resources.push(
           { uri: 'workspace://root', name: 'Workspace Root', mimeType: 'inode/directory', serverId: s.id, serverName: s.name },
@@ -705,6 +1081,11 @@ export class McpService {
       : Array.from(this.servers.values()).filter((s) => s.enabled)
 
     for (const s of targetServers) {
+      const discovered = this.discoveredPrompts.get(s.id)
+      if (discovered && discovered.length > 0) {
+        prompts.push(...discovered)
+        continue
+      }
       if (s.id === 'mcp-git') {
         prompts.push({
           name: 'generate_git_commit_message',
@@ -783,7 +1164,6 @@ export class McpService {
       if (
         server.transport === 'stdio' &&
         server.command &&
-        !BUILTIN_SERVER_TOOLS[server.id] &&
         typeof window !== 'undefined' &&
         window.electronAPI?.mcp?.callTool
       ) {
@@ -806,71 +1186,122 @@ export class McpService {
           ? contentBlocks.map((c: any) => c.text || JSON.stringify(c)).join('\n')
           : JSON.stringify(res.result ?? {}, null, 2)
       } else if (server.transport === 'sse' && server.url) {
-        try {
-          const rpcRes = await fetch(server.url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(server.headers || {}),
-            },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: `mcp-${Date.now()}`,
-              method: 'tools/call',
-              params: {
-                name: actualToolName,
-                arguments: args,
-              },
-            }),
-            signal: AbortSignal.timeout(server.timeoutMs || 15000),
-          })
-          if (!rpcRes.ok) {
-            throw new Error(`HTTP ${rpcRes.status}: ${rpcRes.statusText}`)
-          }
-          const rpcJson = (await rpcRes.json()) as any
-          if (rpcJson.error) {
-            throw new Error(rpcJson.error.message || JSON.stringify(rpcJson.error))
-          }
-          const contentBlocks = rpcJson.result?.content
-          responseText = Array.isArray(contentBlocks)
-            ? contentBlocks.map((c: any) => c.text || JSON.stringify(c)).join('\n')
-            : JSON.stringify(rpcJson.result ?? rpcJson, null, 2)
-        } catch (sseErr: any) {
-          throw new Error(`SSE MCP server "${server.name}" call failed: ${sseErr?.message || String(sseErr)}`)
+        const rpcRes = await this.sendHttpRpc(server, 'tools/call', {
+          name: actualToolName,
+          arguments: args,
+        })
+        if (!rpcRes.success) {
+          throw new Error(`SSE MCP server "${server.name}" call failed: ${rpcRes.error || 'Unknown error'}`)
         }
+        const contentBlocks = rpcRes.result?.content
+        responseText = Array.isArray(contentBlocks)
+          ? contentBlocks.map((c: any) => c.text || JSON.stringify(c)).join('\n')
+          : JSON.stringify(rpcRes.result ?? {}, null, 2)
       } else if (actualToolName === 'fetch_markdown') {
         const url = String(args.url || '').trim()
         if (!url) throw new Error('Parameter "url" is required')
         if (!/^https?:\/\//i.test(url)) throw new Error('URL must begin with http:// or https://')
-        const res = await fetch(url, { signal: AbortSignal.timeout(server.timeoutMs || 15000) })
-        if (!res.ok) {
-          throw new Error(`Failed to fetch "${url}": HTTP ${res.status} ${res.statusText}`)
+        let rawBody = ''
+        if (typeof window !== 'undefined' && window.electronAPI?.infra?.httpRequest) {
+          const httpRes = await window.electronAPI.infra.httpRequest({
+            url,
+            method: 'GET',
+            headers: { Accept: 'text/html, text/markdown, text/plain, application/json;q=0.9, */*;q=0.8' },
+            timeoutMs: server.timeoutMs || 15000,
+          })
+          if (!httpRes.ok) {
+            throw new Error(httpRes.error || `Failed to fetch "${url}": HTTP ${httpRes.status} ${httpRes.statusText}`)
+          }
+          rawBody = httpRes.body || ''
+        } else {
+          const res = await fetch(url, { signal: AbortSignal.timeout(server.timeoutMs || 15000) })
+          if (!res.ok) {
+            throw new Error(`Failed to fetch "${url}": HTTP ${res.status} ${res.statusText}`)
+          }
+          rawBody = await res.text()
         }
-        const rawBody = await res.text()
-        const markdownBody = rawBody
-          .replace(/<script[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[\s\S]*?<\/style>/gi, '')
-          .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, lvl, txt) => `\n${'#'.repeat(Number(lvl))} ${txt.replace(/<[^>]+>/g, '').trim()}\n`)
-          .replace(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, txt) => `[${txt.replace(/<[^>]+>/g, '').trim()}](${href})`)
-          .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, txt) => `- ${txt.replace(/<[^>]+>/g, '').trim()}\n`)
-          .replace(/<\/(p|div|section|article|br)>/gi, '\n')
-          .replace(/<[^>]+>/g, '')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim()
-        responseText = `Fetched [${url}] (${rawBody.length} bytes):\n\n${markdownBody.slice(0, 6000)}`
+        if (args.raw === true) {
+          responseText = `Fetched [${url}] (${rawBody.length} bytes, raw):\n\n${rawBody.slice(0, 12000)}`
+        } else {
+          const markdownBody = rawBody
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, lvl, txt) => `\n${'#'.repeat(Number(lvl))} ${txt.replace(/<[^>]+>/g, '').trim()}\n`)
+            .replace(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, txt) => `[${txt.replace(/<[^>]+>/g, '').trim()}](${href})`)
+            .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, txt) => `- ${txt.replace(/<[^>]+>/g, '').trim()}\n`)
+            .replace(/<\/(p|div|section|article|br)>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim()
+          responseText = `Fetched [${url}] (${rawBody.length} bytes):\n\n${markdownBody.slice(0, 8000)}`
+        }
       } else if (actualToolName === 'search_gemini_docs') {
-        const query = String(args.query || '')
+        const query = String(args.query || '').trim()
         const lang = String(args.language || 'typescript')
-        responseText = `Gemini Docs Search Results for "${query}" (${lang}):\n\n` +
-          `1. [SDK Core] \`google-genai\` Client Initialization & Configuration\n` +
-          `2. [Guides] Streaming responses and AsyncIterables with gemini-2.5-flash\n` +
-          `3. [Interactions API] Structured JSON outputs & Tool Call dispatch`
+        let liveSnippet = ''
+        if (typeof window !== 'undefined' && window.electronAPI?.infra?.httpRequest) {
+          try {
+            const docsUrl = 'https://ai.google.dev/gemini-api/docs/llms.txt'
+            const res = await window.electronAPI.infra.httpRequest({
+              url: docsUrl,
+              method: 'GET',
+              timeoutMs: server.timeoutMs || 10000,
+            })
+            if (res.ok && res.body) {
+              const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1)
+              const lines = res.body.split(/\r?\n/)
+              const scored = lines
+                .map((line) => {
+                  const lower = line.toLowerCase()
+                  let score = 0
+                  for (const term of terms) {
+                    if (lower.includes(term)) score++
+                  }
+                  if (lower.includes(lang.toLowerCase())) score += 0.5
+                  return { line: line.trim(), score }
+                })
+                .filter((x) => x.score > 0 && x.line.length > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 12)
+              if (scored.length > 0) {
+                liveSnippet = scored.map((s, i) => `${i + 1}. ${s.line}`).join('\n')
+              }
+            }
+          } catch {
+            // Fall through to official links index
+          }
+        }
+        responseText = liveSnippet
+          ? `Gemini Docs Search Results for "${query}" (${lang}) [live ai.google.dev/gemini-api/docs/llms.txt]:\n\n${liveSnippet}`
+          : `Gemini Docs Search Results for "${query}" (${lang}):\n\n` +
+            `1. [SDK Overview] https://ai.google.dev/gemini-api/docs/sdks (@google/genai / google-genai)\n` +
+            `2. [Text & Streaming] https://ai.google.dev/gemini-api/docs/text-generation\n` +
+            `3. [Function Calling & Structured Outputs] https://ai.google.dev/gemini-api/docs/function-calling`
       } else if (actualToolName === 'get_gemini_doc') {
-        const chunkId = String(args.chunk_id || 'intro')
-        responseText = `Gemini Documentation Chunk [${chunkId}]:\n\n` +
-          `### Google Gen AI SDK Guide\n` +
-          `Use \`from google import genai\` or \`import { GoogleGenAI } from '@google/genai'\`.\n` +
-          `Configure your API key using the \`GEMINI_API_KEY\` environment variable.`
+        const chunkId = String(args.chunk_id || 'sdks').replace(/^\/+/, '').replace(/\.md$/i, '')
+        const docUrl = /^https?:\/\//i.test(chunkId)
+          ? chunkId
+          : `https://ai.google.dev/gemini-api/docs/${chunkId}`
+        if (typeof window !== 'undefined' && window.electronAPI?.infra?.httpRequest) {
+          const res = await window.electronAPI.infra.httpRequest({
+            url: docUrl,
+            method: 'GET',
+            timeoutMs: server.timeoutMs || 12000,
+          })
+          if (res.ok && res.body) {
+            const cleaned = res.body
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s{2,}/g, ' ')
+              .trim()
+            responseText = `Gemini Documentation [${docUrl}]:\n\n${cleaned.slice(0, 8000)}`
+          } else {
+            throw new Error(res.error || `Failed to fetch Gemini doc "${docUrl}": HTTP ${res.status}`)
+          }
+        } else {
+          responseText = `Gemini Documentation Chunk [${chunkId}]:\nOfficial URL: ${docUrl}\n(Live doc retrieval requires desktop Electron runtime.)`
+        }
       } else if (actualToolName === 'git_log_history') {
         const max = Math.min(Math.max(Number(args.maxCount) || 10, 1), 100)
         if (typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
@@ -1008,9 +1439,43 @@ export class McpService {
         const allNodes = Array.from(this.memoryGraph.values())
         responseText = `Memory MCP Graph (${allNodes.length} entities):\n${JSON.stringify(allNodes, null, 2)}`
       } else if (actualToolName === 'sqlite_query' || actualToolName === 'sqlite_describe_tables') {
-        responseText = `SQLite MCP query result:\n[ { "id": 1, "table_name": "projects", "status": "active", "rows": 42 } ]`
+        // Real SQLite WASM execution via Electron when not handled by an external stdio server
+        const dbPathIdx = Array.isArray(server.args) ? server.args.indexOf('--db-path') : -1
+        const dbPath =
+          (typeof args.dbPath === 'string' && args.dbPath.trim()) ||
+          (dbPathIdx >= 0 && server.args?.[dbPathIdx + 1]) ||
+          ''
+        if (typeof window !== 'undefined' && window.electronAPI?.infra?.dbOpenSqlite && window.electronAPI?.infra?.dbExecSqlite) {
+          if (!dbPath) {
+            throw new Error('No SQLite database path configured (set --db-path in server args or pass args.dbPath).')
+          }
+          const opened = await window.electronAPI.infra.dbOpenSqlite(dbPath)
+          if (!opened.ok || !opened.dbId) {
+            throw new Error(opened.error || `Failed to open SQLite database "${dbPath}".`)
+          }
+          try {
+            const sql =
+              actualToolName === 'sqlite_describe_tables'
+                ? "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+                : String(args.query || '').trim()
+            if (!sql) throw new Error('Parameter "query" is required.')
+            const qRes = await window.electronAPI.infra.dbExecSqlite(opened.dbId, sql)
+            if (!qRes.ok) {
+              throw new Error(qRes.error || 'SQLite query failed')
+            }
+            responseText = JSON.stringify(qRes.rows || [], null, 2)
+          } finally {
+            await window.electronAPI.infra.dbCloseSqlite?.(opened.dbId).catch(() => {})
+          }
+        } else {
+          throw new Error(
+            `SQLite MCP tool "${actualToolName}" requires a connected stdio MCP server or Electron SQLite runtime.`
+          )
+        }
       } else {
-        responseText = `Executed tool "${actualToolName}" on MCP server "${server.name}" with arguments:\n${JSON.stringify(args, null, 2)}`
+        throw new Error(
+          `MCP tool "${actualToolName}" on server "${server.name}" requires an active ${server.transport} runtime connection.`
+        )
       }
 
       const latencyMs = Date.now() - startTime
@@ -1126,6 +1591,9 @@ export class McpService {
    */
   static resetToDefaults(): void {
     this.servers.clear()
+    this.discoveredTools.clear()
+    this.discoveredResources.clear()
+    this.discoveredPrompts.clear()
     for (const preset of DEFAULT_MCP_PRESETS) {
       this.servers.set(preset.id, { ...preset })
     }

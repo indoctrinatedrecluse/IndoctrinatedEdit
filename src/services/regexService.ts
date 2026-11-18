@@ -85,14 +85,13 @@ class RegexService {
     }
 
     try {
-      // Ensure 'g' flag is present for iterating matches
-      const safeFlags = flags.includes('g') ? flags : flags + 'g'
-      const re = new RegExp(pattern, safeFlags)
+      const isGlobal = flags.includes('g')
+      const re = new RegExp(pattern, flags)
       const matches: RegexMatchItem[] = []
 
       let match: RegExpExecArray | null
       let count = 0
-      const maxMatches = 500
+      const maxMatches = isGlobal ? 500 : 1
 
       while ((match = re.exec(testText)) !== null && count < maxMatches) {
         count++
@@ -125,6 +124,7 @@ class RegexService {
           groups,
         })
 
+        if (!isGlobal) break
         if (match.index === re.lastIndex) {
           re.lastIndex++
         }
