@@ -257,6 +257,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className="sidebar glass-panel">
       {activeView === 'debug' && (
         <DebugView
+          activeFilePath={activeFilePath}
+          workspacePath={workspacePath}
           onOpenFileLocation={(filePath, line) => {
             if (onOpenFileAndNavigate && line) {
               onOpenFileAndNavigate(filePath, line)

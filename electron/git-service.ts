@@ -1,5 +1,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { GitCommit, GitFileChange, GitFileStatusCode, GitRepoStatus } from '../packages/sdk/types'
 
 const execFileAsync = promisify(execFile)
@@ -147,7 +149,7 @@ export async function getCommitLog(cwd: string, limit = 40): Promise<GitCommit[]
     // Format: Hash | ShortHash | AuthorName | AuthorEmail | ISO Date | Relative Date | Subject | Parents | Refs
     const delimiter = '~~~'
     const format = `%H${delimiter}%h${delimiter}%an${delimiter}%ae${delimiter}%aI${delimiter}%ar${delimiter}%s${delimiter}%P${delimiter}%D`
-    const raw = await runGit(['log', `-n`, String(limit), `--format=${format}`], cwd)
+    const raw = await runGit(['log', '--all', '--topo-order', `-n`, String(limit), `--format=${format}`], cwd)
 
     if (!raw) return []
 
@@ -373,4 +375,151 @@ export async function applyGitPatch(
     child.stdin.write(patch)
     child.stdin.end()
   })
+}
+
+export interface GitActionResult {
+  success: boolean
+  output?: string
+  error?: string
+}
+
+async function runGitAction(args: string[], cwd: string): Promise<GitActionResult> {
+  try {
+    const out = await runGit(args, cwd)
+    return { success: true, output: out }
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) }
+  }
+}
+
+export async function listBranches(cwd: string): Promise<{ current: string; local: string[]; remote: string[] }> {
+  try {
+    const current = await runGit(['branch', '--show-current'], cwd).catch(() => '')
+    const localRaw = await runGit(['branch', '--format=%(refname:short)'], cwd).catch(() => '')
+    const remoteRaw = await runGit(['branch', '-r', '--format=%(refname:short)'], cwd).catch(() => '')
+    return {
+      current,
+      local: localRaw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+      remote: remoteRaw.split(/\r?\n/).map((s) => s.trim()).filter((s) => Boolean(s) && !s.endsWith('/HEAD')),
+    }
+  } catch {
+    return { current: '', local: [], remote: [] }
+  }
+}
+
+export async function checkoutBranch(cwd: string, branch: string, createNew = false): Promise<GitActionResult> {
+  const args = createNew ? ['checkout', '-b', branch] : ['checkout', branch]
+  return runGitAction(args, cwd)
+}
+
+export async function deleteBranch(cwd: string, branch: string, force = false): Promise<GitActionResult> {
+  return runGitAction(['branch', force ? '-D' : '-d', branch], cwd)
+}
+
+export async function gitPull(cwd: string): Promise<GitActionResult> {
+  return runGitAction(['pull'], cwd)
+}
+
+export async function gitPush(cwd: string): Promise<GitActionResult> {
+  return runGitAction(['push'], cwd)
+}
+
+export async function gitFetch(cwd: string): Promise<GitActionResult> {
+  return runGitAction(['fetch', '--all', '--prune'], cwd)
+}
+
+export async function discardFileChanges(cwd: string, filePath: string, isUntracked = false): Promise<GitActionResult> {
+  if (isUntracked) {
+    try {
+      const target = path.resolve(cwd, filePath)
+      await fs.rm(target, { recursive: true, force: true })
+      return { success: true, output: `Removed untracked ${filePath}` }
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) }
+    }
+  }
+  return runGitAction(['checkout', '--', filePath], cwd)
+}
+
+export interface GitStashEntry {
+  ref: string
+  message: string
+  date: string
+}
+
+export async function stashList(cwd: string): Promise<GitStashEntry[]> {
+  try {
+    const raw = await runGit(['stash', 'list', '--format=%gd~~~%gs~~~%ar'], cwd)
+    if (!raw) return []
+    return raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        const [ref, message, date] = line.split('~~~')
+        return { ref: ref || 'stash@{0}', message: message || '', date: date || '' }
+      })
+  } catch {
+    return []
+  }
+}
+
+export async function stashSave(cwd: string, message?: string): Promise<GitActionResult> {
+  const args = message?.trim() ? ['stash', 'push', '-u', '-m', message.trim()] : ['stash', 'push', '-u']
+  return runGitAction(args, cwd)
+}
+
+export async function stashPop(cwd: string, ref?: string): Promise<GitActionResult> {
+  return runGitAction(ref ? ['stash', 'pop', ref] : ['stash', 'pop'], cwd)
+}
+
+export async function stashDrop(cwd: string, ref: string): Promise<GitActionResult> {
+  return runGitAction(['stash', 'drop', ref], cwd)
+}
+
+export async function cherryPickCommit(cwd: string, hash: string): Promise<GitActionResult> {
+  return runGitAction(['cherry-pick', hash], cwd)
+}
+
+export async function revertCommit(cwd: string, hash: string): Promise<GitActionResult> {
+  return runGitAction(['revert', '--no-edit', hash], cwd)
+}
+
+export async function mergeBranch(cwd: string, branch: string): Promise<GitActionResult> {
+  return runGitAction(['merge', branch], cwd)
+}
+
+export async function rebaseBranch(cwd: string, branch: string): Promise<GitActionResult> {
+  return runGitAction(['rebase', branch], cwd)
+}
+
+export async function showCommitDetails(
+  cwd: string,
+  hash: string
+): Promise<{ hash: string; stat: string; files: string[]; diff: string }> {
+  try {
+    const stat = await runGit(['show', '--stat', '--format=fuller', hash], cwd)
+    const filesRaw = await runGit(['show', '--name-only', '--format=', hash], cwd)
+    const diff = await runGitRaw(['show', '--format=', hash], cwd)
+    return {
+      hash,
+      stat,
+      files: filesRaw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+      diff: diff.slice(0, 60000),
+    }
+  } catch (err: any) {
+    return { hash, stat: err?.message || 'Failed to load commit details', files: [], diff: '' }
+  }
+}
+
+export async function getRemoteInfo(cwd: string): Promise<{ url: string; owner?: string; repo?: string }> {
+  try {
+    const url = await runGit(['remote', 'get-url', 'origin'], cwd)
+    const match = url.match(/github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/i)
+    if (match) {
+      return { url, owner: match[1], repo: match[2] }
+    }
+    return { url }
+  } catch {
+    return { url: '' }
+  }
 }

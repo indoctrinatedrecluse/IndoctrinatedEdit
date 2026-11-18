@@ -37,10 +37,12 @@ import {
 import './DebugView.css'
 
 interface DebugViewProps {
+  activeFilePath?: string
+  workspacePath?: string
   onOpenFileLocation?: (filePath: string, line: number) => void
 }
 
-export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
+export const DebugView: React.FC<DebugViewProps> = ({ activeFilePath, workspacePath, onOpenFileLocation }) => {
   const [sessionState, setSessionState] = useState<DebugSessionState>(() => debugService.getSessionState())
   const [activeTarget, setActiveTarget] = useState<DebugRuntimeTarget>(() => debugService.getActiveTarget())
   const [breakpoints, setBreakpoints] = useState<BreakpointItem[]>(() => debugService.getBreakpoints())
@@ -87,6 +89,10 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
 
   // Console input state
   const [consoleInput, setConsoleInput] = useState('')
+  // Breakpoint condition / logpoint editor state
+  const [editingBpId, setEditingBpId] = useState<string | null>(null)
+  const [editingBpCond, setEditingBpCond] = useState('')
+  const [editingBpLog, setEditingBpLog] = useState('')
 
   useEffect(() => {
     return debugService.subscribe(() => {
@@ -195,7 +201,12 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
         {!isRunningOrPaused ? (
           <button
             className="debug-start-btn glass-interactive"
-            onClick={() => debugService.startDebugging()}
+            onClick={() =>
+              debugService.startDebugging(
+                activeFilePath || DEBUG_RUNTIME_TARGETS.find((t) => t.target === activeTarget)?.defaultEntryPoint || 'index.js',
+                workspacePath
+              )
+            }
           >
             <Play size={13} fill="currentColor" />
             <span>Start Debugging (F5)</span>
@@ -345,21 +356,51 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
                       {/* Nested Children */}
                       {hasChildren && isExpanded && (
                         <div className="var-nested-children">
-                          {v.children?.map((child) => (
-                            <div key={child.id} className="var-row nested">
-                              <span className="var-name">{child.name}:</span>
-                              <span className={`var-value ${child.type}`}>{child.value}</span>
-                              {child.isEditable && (
-                                <button
-                                  className="var-icon-btn"
-                                  onClick={() => startEditVariable(child)}
-                                  title="Edit Value"
-                                >
-                                  <Edit2 size={9} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                          {v.children?.map((child) => {
+                            const isChildEditing = editingVarId === child.id
+                            return (
+                              <div key={child.id} className="var-row nested">
+                                <span className="var-name">{child.name}:</span>
+                                {isChildEditing ? (
+                                  <div className="var-edit-box">
+                                    <input
+                                      type="text"
+                                      className="var-edit-input"
+                                      value={editingVarValue}
+                                      onChange={(e) => setEditingVarValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') saveEditVariable(child.id)
+                                        if (e.key === 'Escape') cancelEditVariable()
+                                      }}
+                                      autoFocus
+                                    />
+                                    <button className="var-btn save" onClick={() => saveEditVariable(child.id)} title="Save">
+                                      <Check size={10} />
+                                    </button>
+                                    <button className="var-btn cancel" onClick={cancelEditVariable} title="Cancel">
+                                      <X size={10} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span
+                                    className={`var-value ${child.type}`}
+                                    onDoubleClick={() => child.isEditable && startEditVariable(child)}
+                                  >
+                                    {child.value}
+                                  </span>
+                                )}
+                                {child.isEditable && !isChildEditing && (
+                                  <button
+                                    className="var-icon-btn"
+                                    onClick={() => startEditVariable(child)}
+                                    title="Edit Value"
+                                  >
+                                    <Edit2 size={9} />
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                     </div>
@@ -476,7 +517,7 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
                         )}
                       </div>
                       <span className="frame-loc">
-                        {f.filePath.split('/').pop()}:{f.line}
+                        {f.filePath.split(/[/\\]/).pop()}:{f.line}
                       </span>
                     </div>
                   )
@@ -594,6 +635,18 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
             <span className="section-title">Breakpoints ({breakpoints.length})</span>
           </div>
           <div className="section-actions" onClick={(e) => e.stopPropagation()}>
+            {breakpoints.length > 0 && (
+              <button
+                className="sec-action-btn glass-interactive"
+                onClick={() => {
+                  const anyEnabled = breakpoints.some((b) => b.enabled)
+                  debugService.toggleAllBreakpointsEnabled(!anyEnabled)
+                }}
+                title={breakpoints.some((b) => b.enabled) ? 'Disable All Breakpoints' : 'Enable All Breakpoints'}
+              >
+                <Check size={12} />
+              </button>
+            )}
             <button
               className="sec-action-btn glass-interactive"
               onClick={() => debugService.clearAllBreakpoints()}
@@ -613,30 +666,82 @@ export const DebugView: React.FC<DebugViewProps> = ({ onOpenFileLocation }) => {
             ) : (
               <div className="breakpoints-list">
                 {breakpoints.map((b) => (
-                  <div key={b.id} className="bp-row">
-                    <input
-                      type="checkbox"
-                      checked={b.enabled}
-                      onChange={() => debugService.toggleBreakpointEnabled(b.id)}
-                      className="bp-checkbox"
-                    />
-                    <div
-                      className="bp-details"
-                      onClick={() => onOpenFileLocation?.(b.filePath, b.line)}
-                      title={`${b.filePath}:${b.line}`}
-                    >
-                      <span className="bp-file">{b.filePath.split('/').pop()}</span>
-                      <span className="bp-line">:{b.line}</span>
-                      {b.condition && <span className="bp-tag cond">cond: {b.condition}</span>}
-                      {b.logMessage && <span className="bp-tag log">log: {b.logMessage}</span>}
+                  <div key={b.id} className="bp-item-wrap">
+                    <div className="bp-row">
+                      <input
+                        type="checkbox"
+                        checked={b.enabled}
+                        onChange={() => debugService.toggleBreakpointEnabled(b.id)}
+                        className="bp-checkbox"
+                      />
+                      <div
+                        className="bp-details"
+                        onClick={() => onOpenFileLocation?.(b.filePath, b.line)}
+                        title={`${b.filePath}:${b.line}`}
+                      >
+                        <span className="bp-file">{b.filePath.split(/[/\\]/).pop()}</span>
+                        <span className="bp-line">:{b.line}</span>
+                        {b.condition && <span className="bp-tag cond">cond: {b.condition}</span>}
+                        {b.logMessage && <span className="bp-tag log">log: {b.logMessage}</span>}
+                      </div>
+                      <button
+                        className="bp-remove-btn"
+                        onClick={() => {
+                          if (editingBpId === b.id) {
+                            setEditingBpId(null)
+                          } else {
+                            setEditingBpId(b.id)
+                            setEditingBpCond(b.condition || '')
+                            setEditingBpLog(b.logMessage || '')
+                          }
+                        }}
+                        title="Edit Condition / Logpoint"
+                      >
+                        <Edit2 size={10} />
+                      </button>
+                      <button
+                        className="bp-remove-btn"
+                        onClick={() => debugService.removeBreakpoint(b.id)}
+                        title="Remove Breakpoint"
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     </div>
-                    <button
-                      className="bp-remove-btn"
-                      onClick={() => debugService.removeBreakpoint(b.id)}
-                      title="Remove Breakpoint"
-                    >
-                      <Trash2 size={11} />
-                    </button>
+                    {editingBpId === b.id && (
+                      <div style={{ padding: '4px 8px 6px 24px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <input
+                          type="text"
+                          className="watch-input"
+                          placeholder="Condition (e.g. count > 5)"
+                          value={editingBpCond}
+                          onChange={(e) => setEditingBpCond(e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          className="watch-input"
+                          placeholder="Logpoint message (e.g. val={x})"
+                          value={editingBpLog}
+                          onChange={(e) => setEditingBpLog(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            className="sec-action-btn glass-interactive"
+                            onClick={() => {
+                              debugService.setBreakpoint(b.filePath, b.line, {
+                                condition: editingBpCond.trim() || undefined,
+                                logMessage: editingBpLog.trim() || undefined,
+                              })
+                              setEditingBpId(null)
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button className="sec-action-btn glass-interactive" onClick={() => setEditingBpId(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

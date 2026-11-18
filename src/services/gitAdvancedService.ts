@@ -303,6 +303,80 @@ class GitAdvancedService {
   }
 
   /**
+   * Build a valid unified diff patch for a single hunk so `git apply --cached` can stage/unstage it.
+   */
+  public buildHunkPatch(
+    filePath: string,
+    hunk: GitHunk,
+    oldContent: string,
+    newContent: string
+  ): string {
+    const normPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '')
+    const oldLines = oldContent.split(/\r?\n/)
+    const newLines = newContent.split(/\r?\n/)
+    const startIdx = Math.max(0, hunk.startLine - 1)
+    const endIdx = Math.max(startIdx, hunk.endLine - 1)
+
+    const removed: string[] = []
+    const added: string[] = []
+    for (let i = startIdx; i <= endIdx; i++) {
+      if (i < oldLines.length && oldLines[i] !== undefined) removed.push(`-${oldLines[i]}`)
+      if (i < newLines.length && newLines[i] !== undefined) added.push(`+${newLines[i]}`)
+    }
+
+    const oldStart = removed.length > 0 ? hunk.startLine : Math.max(0, hunk.startLine - 1)
+    const newStart = added.length > 0 ? hunk.startLine : Math.max(0, hunk.startLine - 1)
+
+    return [
+      `diff --git a/${normPath} b/${normPath}`,
+      `--- a/${normPath}`,
+      `+++ b/${normPath}`,
+      `@@ -${oldStart},${removed.length} +${newStart},${added.length} @@`,
+      ...removed,
+      ...added,
+      '',
+    ].join('\n')
+  }
+
+  /**
+   * Stage a single hunk directly into the Git index via `git apply --cached`.
+   */
+  public async stageHunkAsync(
+    hunk: GitHunk,
+    oldContent: string,
+    newContent: string,
+    cwd?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (typeof window !== 'undefined' && window.electronAPI?.git?.applyPatch) {
+      const patch = this.buildHunkPatch(hunk.filePath, hunk, oldContent, newContent)
+      const res = await window.electronAPI.git.applyPatch(patch, { cached: true, cwd })
+      if (res.success) this.stagedHunkIds.add(hunk.id)
+      return res
+    }
+    this.stagedHunkIds.add(hunk.id)
+    return { success: true }
+  }
+
+  /**
+   * Unstage a single hunk from the Git index via `git apply --cached --reverse`.
+   */
+  public async unstageHunkAsync(
+    hunk: GitHunk,
+    oldContent: string,
+    newContent: string,
+    cwd?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (typeof window !== 'undefined' && window.electronAPI?.git?.applyPatch) {
+      const patch = this.buildHunkPatch(hunk.filePath, hunk, oldContent, newContent)
+      const res = await window.electronAPI.git.applyPatch(patch, { cached: true, reverse: true, cwd })
+      if (res.success) this.stagedHunkIds.delete(hunk.id)
+      return res
+    }
+    this.stagedHunkIds.delete(hunk.id)
+    return { success: true }
+  }
+
+  /**
    * Stage or unstage a specific hunk
    */
   public stageHunk(hunkId: string): void {

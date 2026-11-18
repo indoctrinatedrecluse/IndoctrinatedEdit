@@ -67,10 +67,273 @@ export class GitWorkflowService {
   private selectedJobId: string | null = null
   private listeners: Set<() => void> = new Set()
   private pollInterval: NodeJS.Timeout | null = null
+  private dataSource: 'live-gh' | 'github-api' | 'local-yaml' | 'demo' = 'demo'
+  private activeWorkspacePath?: string
+  private liveJobLogsCache = new Map<string, string[]>()
 
   constructor() {
     this.initDefaultWorkflows()
     this.initDefaultRuns()
+  }
+
+  public getDataSource(): 'live-gh' | 'github-api' | 'local-yaml' | 'demo' {
+    return this.dataSource
+  }
+
+  /**
+   * Discover real `.github/workflows/*.{yml,yaml}` files and live GitHub Actions runs
+   * using `gh` CLI (preferred) or public GitHub REST API via Electron IPC.
+   */
+  public async loadWorkspaceWorkflows(workspacePath?: string): Promise<void> {
+    this.activeWorkspacePath = workspacePath
+    if (typeof window === 'undefined' || !workspacePath) return
+
+    const discovered: WorkflowFile[] = []
+    try {
+      if (window.electronAPI?.workspace?.findFiles && window.electronAPI?.readFile) {
+        const allFiles = await window.electronAPI.workspace.findFiles({
+          rootDir: workspacePath,
+          maxDepth: 4,
+          maxFiles: 400,
+          includeExtensions: ['.yml', '.yaml'],
+        })
+        const wfFiles = allFiles.filter((f) =>
+          f.relativePath.replace(/\\/g, '/').startsWith('.github/workflows/')
+        )
+
+        for (const f of wfFiles) {
+          try {
+            const content = await window.electronAPI.readFile(f.path)
+            const nameMatch = content.match(/^name:\s*['"]?(.+?)['"]?\s*$/m)
+            const triggers: WorkflowFile['triggers'] = []
+            if (/\bpush\b/.test(content)) triggers.push('push')
+            if (/\bpull_request\b/.test(content)) triggers.push('pull_request')
+            if (/\bworkflow_dispatch\b/.test(content)) triggers.push('workflow_dispatch')
+            if (/\bschedule\b/.test(content)) triggers.push('schedule')
+            if (/\brelease\b/.test(content)) triggers.push('release')
+            const lowerName = (nameMatch?.[1] || f.name).toLowerCase()
+            const category: WorkflowFile['category'] = lowerName.includes('release')
+              ? 'release'
+              : lowerName.includes('test')
+              ? 'test'
+              : lowerName.includes('sec') || lowerName.includes('audit')
+              ? 'security'
+              : lowerName.includes('deploy')
+              ? 'deploy'
+              : 'build'
+
+            discovered.push({
+              id: f.name,
+              name: nameMatch?.[1] || f.name,
+              path: f.relativePath.replace(/\\/g, '/'),
+              state: 'active',
+              triggers: triggers.length > 0 ? triggers : ['push'],
+              description: `Workspace workflow (${f.relativePath.replace(/\\/g, '/')})`,
+              category,
+            })
+          } catch {
+            // skip unreadable workflow file
+          }
+        }
+      }
+    } catch {
+      // ignore discovery errors
+    }
+
+    if (discovered.length > 0) {
+      this.workflows = discovered
+      this.dataSource = 'local-yaml'
+    }
+
+    // Try live `gh run list` first
+    let loadedRuns = false
+    if (window.electronAPI?.workspace?.execCommand) {
+      try {
+        const res = await window.electronAPI.workspace.execCommand({
+          command: 'gh run list --limit 12 --json databaseId,workflowName,displayTitle,status,conclusion,headBranch,headSha,event,number,createdAt',
+          cwd: workspacePath,
+          timeoutMs: 12000,
+        })
+        if (res.exitCode === 0 && res.stdout.trim().startsWith('[')) {
+          const parsed: any[] = JSON.parse(res.stdout)
+          this.runs = parsed.map((r) => ({
+            id: String(r.databaseId),
+            workflowId: this.workflows.find((w) => w.name === r.workflowName)?.id || r.workflowName || 'workflow',
+            name: r.workflowName || r.displayTitle || 'Workflow Run',
+            runNumber: Number(r.number) || 1,
+            event: (['push', 'pull_request', 'workflow_dispatch', 'release'].includes(r.event) ? r.event : 'push') as WorkflowRun['event'],
+            status: (r.status === 'completed' ? (r.conclusion === 'failure' ? 'failed' : r.conclusion === 'cancelled' ? 'cancelled' : 'completed') : r.status === 'queued' ? 'queued' : 'in_progress') as WorkflowRunStatus,
+            conclusion: (r.conclusion || null) as WorkflowConclusion,
+            branch: r.headBranch || 'main',
+            actor: { name: 'GitHub Actions' },
+            commit: {
+              hash: r.headSha || '',
+              shortHash: (r.headSha || '').slice(0, 7) || 'HEAD',
+              message: r.displayTitle || '',
+            },
+            startedAt: r.createdAt || new Date().toISOString(),
+            durationFormatted: r.status === 'completed' ? 'done' : 'running',
+            jobs: [
+              {
+                id: `job_${r.databaseId}`,
+                name: r.workflowName || 'Run Jobs',
+                runner: 'github-hosted',
+                status: (r.status === 'completed' ? 'completed' : 'in_progress') as WorkflowRunStatus,
+                conclusion: (r.conclusion || null) as WorkflowConclusion,
+                durationSeconds: 0,
+                steps: [],
+              },
+            ],
+          }))
+          this.selectedRunId = this.runs[0]?.id || null
+          this.selectedJobId = this.runs[0]?.jobs[0]?.id || null
+          this.dataSource = 'live-gh'
+          loadedRuns = true
+        }
+      } catch {
+        // fallback to REST API
+      }
+    }
+
+    // Fallback: public GitHub REST API using git remote origin owner/repo
+    if (!loadedRuns && window.electronAPI?.git?.remoteInfo && window.electronAPI?.infra?.httpRequest) {
+      try {
+        const remote = await window.electronAPI.git.remoteInfo(workspacePath)
+        if (remote.owner && remote.repo) {
+          const apiRes = await window.electronAPI.infra.httpRequest({
+            url: `https://api.github.com/repos/${remote.owner}/${remote.repo}/actions/runs?per_page=10`,
+            method: 'GET',
+            headers: {
+              Accept: 'application/vnd.github+json',
+              'User-Agent': 'IndoctrinatedEdit',
+            },
+            timeoutMs: 10000,
+          })
+          if (apiRes.ok) {
+            const data = JSON.parse(apiRes.body)
+            const wfRuns: any[] = data.workflow_runs || []
+            if (wfRuns.length > 0) {
+              this.runs = wfRuns.map((r) => ({
+                id: String(r.id),
+                workflowId: r.path ? String(r.path).split('/').pop() || r.name : r.name,
+                name: r.name || 'Workflow',
+                runNumber: Number(r.run_number) || 1,
+                event: (['push', 'pull_request', 'workflow_dispatch', 'release'].includes(r.event) ? r.event : 'push') as WorkflowRun['event'],
+                status: (r.status === 'completed' ? (r.conclusion === 'failure' ? 'failed' : r.conclusion === 'cancelled' ? 'cancelled' : 'completed') : r.status === 'queued' ? 'queued' : 'in_progress') as WorkflowRunStatus,
+                conclusion: (r.conclusion || null) as WorkflowConclusion,
+                branch: r.head_branch || 'main',
+                actor: { name: r.actor?.login || 'github' },
+                commit: {
+                  hash: r.head_sha || '',
+                  shortHash: (r.head_sha || '').slice(0, 7),
+                  message: r.display_title || r.head_commit?.message?.split('\n')[0] || '',
+                },
+                startedAt: r.created_at || new Date().toISOString(),
+                durationFormatted: r.status === 'completed' ? 'done' : 'running',
+                jobs: [
+                  {
+                    id: `job_${r.id}`,
+                    name: r.name || 'Run Jobs',
+                    runner: 'github-hosted',
+                    status: (r.status === 'completed' ? 'completed' : 'in_progress') as WorkflowRunStatus,
+                    conclusion: (r.conclusion || null) as WorkflowConclusion,
+                    durationSeconds: 0,
+                    steps: [],
+                  },
+                ],
+              }))
+              this.selectedRunId = this.runs[0]?.id || null
+              this.selectedJobId = this.runs[0]?.jobs[0]?.id || null
+              this.dataSource = 'github-api'
+            }
+          }
+        }
+      } catch {
+        // keep discovered local workflows or defaults
+      }
+    }
+
+    this.notify()
+  }
+
+  public async fetchJobLogsAsync(runId: string, jobId: string): Promise<string[]> {
+    if (this.dataSource === 'live-gh' && this.activeWorkspacePath && typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const res = await window.electronAPI.workspace.execCommand({
+        command: `gh run view ${runId} --log`,
+        cwd: this.activeWorkspacePath,
+        timeoutMs: 15000,
+      })
+      if (res.exitCode === 0 && res.stdout.trim()) {
+        const lines = res.stdout.split(/\r?\n/).slice(-250)
+        this.liveJobLogsCache.set(`${runId}:${jobId}`, lines)
+        this.notify()
+        return lines
+      }
+      return [`[INFO] Could not fetch logs via gh CLI: ${res.stderr.trim() || 'Run may still be queued or unauthenticated'}`]
+    }
+    return this.getJobLogs(runId, jobId)
+  }
+
+  public async triggerWorkflowAsync(
+    workflowId: string,
+    branch = 'master',
+    inputs: Record<string, string> = {}
+  ): Promise<{ ok: boolean; message: string }> {
+    if (this.dataSource === 'live-gh' && this.activeWorkspacePath && typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const safeWf = workflowId.replace(/[^a-zA-Z0-9._-]/g, '')
+      const safeBranch = branch.replace(/[^a-zA-Z0-9._/-]/g, '')
+      const inputFlags = Object.entries(inputs)
+        .filter(([, v]) => v && v.trim())
+        .map(([k, v]) => `-f ${k.replace(/[^a-zA-Z0-9_-]/g, '')}=${JSON.stringify(v.trim())}`)
+        .join(' ')
+      const cmd = `gh workflow run ${safeWf} --ref ${safeBranch} ${inputFlags}`.trim()
+      const res = await window.electronAPI.workspace.execCommand({
+        command: cmd,
+        cwd: this.activeWorkspacePath,
+        timeoutMs: 15000,
+      })
+      if (res.exitCode === 0) {
+        await this.loadWorkspaceWorkflows(this.activeWorkspacePath)
+        return { ok: true, message: `Dispatched ${safeWf} on ${safeBranch}` }
+      }
+      return { ok: false, message: res.stderr.trim() || `gh workflow run failed (exit ${res.exitCode})` }
+    }
+    this.triggerWorkflow(workflowId, branch, inputs)
+    return { ok: true, message: `Triggered local simulation for ${workflowId}` }
+  }
+
+  public async rerunWorkflowAsync(runId: string): Promise<{ ok: boolean; message: string }> {
+    if (this.dataSource === 'live-gh' && this.activeWorkspacePath && typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const res = await window.electronAPI.workspace.execCommand({
+        command: `gh run rerun ${runId.replace(/[^0-9]/g, '')}`,
+        cwd: this.activeWorkspacePath,
+        timeoutMs: 15000,
+      })
+      if (res.exitCode === 0) {
+        await this.loadWorkspaceWorkflows(this.activeWorkspacePath)
+        return { ok: true, message: `Re-run requested for #${runId}` }
+      }
+      return { ok: false, message: res.stderr.trim() || 'gh run rerun failed' }
+    }
+    this.rerunWorkflow(runId)
+    return { ok: true, message: `Re-running ${runId}` }
+  }
+
+  public async cancelWorkflowAsync(runId: string): Promise<{ ok: boolean; message: string }> {
+    if (this.dataSource === 'live-gh' && this.activeWorkspacePath && typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
+      const res = await window.electronAPI.workspace.execCommand({
+        command: `gh run cancel ${runId.replace(/[^0-9]/g, '')}`,
+        cwd: this.activeWorkspacePath,
+        timeoutMs: 15000,
+      })
+      if (res.exitCode === 0) {
+        await this.loadWorkspaceWorkflows(this.activeWorkspacePath)
+        return { ok: true, message: `Cancelled run #${runId}` }
+      }
+      return { ok: false, message: res.stderr.trim() || 'gh run cancel failed' }
+    }
+    this.cancelWorkflow(runId)
+    return { ok: true, message: `Cancelled run ${runId}` }
   }
 
   private initDefaultWorkflows() {
@@ -455,6 +718,9 @@ export class GitWorkflowService {
   }
 
   public getJobLogs(runId: string, jobId: string): string[] {
+    const liveCached = this.liveJobLogsCache.get(`${runId}:${jobId}`)
+    if (liveCached && liveCached.length > 0) return liveCached
+
     const run = this.runs.find((r) => r.id === runId)
     const job = run?.jobs.find((j) => j.id === jobId)
     if (!job) return ['No logs available for selected job.']

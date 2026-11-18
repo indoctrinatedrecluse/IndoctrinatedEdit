@@ -12,7 +12,25 @@ import {
   getGitBlame,
   getGitDiff,
   applyGitPatch,
+  listBranches,
+  checkoutBranch,
+  deleteBranch,
+  gitPull,
+  gitPush,
+  gitFetch,
+  discardFileChanges,
+  stashList,
+  stashSave,
+  stashPop,
+  stashDrop,
+  cherryPickCommit,
+  revertCommit,
+  mergeBranch,
+  rebaseBranch,
+  showCommitDetails,
+  getRemoteInfo,
 } from './git-service'
+import { setupDebugIPC, disposeDebugSessions } from './debug-adapter-service'
 import { setupWorkspaceToolsIPC } from './workspace-tools-service'
 import { mcpClientManager, setupMcpClientIPC } from './mcp-client-service'
 import { infraSocketManager, setupInfraIPC } from './infra-ipc-service'
@@ -238,6 +256,9 @@ function disposeAllSubsystems() {
   } catch {}
   try {
     void antigravityAcpClient.disconnect()
+  } catch {}
+  try {
+    disposeDebugSessions()
   } catch {}
   try {
     updateService.triggerPendingInstallOnQuit()
@@ -480,6 +501,63 @@ ipcMain.handle('git:applyPatch', async (_, patch: string, options?: { cached?: b
   const targetDir = options?.cwd || process.env.APP_ROOT || process.cwd()
   return await applyGitPatch(targetDir, patch, options)
 })
+
+ipcMain.handle('git:branches', async (_, cwd?: string) => {
+  return await listBranches(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:checkout', async (_, branch: string, createNew?: boolean, cwd?: string) => {
+  return await checkoutBranch(cwd || process.env.APP_ROOT || process.cwd(), branch, Boolean(createNew))
+})
+ipcMain.handle('git:deleteBranch', async (_, branch: string, force?: boolean, cwd?: string) => {
+  return await deleteBranch(cwd || process.env.APP_ROOT || process.cwd(), branch, Boolean(force))
+})
+ipcMain.handle('git:pull', async (_, cwd?: string) => {
+  return await gitPull(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:push', async (_, cwd?: string) => {
+  return await gitPush(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:fetch', async (_, cwd?: string) => {
+  return await gitFetch(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:discardFile', async (_, filePath: string, isUntracked?: boolean, cwd?: string) => {
+  return await discardFileChanges(cwd || process.env.APP_ROOT || process.cwd(), filePath, Boolean(isUntracked))
+})
+ipcMain.handle('git:stashList', async (_, cwd?: string) => {
+  return await stashList(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:stashSave', async (_, message?: string, cwd?: string) => {
+  return await stashSave(cwd || process.env.APP_ROOT || process.cwd(), message)
+})
+ipcMain.handle('git:stashPop', async (_, ref?: string, cwd?: string) => {
+  return await stashPop(cwd || process.env.APP_ROOT || process.cwd(), ref)
+})
+ipcMain.handle('git:stashDrop', async (_, ref: string, cwd?: string) => {
+  return await stashDrop(cwd || process.env.APP_ROOT || process.cwd(), ref)
+})
+ipcMain.handle('git:cherryPick', async (_, hash: string, cwd?: string) => {
+  return await cherryPickCommit(cwd || process.env.APP_ROOT || process.cwd(), hash)
+})
+ipcMain.handle('git:revert', async (_, hash: string, cwd?: string) => {
+  return await revertCommit(cwd || process.env.APP_ROOT || process.cwd(), hash)
+})
+ipcMain.handle('git:merge', async (_, branch: string, cwd?: string) => {
+  return await mergeBranch(cwd || process.env.APP_ROOT || process.cwd(), branch)
+})
+ipcMain.handle('git:rebase', async (_, branch: string, cwd?: string) => {
+  return await rebaseBranch(cwd || process.env.APP_ROOT || process.cwd(), branch)
+})
+ipcMain.handle('git:showCommit', async (_, hash: string, cwd?: string) => {
+  return await showCommitDetails(cwd || process.env.APP_ROOT || process.cwd(), hash)
+})
+ipcMain.handle('git:remoteInfo', async (_, cwd?: string) => {
+  return await getRemoteInfo(cwd || process.env.APP_ROOT || process.cwd())
+})
+
+// ==========================================
+// Real Multi-Runtime Debug Adapter (CDP / DAP)
+// ==========================================
+setupDebugIPC(ipcMain, () => win)
 
 // ==========================================
 // Workspace CLI, Bundle, Search & Binary IPC

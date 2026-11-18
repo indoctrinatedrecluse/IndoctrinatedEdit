@@ -164,6 +164,23 @@ export class DebugService {
   private loadedModules: DebugLoadedModule[] = []
   private listeners: Set<() => void> = new Set()
   private stepIndex: number = 0
+  private liveMode: boolean = false
+  private liveCwd?: string
+  private unsubElectronDebug: (() => void) | null = null
+
+  private syncLiveBreakpoints() {
+    if (!this.liveMode) return
+    if (typeof window !== 'undefined' && window.electronAPI?.debug?.setBreakpoints) {
+      void window.electronAPI.debug.setBreakpoints(
+        this.getBreakpoints().map((b) => ({
+          filePath: b.filePath,
+          line: b.line,
+          enabled: b.enabled,
+          condition: b.condition,
+        }))
+      )
+    }
+  }
 
   constructor() {
     this.initDefaultWatches()
@@ -210,6 +227,7 @@ export class DebugService {
         verified: true,
       }
       this.breakpoints.set(filePath, list)
+      this.syncLiveBreakpoints()
       this.notify()
       return list[existingIndex]
     }
@@ -229,6 +247,7 @@ export class DebugService {
     list.push(newBp)
     list.sort((a, b) => a.line - b.line)
     this.breakpoints.set(filePath, list)
+    this.syncLiveBreakpoints()
     this.notify()
     return newBp
   }
@@ -258,6 +277,7 @@ export class DebugService {
       if (bp) {
         bp.enabled = !bp.enabled
         this.breakpoints.set(filePath, [...list])
+        this.syncLiveBreakpoints()
         this.notify()
       }
     })
@@ -272,11 +292,13 @@ export class DebugService {
         this.breakpoints.set(filePath, filtered)
       }
     })
+    this.syncLiveBreakpoints()
     this.notify()
   }
 
   public clearAllBreakpoints(): void {
     this.breakpoints.clear()
+    this.syncLiveBreakpoints()
     this.notify()
   }
 
@@ -287,6 +309,7 @@ export class DebugService {
       })
       this.breakpoints.set(filePath, [...list])
     })
+    this.syncLiveBreakpoints()
     this.notify()
   }
 
@@ -329,6 +352,9 @@ export class DebugService {
 
   public setExceptionBreakpoints(config: Partial<ExceptionBreakpointsConfig>): void {
     this.exceptionBreakpoints = { ...this.exceptionBreakpoints, ...config }
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.setExceptionBreakpoints) {
+      void window.electronAPI.debug.setExceptionBreakpoints(this.exceptionBreakpoints)
+    }
     this.notify()
   }
 
@@ -389,6 +415,27 @@ export class DebugService {
 
     const res = updateRecursive(this.variables)
     if (res) {
+      if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.setVariable) {
+        const findVar = (vars: DebugVariable[]): DebugVariable | undefined => {
+          for (const v of vars) {
+            if (v.id === id) return v
+            if (v.children) {
+              const found = findVar(v.children)
+              if (found) return found
+            }
+          }
+          return undefined
+        }
+        const targetVar = findVar(this.variables)
+        if (targetVar) {
+          void window.electronAPI.debug.setVariable(
+            targetVar.name,
+            newValue,
+            this.getActiveFrameId() || undefined,
+            (targetVar as any).scopeNumber ?? 0
+          )
+        }
+      }
       this.updateWatchExpressions()
       this.notify()
     }
@@ -470,7 +517,17 @@ export class DebugService {
       if (frame) {
         this.activeFilePath = frame.filePath
         this.activeLine = frame.line
-        this.refreshVariablesForFrame(frame)
+        if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.getFrameVariables) {
+          void window.electronAPI.debug.getFrameVariables(frame.id).then((vars) => {
+            if (Array.isArray(vars)) {
+              this.variables = vars
+              this.updateWatchExpressions()
+              this.notify()
+            }
+          })
+        } else {
+          this.refreshVariablesForFrame(frame)
+        }
       }
     }
     this.notify()
@@ -505,6 +562,18 @@ export class DebugService {
   }
 
   public updateWatchExpressions(): void {
+    if (this.liveMode && this.sessionState === 'paused' && typeof window !== 'undefined' && window.electronAPI?.debug?.evaluate) {
+      const frameId = this.getActiveFrameId() || undefined
+      for (const w of this.watchExpressions) {
+        void window.electronAPI.debug.evaluate(w.expression, frameId).then((res) => {
+          w.value = res.value
+          w.type = res.type
+          w.error = res.error
+          this.notify()
+        })
+      }
+      return
+    }
     this.watchExpressions.forEach((w) => {
       const res = this.evaluateExpression(w.expression)
       w.value = res.value
@@ -629,6 +698,18 @@ export class DebugService {
       return summary
     }
 
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.evaluate) {
+      const frameId = this.getActiveFrameId() || undefined
+      void window.electronAPI.debug.evaluate(trimmed, frameId).then((liveRes) => {
+        if (liveRes.error) {
+          this.logToConsole('error', liveRes.error)
+        } else {
+          this.logToConsole('result', `${liveRes.value ?? 'undefined'} (${liveRes.type || 'any'})`)
+        }
+      })
+      return 'Evaluating in live runtime...'
+    }
+
     const res = this.evaluateExpression(trimmed)
     if (res.error) {
       this.logToConsole('error', res.error)
@@ -640,17 +721,99 @@ export class DebugService {
   }
 
   // --- Debugger Stepping Lifecycle ---
-  public async startDebugging(filePath = 'welcome.ts'): Promise<void> {
+  public async startDebugging(filePath = 'welcome.ts', cwd?: string): Promise<void> {
     this.sessionState = 'running'
     this.activeFilePath = filePath
+    this.liveCwd = cwd
     this.activeLine = 1
     this.stepIndex = 0
+    this.loadedModules = []
+    this.threads = []
+    this.variables = []
 
     const targetConfig = DEBUG_RUNTIME_TARGETS.find((t) => t.target === this.activeTarget)
     this.logToConsole(
       'info',
       `[Debugger] Starting ${targetConfig?.name || 'V8'} session for ${filePath}...`
     )
+
+    // Real Electron CDP / DAP debugger
+    if (typeof window !== 'undefined' && window.electronAPI?.debug?.start) {
+      this.unsubElectronDebug?.()
+      this.liveMode = true
+      this.unsubElectronDebug = window.electronAPI.debug.onEvent((ev: any) => {
+        if (ev.type === 'output') {
+          const text = String(ev.text || '').trimEnd()
+          if (text) this.logToConsole(ev.category || 'stdout', text)
+        } else if (ev.type === 'moduleLoaded' && ev.module) {
+          if (!this.loadedModules.some((m) => m.id === ev.module.id)) {
+            this.loadedModules.push(ev.module)
+            this.notify()
+          }
+        } else if (ev.type === 'paused') {
+          this.sessionState = 'paused'
+          if (Array.isArray(ev.threads) && ev.threads.length > 0) {
+            this.threads = ev.threads
+            const current = ev.threads.find((t: any) => t.isCurrent) || ev.threads[0]
+            this.activeThreadId = current.id
+          }
+          if (Array.isArray(ev.frames) && ev.frames.length > 0) {
+            this.activeFilePath = ev.frames[0].filePath
+            this.activeLine = ev.frames[0].line
+          }
+          this.variables = Array.isArray(ev.variables) ? ev.variables : []
+          this.logToConsole(
+            'info',
+            `[Debugger] Paused (${ev.reason || 'breakpoint'}) at ${this.activeFilePath}:${this.activeLine}`
+          )
+          this.updateWatchExpressions()
+          this.notify()
+        } else if (ev.type === 'resumed') {
+          this.sessionState = 'running'
+          this.notify()
+        } else if (ev.type === 'error') {
+          this.logToConsole('error', `[Debugger] ${ev.text || 'Adapter error'}`)
+        } else if (ev.type === 'terminated') {
+          this.liveMode = false
+          this.unsubElectronDebug?.()
+          this.unsubElectronDebug = null
+          this.sessionState = 'inactive'
+          this.threads = []
+          this.variables = []
+          this.logToConsole('info', `[Debugger] Process exited (code ${ev.exitCode ?? 0}).`)
+          this.notify()
+        }
+      })
+
+      this.notify()
+      const startRes = await window.electronAPI.debug.start({
+        target: this.activeTarget,
+        filePath,
+        cwd,
+        breakpoints: this.getBreakpoints().map((b) => ({
+          filePath: b.filePath,
+          line: b.line,
+          enabled: b.enabled,
+          condition: b.condition,
+          logMessage: b.logMessage,
+        })),
+        exceptionBreakpoints: this.exceptionBreakpoints,
+      })
+
+      if (!startRes.ok) {
+        this.liveMode = false
+        this.unsubElectronDebug?.()
+        this.unsubElectronDebug = null
+        this.sessionState = 'inactive'
+        this.logToConsole('error', `[Debugger] Failed to launch: ${startRes.error || 'Unknown error'}`)
+        this.notify()
+      } else {
+        this.logToConsole('info', `[Debugger] Live ${targetConfig?.adapterName || 'CDP'} adapter attached.`)
+      }
+      return
+    }
+
+    this.liveMode = false
     this.logToConsole(
       'info',
       `[Debugger] Connected to adapter ${targetConfig?.adapterName || 'v8-inspector'}. Breakpoints verified.`
@@ -665,6 +828,12 @@ export class DebugService {
 
   public async continueExecution(): Promise<void> {
     if (this.sessionState !== 'paused' && this.sessionState !== 'running') return
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.continue) {
+      this.sessionState = 'running'
+      this.notify()
+      await window.electronAPI.debug.continue()
+      return
+    }
     this.sessionState = 'running'
     this.notify()
 
@@ -672,6 +841,10 @@ export class DebugService {
   }
 
   public async stepOver(): Promise<void> {
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.stepOver) {
+      await window.electronAPI.debug.stepOver()
+      return
+    }
     if (this.sessionState !== 'paused') {
       await this.startDebugging(this.activeFilePath)
       return
@@ -682,6 +855,10 @@ export class DebugService {
   }
 
   public async stepInto(): Promise<void> {
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.stepInto) {
+      await window.electronAPI.debug.stepInto()
+      return
+    }
     if (this.sessionState !== 'paused') {
       await this.startDebugging(this.activeFilePath)
       return
@@ -692,6 +869,10 @@ export class DebugService {
   }
 
   public async stepOut(): Promise<void> {
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.stepOut) {
+      await window.electronAPI.debug.stepOut()
+      return
+    }
     if (this.sessionState !== 'paused') return
     this.stepIndex++
     const cur = this.threads.find((t) => t.id === this.activeThreadId)
@@ -708,6 +889,10 @@ export class DebugService {
   }
 
   public pause(): void {
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.pause) {
+      void window.electronAPI.debug.pause()
+      return
+    }
     if (this.sessionState === 'running') {
       this.sessionState = 'paused'
       this.syncExecutionState()
@@ -716,13 +901,21 @@ export class DebugService {
   }
 
   public restart(): void {
+    const file = this.activeFilePath
+    const cwd = this.liveCwd
     this.stopDebugging()
     setTimeout(() => {
-      this.startDebugging(this.activeFilePath)
+      void this.startDebugging(file, cwd)
     }, 150)
   }
 
   public stopDebugging(): void {
+    if (this.liveMode && typeof window !== 'undefined' && window.electronAPI?.debug?.stop) {
+      void window.electronAPI.debug.stop()
+      this.liveMode = false
+      this.unsubElectronDebug?.()
+      this.unsubElectronDebug = null
+    }
     this.sessionState = 'stopped'
     this.threads = []
     this.variables = []

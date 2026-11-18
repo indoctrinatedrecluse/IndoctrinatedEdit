@@ -26,14 +26,23 @@ export const DebugToolbar: React.FC<DebugToolbarProps> = ({ onGoToActiveLocation
   const isDragging = useRef(false)
   const dragStart = useRef({ x: 0, y: 0 })
 
+  const lastNavRef = useRef<string | null>(null)
+
   useEffect(() => {
     return debugService.subscribe(() => {
-      setSessionState(debugService.getSessionState())
+      const nextState = debugService.getSessionState()
+      setSessionState(nextState)
       const loc = debugService.getActiveLocation()
       setActiveLocation(loc)
       setActiveTarget(debugService.getActiveTarget())
-      if (loc && onGoToActiveLocation) {
-        onGoToActiveLocation(loc.filePath, loc.line)
+      if (nextState === 'paused' && loc && onGoToActiveLocation) {
+        const key = `${loc.filePath}:${loc.line}`
+        if (lastNavRef.current !== key) {
+          lastNavRef.current = key
+          onGoToActiveLocation(loc.filePath, loc.line)
+        }
+      } else if (nextState === 'inactive' || nextState === 'stopped') {
+        lastNavRef.current = null
       }
     })
   }, [onGoToActiveLocation])

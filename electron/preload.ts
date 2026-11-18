@@ -34,6 +34,12 @@ export interface ElectronGitBlameEntry {
   summary: string
 }
 
+export interface ElectronGitActionResult {
+  success: boolean
+  output?: string
+  error?: string
+}
+
 export interface ElectronGitAPI {
   getRepoStatus: (cwd?: string) => Promise<GitRepoStatus>
   stageFile: (filePath: string, cwd?: string) => Promise<boolean>
@@ -43,6 +49,46 @@ export interface ElectronGitAPI {
   blame: (filePath: string, cwd?: string) => Promise<ElectronGitBlameEntry[]>
   diff: (options?: { staged?: boolean; filePath?: string; cwd?: string }) => Promise<string>
   applyPatch: (patch: string, options?: { cached?: boolean; reverse?: boolean; cwd?: string }) => Promise<{ success: boolean; error?: string }>
+  branches: (cwd?: string) => Promise<{ current: string; local: string[]; remote: string[] }>
+  checkout: (branch: string, createNew?: boolean, cwd?: string) => Promise<ElectronGitActionResult>
+  deleteBranch: (branch: string, force?: boolean, cwd?: string) => Promise<ElectronGitActionResult>
+  pull: (cwd?: string) => Promise<ElectronGitActionResult>
+  push: (cwd?: string) => Promise<ElectronGitActionResult>
+  fetch: (cwd?: string) => Promise<ElectronGitActionResult>
+  discardFile: (filePath: string, isUntracked?: boolean, cwd?: string) => Promise<ElectronGitActionResult>
+  stashList: (cwd?: string) => Promise<Array<{ ref: string; message: string; date: string }>>
+  stashSave: (message?: string, cwd?: string) => Promise<ElectronGitActionResult>
+  stashPop: (ref?: string, cwd?: string) => Promise<ElectronGitActionResult>
+  stashDrop: (ref: string, cwd?: string) => Promise<ElectronGitActionResult>
+  cherryPick: (hash: string, cwd?: string) => Promise<ElectronGitActionResult>
+  revert: (hash: string, cwd?: string) => Promise<ElectronGitActionResult>
+  merge: (branch: string, cwd?: string) => Promise<ElectronGitActionResult>
+  rebase: (branch: string, cwd?: string) => Promise<ElectronGitActionResult>
+  showCommit: (hash: string, cwd?: string) => Promise<{ hash: string; stat: string; files: string[]; diff: string }>
+  remoteInfo: (cwd?: string) => Promise<{ url: string; owner?: string; repo?: string }>
+}
+
+export interface ElectronDebugAPI {
+  start: (options: {
+    target: 'node' | 'python' | 'rust' | 'go'
+    filePath: string
+    cwd?: string
+    args?: string[]
+    breakpoints?: Array<{ filePath: string; line: number; enabled: boolean; condition?: string; logMessage?: string }>
+    exceptionBreakpoints?: { uncaught: boolean; caught: boolean }
+  }) => Promise<{ ok: boolean; sessionId?: string; error?: string }>
+  stop: () => Promise<boolean>
+  continue: () => Promise<boolean>
+  stepOver: () => Promise<boolean>
+  stepInto: () => Promise<boolean>
+  stepOut: () => Promise<boolean>
+  pause: () => Promise<boolean>
+  setBreakpoints: (bps: Array<{ filePath: string; line: number; enabled: boolean; condition?: string }>) => Promise<boolean>
+  setExceptionBreakpoints: (cfg: { uncaught: boolean; caught: boolean }) => Promise<boolean>
+  evaluate: (expression: string, frameId?: string) => Promise<{ value?: string; type?: string; error?: string }>
+  setVariable: (varName: string, newValue: string, frameId?: string, scopeNumber?: number) => Promise<{ ok: boolean; error?: string }>
+  getFrameVariables: (frameId: string) => Promise<any[]>
+  onEvent: (callback: (ev: any) => void) => () => void
 }
 
 export interface ElectronWorkspaceToolsAPI {
@@ -366,6 +412,9 @@ export interface ElectronAPI {
   // Real Network & Infrastructure Studios IPC
   infra: ElectronInfraAPI
 
+  // Real Multi-Runtime Debug Adapter (CDP / DAP)
+  debug: ElectronDebugAPI
+
   // Lifecycle notification
   notifyReady: () => Promise<void>
 }
@@ -407,6 +456,43 @@ const api: ElectronAPI = {
     diff: (options?: { staged?: boolean; filePath?: string; cwd?: string }) => ipcRenderer.invoke('git:diff', options),
     applyPatch: (patch: string, options?: { cached?: boolean; reverse?: boolean; cwd?: string }) =>
       ipcRenderer.invoke('git:applyPatch', patch, options),
+    branches: (cwd?: string) => ipcRenderer.invoke('git:branches', cwd),
+    checkout: (branch: string, createNew?: boolean, cwd?: string) => ipcRenderer.invoke('git:checkout', branch, createNew, cwd),
+    deleteBranch: (branch: string, force?: boolean, cwd?: string) => ipcRenderer.invoke('git:deleteBranch', branch, force, cwd),
+    pull: (cwd?: string) => ipcRenderer.invoke('git:pull', cwd),
+    push: (cwd?: string) => ipcRenderer.invoke('git:push', cwd),
+    fetch: (cwd?: string) => ipcRenderer.invoke('git:fetch', cwd),
+    discardFile: (filePath: string, isUntracked?: boolean, cwd?: string) => ipcRenderer.invoke('git:discardFile', filePath, isUntracked, cwd),
+    stashList: (cwd?: string) => ipcRenderer.invoke('git:stashList', cwd),
+    stashSave: (message?: string, cwd?: string) => ipcRenderer.invoke('git:stashSave', message, cwd),
+    stashPop: (ref?: string, cwd?: string) => ipcRenderer.invoke('git:stashPop', ref, cwd),
+    stashDrop: (ref: string, cwd?: string) => ipcRenderer.invoke('git:stashDrop', ref, cwd),
+    cherryPick: (hash: string, cwd?: string) => ipcRenderer.invoke('git:cherryPick', hash, cwd),
+    revert: (hash: string, cwd?: string) => ipcRenderer.invoke('git:revert', hash, cwd),
+    merge: (branch: string, cwd?: string) => ipcRenderer.invoke('git:merge', branch, cwd),
+    rebase: (branch: string, cwd?: string) => ipcRenderer.invoke('git:rebase', branch, cwd),
+    showCommit: (hash: string, cwd?: string) => ipcRenderer.invoke('git:showCommit', hash, cwd),
+    remoteInfo: (cwd?: string) => ipcRenderer.invoke('git:remoteInfo', cwd),
+  },
+
+  debug: {
+    start: (options) => ipcRenderer.invoke('debug:start', options),
+    stop: () => ipcRenderer.invoke('debug:stop'),
+    continue: () => ipcRenderer.invoke('debug:continue'),
+    stepOver: () => ipcRenderer.invoke('debug:stepOver'),
+    stepInto: () => ipcRenderer.invoke('debug:stepInto'),
+    stepOut: () => ipcRenderer.invoke('debug:stepOut'),
+    pause: () => ipcRenderer.invoke('debug:pause'),
+    setBreakpoints: (bps) => ipcRenderer.invoke('debug:setBreakpoints', bps),
+    setExceptionBreakpoints: (cfg) => ipcRenderer.invoke('debug:setExceptionBreakpoints', cfg),
+    evaluate: (expression, frameId) => ipcRenderer.invoke('debug:evaluate', expression, frameId),
+    setVariable: (varName, newValue, frameId, scopeNumber) => ipcRenderer.invoke('debug:setVariable', varName, newValue, frameId, scopeNumber),
+    getFrameVariables: (frameId) => ipcRenderer.invoke('debug:getFrameVariables', frameId),
+    onEvent: (callback) => {
+      const handler = (_: unknown, ev: any) => callback(ev)
+      ipcRenderer.on('debug:event', handler)
+      return () => ipcRenderer.removeListener('debug:event', handler)
+    },
   },
 
   workspace: {

@@ -17,6 +17,13 @@ import {
   Clock,
   XCircle,
   Terminal,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Archive,
+  Undo2,
+  GitMerge,
+  FileDiff,
+  Square,
 } from 'lucide-react'
 import { GitRepoStatus, GitCommit } from '@sdk/types'
 import {
@@ -25,6 +32,7 @@ import {
   WorkflowRun,
   WorkflowJob,
 } from '../../services/gitWorkflowService'
+import { MergeStudioModal } from '../Git/MergeStudioModal'
 import './GitGraphView.css'
 
 interface GitGraphViewProps {
@@ -49,11 +57,26 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
   const [stagedExpanded, setStagedExpanded] = useState<boolean>(true)
   const [changesExpanded, setChangesExpanded] = useState<boolean>(true)
   const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null)
+  const [commitDetail, setCommitDetail] = useState<{ hash: string; stat: string; files: string[]; diff: string } | null>(null)
   const [committing, setCommitting] = useState<boolean>(false)
+  const [gitToast, setGitToast] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  // Branch & Stash state
+  const [branches, setBranches] = useState<{ current: string; local: string[]; remote: string[] }>({ current: '', local: [], remote: [] })
+  const [showBranchMenu, setShowBranchMenu] = useState<boolean>(false)
+  const [newBranchName, setNewBranchName] = useState<string>('')
+  const [stashes, setStashes] = useState<Array<{ ref: string; message: string; date: string }>>([])
+  const [stashExpanded, setStashExpanded] = useState<boolean>(false)
+  const [stashMsg, setStashMsg] = useState<string>('')
+
+  // Diff Preview & 3-Way Merge Studio state
+  const [diffPreview, setDiffPreview] = useState<{ filePath: string; diff: string } | null>(null)
+  const [mergeTarget, setMergeTarget] = useState<{ filePath: string; content: string } | null>(null)
 
   // Workflows state
   const [workflows, setWorkflows] = useState<WorkflowFile[]>(() => gitWorkflowService.getWorkflows())
   const [runs, setRuns] = useState<WorkflowRun[]>(() => gitWorkflowService.getRuns())
+  const [workflowDataSource, setWorkflowDataSource] = useState(() => gitWorkflowService.getDataSource())
   const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(() => gitWorkflowService.getSelectedRun())
   const [selectedJob, setSelectedJob] = useState<WorkflowJob | null>(() => gitWorkflowService.getSelectedJob())
   const [jobLogs, setJobLogs] = useState<string[]>([])
@@ -61,7 +84,12 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false)
   const [dispatchWorkflowId, setDispatchWorkflowId] = useState<string>('release.yml')
   const [dispatchBranch, setDispatchBranch] = useState<string>('master')
-  const [dispatchTagInput, setDispatchTagInput] = useState<string>('v4.1.0')
+  const [dispatchTagInput, setDispatchTagInput] = useState<string>('')
+
+  const showToast = useCallback((type: 'ok' | 'err', text: string) => {
+    setGitToast({ type, text })
+    setTimeout(() => setGitToast((prev) => (prev?.text === text ? null : prev)), 4000)
+  }, [])
 
   const fetchGitStatus = useCallback(async () => {
     if (!window.electronAPI?.git?.getRepoStatus) {
@@ -73,6 +101,15 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
       setLoading(true)
       const res = await window.electronAPI.git.getRepoStatus(workspacePath)
       setStatus(res)
+      if (res.branch) setDispatchBranch(res.branch)
+      if (window.electronAPI.git.branches) {
+        const br = await window.electronAPI.git.branches(workspacePath)
+        setBranches(br)
+      }
+      if (window.electronAPI.git.stashList) {
+        const st = await window.electronAPI.git.stashList(workspacePath)
+        setStashes(st)
+      }
     } catch (err) {
       console.warn('Failed to fetch git status:', err)
     } finally {
@@ -82,11 +119,17 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
 
   useEffect(() => {
     fetchGitStatus()
-  }, [fetchGitStatus])
+    void gitWorkflowService.loadWorkspaceWorkflows(workspacePath)
+  }, [fetchGitStatus, workspacePath])
 
   useEffect(() => {
     return gitWorkflowService.subscribe(() => {
-      setWorkflows(gitWorkflowService.getWorkflows())
+      const wfs = gitWorkflowService.getWorkflows()
+      setWorkflows(wfs)
+      if (wfs.length > 0 && !wfs.some((w) => w.id === dispatchWorkflowId)) {
+        setDispatchWorkflowId(wfs[0].id)
+      }
+      setWorkflowDataSource(gitWorkflowService.getDataSource())
       setRuns(gitWorkflowService.getRuns(selectedWorkflowFilter === 'all' ? undefined : selectedWorkflowFilter))
       const run = gitWorkflowService.getSelectedRun()
       setSelectedRun(run)
@@ -96,7 +139,120 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         setJobLogs(gitWorkflowService.getJobLogs(run.id, job.id))
       }
     })
-  }, [selectedWorkflowFilter])
+  }, [selectedWorkflowFilter, dispatchWorkflowId])
+
+  const handleCheckout = async (branch: string, createNew = false) => {
+    if (!window.electronAPI?.git?.checkout || !branch.trim()) return
+    const res = await window.electronAPI.git.checkout(branch.trim(), createNew, workspacePath)
+    if (res.success) {
+      showToast('ok', createNew ? `Created & switched to ${branch}` : `Switched to ${branch}`)
+      setShowBranchMenu(false)
+      setNewBranchName('')
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Checkout failed')
+    }
+  }
+
+  const handleGitSync = async (action: 'fetch' | 'pull' | 'push') => {
+    const fn = window.electronAPI?.git?.[action]
+    if (!fn) return
+    setLoading(true)
+    try {
+      const res = await fn(workspacePath)
+      if (res.success) {
+        showToast('ok', `git ${action} succeeded${res.output ? `: ${res.output.slice(0, 80)}` : ''}`)
+        await fetchGitStatus()
+      } else {
+        showToast('err', res.error || `git ${action} failed`)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDiscardFile = async (filePath: string, isUntracked: boolean) => {
+    if (!window.electronAPI?.git?.discardFile) return
+    const res = await window.electronAPI.git.discardFile(filePath, isUntracked, workspacePath)
+    if (res.success) {
+      showToast('ok', `Discarded changes in ${filePath}`)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Discard failed')
+    }
+  }
+
+  const handlePreviewDiff = async (filePath: string, staged: boolean) => {
+    if (!window.electronAPI?.git?.diff) return
+    const diff = await window.electronAPI.git.diff({ filePath, staged, cwd: workspacePath })
+    setDiffPreview({ filePath, diff: diff || '(No diff output — untracked or binary file)' })
+  }
+
+  const handleOpenMergeStudio = async (relPath: string) => {
+    if (!window.electronAPI?.readFile) return
+    const fullPath = workspacePath ? `${workspacePath.replace(/[/\\]+$/, '')}/${relPath}` : relPath
+    try {
+      const content = await window.electronAPI.readFile(fullPath)
+      setMergeTarget({ filePath: fullPath, content })
+    } catch (err: any) {
+      showToast('err', `Could not read ${relPath}: ${err?.message || err}`)
+    }
+  }
+
+  const handleStashSave = async () => {
+    if (!window.electronAPI?.git?.stashSave) return
+    const res = await window.electronAPI.git.stashSave(stashMsg || undefined, workspacePath)
+    if (res.success) {
+      setStashMsg('')
+      showToast('ok', 'Saved working tree to stash')
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Stash save failed')
+    }
+  }
+
+  const handleStashPop = async (ref: string) => {
+    if (!window.electronAPI?.git?.stashPop) return
+    const res = await window.electronAPI.git.stashPop(ref, workspacePath)
+    if (res.success) {
+      showToast('ok', `Applied ${ref}`)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Stash pop failed')
+    }
+  }
+
+  const handleStashDrop = async (ref: string) => {
+    if (!window.electronAPI?.git?.stashDrop) return
+    const res = await window.electronAPI.git.stashDrop(ref, workspacePath)
+    if (res.success) {
+      showToast('ok', `Dropped ${ref}`)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Stash drop failed')
+    }
+  }
+
+  const handleSelectCommit = async (commit: GitCommit) => {
+    setSelectedCommit(commit)
+    setCommitDetail(null)
+    if (window.electronAPI?.git?.showCommit) {
+      const detail = await window.electronAPI.git.showCommit(commit.hash, workspacePath)
+      setCommitDetail(detail)
+    }
+  }
+
+  const handleCommitAction = async (action: 'cherryPick' | 'revert', hash: string) => {
+    const fn = window.electronAPI?.git?.[action]
+    if (!fn) return
+    const res = await fn(hash, workspacePath)
+    if (res.success) {
+      showToast('ok', `${action === 'cherryPick' ? 'Cherry-picked' : 'Reverted'} ${hash.slice(0, 7)}`)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || `${action} failed`)
+    }
+  }
 
   const handleStageFile = async (filePath: string) => {
     if (!window.electronAPI?.git?.stageFile) return
@@ -142,8 +298,13 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     await fetchGitStatus()
   }
 
-  const handleTriggerDispatch = () => {
-    gitWorkflowService.triggerWorkflow(dispatchWorkflowId, dispatchBranch, { tag: dispatchTagInput })
+  const handleTriggerDispatch = async () => {
+    const res = await gitWorkflowService.triggerWorkflowAsync(
+      dispatchWorkflowId,
+      dispatchBranch,
+      dispatchTagInput.trim() ? { tag: dispatchTagInput.trim() } : {}
+    )
+    showToast(res.ok ? 'ok' : 'err', res.message)
     setIsDispatchModalOpen(false)
     setActiveTab('workflows')
   }
@@ -154,6 +315,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     if (run.jobs.length > 0) {
       setSelectedJob(run.jobs[0])
       setJobLogs(gitWorkflowService.getJobLogs(run.id, run.jobs[0].id))
+      void gitWorkflowService.fetchJobLogsAsync(run.id, run.jobs[0].id).then((lines) => setJobLogs(lines))
     }
   }
 
@@ -162,6 +324,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     setSelectedJob(job)
     if (selectedRun) {
       setJobLogs(gitWorkflowService.getJobLogs(selectedRun.id, job.id))
+      void gitWorkflowService.fetchJobLogsAsync(selectedRun.id, job.id).then((lines) => setJobLogs(lines))
     }
   }
 
@@ -195,11 +358,17 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     <div className="git-graph-view">
       {/* Top Stylish Header */}
       <div className="git-header">
-        <div className="git-header-left">
-          <div className="git-branch-pill">
+        <div className="git-header-left" style={{ position: 'relative' }}>
+          <button
+            className="git-branch-pill glass-interactive"
+            onClick={() => setShowBranchMenu((v) => !v)}
+            title="Switch or Create Branch"
+            style={{ cursor: 'pointer', border: 'none' }}
+          >
             <GitBranch size={13} className="branch-icon" />
             <span className="branch-name">{status.branch || 'master'}</span>
-          </div>
+            <ChevronDown size={11} />
+          </button>
           {(status.ahead > 0 || status.behind > 0) && (
             <div className="sync-badge">
               {status.ahead > 0 && <span className="sync-up">↑ {status.ahead}</span>}
@@ -209,6 +378,12 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         </div>
 
         <div className="git-header-right">
+          <button className="icon-btn" onClick={() => void handleGitSync('pull')} title="Git Pull">
+            <ArrowDownToLine size={12} />
+          </button>
+          <button className="icon-btn" onClick={() => void handleGitSync('push')} title="Git Push">
+            <ArrowUpFromLine size={12} />
+          </button>
           <button
             className="icon-btn"
             onClick={() => setIsDispatchModalOpen(true)}
@@ -221,6 +396,64 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
           </button>
         </div>
       </div>
+
+      {/* Inline Branch Switcher / Create Drawer */}
+      {showBranchMenu && (
+        <div className="glass-panel" style={{ margin: '0 8px 6px', padding: 8, borderRadius: 8, fontSize: 11 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+            <input
+              type="text"
+              className="commit-textarea glass-input"
+              style={{ flex: 1, padding: '3px 6px', fontSize: 11 }}
+              placeholder="New branch name..."
+              value={newBranchName}
+              onChange={(e) => setNewBranchName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newBranchName.trim()) void handleCheckout(newBranchName, true)
+              }}
+            />
+            <button
+              className="sec-action-link"
+              onClick={() => void handleCheckout(newBranchName, true)}
+              disabled={!newBranchName.trim()}
+            >
+              + Create
+            </button>
+            <button className="sec-action-link" onClick={() => void handleGitSync('fetch')}>
+              Fetch
+            </button>
+          </div>
+          <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {branches.local.map((b) => (
+              <button
+                key={b}
+                className="file-change-row glass-interactive"
+                style={{ textAlign: 'left', border: 'none', background: b === branches.current ? 'rgba(10,132,255,0.2)' : 'transparent', color: '#E2E8F0', cursor: 'pointer' }}
+                onClick={() => void handleCheckout(b, false)}
+              >
+                <GitBranch size={11} />
+                <span style={{ flex: 1 }}>{b}</span>
+                {b === branches.current && <Check size={11} color="#30D158" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {gitToast && (
+        <div
+          style={{
+            margin: '0 8px 6px',
+            padding: '5px 8px',
+            borderRadius: 6,
+            fontSize: 11,
+            color: gitToast.type === 'ok' ? '#30D158' : '#FF453A',
+            background: gitToast.type === 'ok' ? 'rgba(48,209,88,0.12)' : 'rgba(255,69,58,0.14)',
+          }}
+        >
+          {gitToast.text}
+        </div>
+      )}
 
       {/* Mode Switcher Tabs */}
       <div className="git-tab-switcher">
@@ -312,6 +545,16 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                       <span className={`status-code ${file.status.toLowerCase()}`}>{file.status}</span>
                       <span className="file-path">{file.path}</span>
                       <button
+                        className="row-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handlePreviewDiff(file.path, true)
+                        }}
+                        title="Preview Staged Diff"
+                      >
+                        <FileDiff size={11} />
+                      </button>
+                      <button
                         className="row-action-btn unstage"
                         onClick={(e) => {
                           e.stopPropagation()
@@ -365,6 +608,38 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                         {file.status === '?' ? 'U' : file.status}
                       </span>
                       <span className="file-path">{file.path}</span>
+                      {file.status === 'U' && (
+                        <button
+                          className="row-action-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleOpenMergeStudio(file.path)
+                          }}
+                          title="Resolve Conflict in 3-Way Merge Studio"
+                        >
+                          <GitMerge size={11} color="#BF5AF2" />
+                        </button>
+                      )}
+                      <button
+                        className="row-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handlePreviewDiff(file.path, false)
+                        }}
+                        title="Preview File Diff"
+                      >
+                        <FileDiff size={11} />
+                      </button>
+                      <button
+                        className="row-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleDiscardFile(file.path, file.status === '?')
+                        }}
+                        title="Discard Working Tree Changes"
+                      >
+                        <Undo2 size={11} />
+                      </button>
                       <button
                         className="row-action-btn stage"
                         onClick={(e) => {
@@ -374,6 +649,66 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                         title="Stage File"
                       >
                         <Plus size={12} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          {/* Diff Preview Drawer */}
+          {diffPreview && (
+            <div className="selected-commit-drawer glass-panel" style={{ marginTop: 8 }}>
+              <div className="drawer-header">
+                <span className="drawer-hash">DIFF: {diffPreview.filePath}</span>
+                <button className="close-btn" onClick={() => setDiffPreview(null)}>
+                  ✕
+                </button>
+              </div>
+              <pre style={{ fontSize: 10.5, fontFamily: 'monospace', maxHeight: 180, overflow: 'auto', margin: 0, whiteSpace: 'pre-wrap' }}>
+                {diffPreview.diff}
+              </pre>
+            </div>
+          )}
+
+          {/* Stashes Section */}
+          <div className="changes-section" style={{ marginTop: 8 }}>
+            <div className="section-header" onClick={() => setStashExpanded((v) => !v)}>
+              <div className="sec-header-left">
+                {stashExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <Archive size={12} />
+                <span className="section-title">STASHES</span>
+                <span className="badge">{stashes.length}</span>
+              </div>
+            </div>
+            {stashExpanded && (
+              <div style={{ padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <input
+                    type="text"
+                    className="commit-textarea glass-input"
+                    style={{ flex: 1, padding: '3px 6px', fontSize: 11 }}
+                    placeholder="Stash message (optional)..."
+                    value={stashMsg}
+                    onChange={(e) => setStashMsg(e.target.value)}
+                  />
+                  <button className="sec-action-link" onClick={() => void handleStashSave()}>
+                    Save
+                  </button>
+                </div>
+                {stashes.length === 0 ? (
+                  <div className="empty-hint">No stashes saved</div>
+                ) : (
+                  stashes.map((s) => (
+                    <div key={s.ref} className="file-change-row glass-interactive" style={{ fontSize: 11 }}>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <strong>{s.ref}</strong> {s.message}
+                      </span>
+                      <button className="sec-action-link" onClick={() => void handleStashPop(s.ref)}>
+                        Pop
+                      </button>
+                      <button className="sec-action-link" onClick={() => void handleStashDrop(s.ref)}>
+                        Drop
                       </button>
                     </div>
                   ))
@@ -412,7 +747,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                   <div
                     key={commit.hash}
                     className={`graph-row glass-interactive ${isSelected ? 'selected' : ''}`}
-                    onClick={() => setSelectedCommit(commit)}
+                    onClick={() => void handleSelectCommit(commit)}
                   >
                     <div className="subway-canvas" style={{ minWidth: svgWidth }}>
                       <svg width={svgWidth} height="42" viewBox={`0 0 ${svgWidth} 42`}>
@@ -515,6 +850,34 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 <span>By {selectedCommit.authorName} &lt;{selectedCommit.authorEmail}&gt;</span>
                 <span>{new Date(selectedCommit.date).toLocaleString()}</span>
               </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <button
+                  className="details-btn glass-interactive"
+                  onClick={() => void handleCommitAction('cherryPick', selectedCommit.hash)}
+                >
+                  Cherry-Pick
+                </button>
+                <button
+                  className="details-btn glass-interactive"
+                  onClick={() => void handleCommitAction('revert', selectedCommit.hash)}
+                >
+                  Revert
+                </button>
+              </div>
+              {commitDetail && commitDetail.files.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 10.5, maxHeight: 110, overflowY: 'auto' }}>
+                  <div style={{ opacity: 0.65, marginBottom: 3 }}>Changed Files ({commitDetail.files.length}):</div>
+                  {commitDetail.files.map((fp) => (
+                    <div
+                      key={fp}
+                      style={{ cursor: 'pointer', padding: '1px 0', color: '#5AC8FA' }}
+                      onClick={() => onOpenFile?.(fp)}
+                    >
+                      {fp}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -537,6 +900,14 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 </option>
               ))}
             </select>
+            <button
+              className="run-dispatch-btn glass-interactive"
+              onClick={() => void gitWorkflowService.loadWorkspaceWorkflows(workspacePath)}
+              title={`Source: ${workflowDataSource} — Refresh`}
+            >
+              <RotateCw size={11} />
+              <span>{workflowDataSource === 'live-gh' ? 'LIVE' : workflowDataSource === 'github-api' ? 'API' : workflowDataSource === 'local-yaml' ? 'YAML' : 'SYNC'}</span>
+            </button>
             <button
               className="run-dispatch-btn glass-interactive"
               onClick={() => setIsDispatchModalOpen(true)}
@@ -597,9 +968,18 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 <div className="run-details-title-row">
                   <span className="details-title">{selectedRun.name} #{selectedRun.runNumber}</span>
                   <div className="details-actions">
+                    {selectedRun.status === 'in_progress' && (
+                      <button
+                        className="details-btn glass-interactive"
+                        onClick={() => void gitWorkflowService.cancelWorkflowAsync(selectedRun.id)}
+                        title="Cancel running workflow"
+                      >
+                        <Square size={10} /> Cancel
+                      </button>
+                    )}
                     <button
                       className="details-btn glass-interactive"
-                      onClick={() => gitWorkflowService.rerunWorkflow(selectedRun.id)}
+                      onClick={() => void gitWorkflowService.rerunWorkflowAsync(selectedRun.id)}
                       title="Re-run all jobs in workflow"
                     >
                       <RotateCw size={11} /> Re-run
@@ -755,6 +1135,24 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
             </div>
           </div>
         </div>
+      )}
+
+      {/* Inline 3-Way Merge Studio Modal for Conflicted Files */}
+      {mergeTarget && (
+        <MergeStudioModal
+          isOpen={true}
+          filePath={mergeTarget.filePath}
+          fileContent={mergeTarget.content}
+          workspacePath={workspacePath}
+          onClose={() => setMergeTarget(null)}
+          onSaveResolvedContent={async (resolved) => {
+            if (window.electronAPI?.saveFile) {
+              await window.electronAPI.saveFile(mergeTarget.filePath, resolved)
+              showToast('ok', `Saved resolved conflict to ${mergeTarget.filePath}`)
+              await fetchGitStatus()
+            }
+          }}
+        />
       )}
 
     </div>
