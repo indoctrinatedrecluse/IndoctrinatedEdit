@@ -135,7 +135,7 @@ class RedisStudioService {
         ttl: 604800,
         sizeBytes: 280,
         value: [
-          { member: 'abhishek_mitra', score: 98500 },
+          { member: 'alex_mercer', score: 98500 },
           { member: 'alex_chen', score: 84200 },
           { member: 'sarah_dev', score: 71000 },
         ],
@@ -261,10 +261,57 @@ class RedisStudioService {
     return { deletedCount: count }
   }
 
+  /**
+   * Tokenize a Redis CLI command line respecting quoted arguments (e.g. SET key "hello world").
+   */
+  public tokenizeCommand(rawCommand: string): string[] {
+    const tokens: string[] = []
+    const re = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(rawCommand)) !== null) {
+      tokens.push(m[1] ?? m[2] ?? m[3])
+    }
+    return tokens
+  }
+
+  /**
+   * Execute a live Redis command over real RESP2 TCP/TLS via Electron IPC when connected.
+   */
+  public async executeLiveCommand(rawCommand: string, connection?: RedisConnectionConfig): Promise<RedisCommandLog> {
+    const conn = connection || this.getActiveConnection()
+    const tokens = this.tokenizeCommand(rawCommand)
+    if (
+      conn &&
+      tokens.length > 0 &&
+      typeof window !== 'undefined' &&
+      window.electronAPI?.infra?.redisExec
+    ) {
+      const res = await window.electronAPI.infra.redisExec({
+        host: conn.host,
+        port: conn.port,
+        password: conn.password,
+        db: conn.dbIndex,
+        args: tokens,
+      })
+      const entry: RedisCommandLog = {
+        id: `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        command: rawCommand.trim(),
+        response: res.ok
+          ? (typeof res.value === 'string' ? res.value : JSON.stringify(res.value, null, 2))
+          : `(error) ${res.error || 'Redis error'}`,
+        isError: !res.ok,
+        durationMs: res.latencyMs,
+      }
+      return entry
+    }
+    return this.executeCommand(rawCommand)
+  }
+
   public executeCommand(rawCommand: string): RedisCommandLog {
     const start = performance.now()
     const trimmed = rawCommand.trim()
-    const parts = trimmed.split(/\s+/)
+    const parts = this.tokenizeCommand(trimmed)
     const cmd = parts[0]?.toUpperCase() || ''
     const args = parts.slice(1)
 

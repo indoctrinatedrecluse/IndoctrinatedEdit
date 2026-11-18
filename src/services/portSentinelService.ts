@@ -141,70 +141,81 @@ class PortSentinelService {
   ]
 
   /**
-   * Scans active system ports. In desktop environment, this queries IPC or simulates live telemetry.
+   * Scans active OS listening ports via Electron IPC (`netstat`/`tasklist` or `lsof`),
+   * falling back to sample registry in browser-only preview/tests.
    */
   public async scanActivePorts(customFilter?: string): Promise<ActivePort[]> {
-    // Artificial small scanning latency for responsive tactile feel
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    
-    let list = [...this.samplePorts]
+    let list: ActivePort[]
+
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.portsScan) {
+      const osPorts = await window.electronAPI.infra.portsScan()
+      list = osPorts.map((p) => {
+        const known = KNOWN_DEV_PORTS[p.port]
+        return {
+          port: p.port,
+          protocol: p.protocol,
+          pid: p.pid,
+          processName: p.processName,
+          localAddress: p.localAddress,
+          foreignAddress: '0.0.0.0:0',
+          state: (p.state === 'LISTENING' || p.state === 'LISTEN' ? 'LISTENING' : 'ESTABLISHED') as ActivePort['state'],
+          description: known?.description || `${p.processName} (${p.protocol})`,
+          category: known?.category || 'other',
+          isKnownDevPort: Boolean(known),
+          isConflict: false,
+          uptimeSeconds: 0,
+        }
+      })
+    } else {
+      list = [...this.samplePorts]
+    }
 
     if (customFilter) {
       const q = customFilter.toLowerCase().trim()
       list = list.filter(
         (p) =>
           p.port.toString().includes(q) ||
+          p.pid.toString().includes(q) ||
           p.processName.toLowerCase().includes(q) ||
           p.description.toLowerCase().includes(q) ||
           p.protocol.toLowerCase().includes(q)
       )
     }
 
-    // Sort by port number ascending
     return list.sort((a, b) => a.port - b.port)
   }
 
   /**
-   * Performs an HTTP / TCP connectivity health probe on the target host and port.
+   * Performs a real TCP / HTTP connectivity probe on the target host and port.
    */
   public async pingPort(port: number, host = '127.0.0.1'): Promise<PortPingResult> {
-    const start = performance.now()
-    try {
-      const url = `http://${host}:${port}/`
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 2000)
-
-      let isReachable = true
-      let statusCode = 200
-      let statusText = 'OK'
-      let serverHeader = 'HTTP Server'
-
-      // In browser/sandboxed context, standard cross-origin fetch may reject or succeed
-      try {
-        const res = await fetch(url, { method: 'HEAD', signal: controller.signal, mode: 'no-cors' })
-        statusCode = res.status || 200
-        statusText = res.statusText || 'Reachable'
-      } catch {
-        // Fallback simulation for active listening port
-        const match = this.samplePorts.find((p) => p.port === port)
-        if (!match) {
-          isReachable = false
-          statusCode = 503
-          statusText = 'Connection Refused'
-        }
-      } finally {
-        clearTimeout(timeoutId)
-      }
-
-      const elapsed = Math.round(performance.now() - start)
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.portsPing) {
+      const res = await window.electronAPI.infra.portsPing(port, host)
       return {
         port,
         host,
-        isReachable,
-        latencyMs: Math.max(elapsed, 4),
-        statusCode,
-        statusText,
-        serverHeader,
+        isReachable: res.isReachable,
+        latencyMs: res.latencyMs,
+        statusCode: res.statusCode,
+        statusText: res.statusText || (res.isReachable ? 'Open' : res.error || 'Unreachable'),
+        serverHeader: res.serverHeader,
+        checkedAt: new Date().toLocaleTimeString(),
+      }
+    }
+
+    const start = performance.now()
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000)
+    try {
+      const res = await fetch(`http://${host}:${port}/`, { method: 'HEAD', signal: controller.signal, mode: 'no-cors' })
+      return {
+        port,
+        host,
+        isReachable: true,
+        latencyMs: Math.max(Math.round(performance.now() - start), 1),
+        statusCode: res.status || 200,
+        statusText: res.statusText || 'Reachable',
+        serverHeader: res.headers?.get('server') || undefined,
         checkedAt: new Date().toLocaleTimeString(),
       }
     } catch {
@@ -213,11 +224,29 @@ class PortSentinelService {
         host,
         isReachable: false,
         latencyMs: Math.round(performance.now() - start),
-        statusCode: 504,
-        statusText: 'Timeout / Unreachable',
+        statusCode: 503,
+        statusText: 'Connection Refused / Unreachable',
         checkedAt: new Date().toLocaleTimeString(),
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
+  }
+
+  /**
+   * Terminates a real OS process via Electron IPC when available.
+   */
+  public async killProcessAsync(pid: number): Promise<{ success: boolean; message: string; killCommand: string }> {
+    const isWindows =
+      (typeof window !== 'undefined' && window.electronAPI?.platform === 'win32') ||
+      (typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows'))
+    const killCommand = isWindows ? `Stop-Process -Id ${pid} -Force` : `kill -9 ${pid}`
+
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.portsKill) {
+      const res = await window.electronAPI.infra.portsKill(pid)
+      return { ...res, killCommand }
+    }
+    return this.killProcess(pid)
   }
 
   /**

@@ -54,7 +54,7 @@ class MockLabService {
           page: 1,
           total: 3,
           data: [
-            { id: 'usr_1', name: 'Abhishek Mitra', role: 'Architect', email: 'abmitra1999@gmail.com' },
+            { id: 'usr_1', name: 'Alex Mercer', role: 'Architect', email: 'alex@example.local' },
             { id: 'usr_2', name: 'Elena Rostova', role: 'Lead Frontend', email: 'elena@example.com' },
             { id: 'usr_3', name: 'Marcus Vance', role: 'DevOps Lead', email: 'marcus@example.com' },
           ],
@@ -158,12 +158,39 @@ class MockLabService {
     },
   ]
 
+  private listeners = new Set<() => void>()
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private notify(): void {
+    this.listeners.forEach((fn) => fn())
+  }
+
+  private syncToElectron(): void {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.mockSync) {
+      void window.electronAPI.infra.mockSync(this.endpoints)
+    }
+  }
+
   public isRunning(): boolean {
     return this.isServerRunning
   }
 
   public toggleServer(running?: boolean): boolean {
     this.isServerRunning = running !== undefined ? running : !this.isServerRunning
+    if (typeof window !== 'undefined' && window.electronAPI?.infra) {
+      if (this.isServerRunning) {
+        void window.electronAPI.infra.mockStart(this.serverPort, this.endpoints)
+      } else {
+        void window.electronAPI.infra.mockStop()
+      }
+    }
+    this.notify()
     return this.isServerRunning
   }
 
@@ -173,6 +200,10 @@ class MockLabService {
 
   public setPort(port: number): void {
     this.serverPort = port
+    if (this.isServerRunning && typeof window !== 'undefined' && window.electronAPI?.infra?.mockStart) {
+      void window.electronAPI.infra.mockStart(this.serverPort, this.endpoints)
+    }
+    this.notify()
   }
 
   public getEndpoints(): MockEndpoint[] {
@@ -190,6 +221,8 @@ class MockLabService {
       callCount: 0,
     }
     this.endpoints.push(newEp)
+    this.syncToElectron()
+    this.notify()
     return newEp
   }
 
@@ -197,6 +230,8 @@ class MockLabService {
     const ep = this.endpoints.find((e) => e.id === id)
     if (!ep) return undefined
     Object.assign(ep, updates)
+    this.syncToElectron()
+    this.notify()
     return ep
   }
 
@@ -204,6 +239,8 @@ class MockLabService {
     const idx = this.endpoints.findIndex((e) => e.id === id)
     if (idx === -1) return false
     this.endpoints.splice(idx, 1)
+    this.syncToElectron()
+    this.notify()
     return true
   }
 
@@ -213,6 +250,7 @@ class MockLabService {
 
   public clearTrafficLogs(): void {
     this.trafficLogs = []
+    this.notify()
   }
 
   /**
@@ -286,7 +324,7 @@ class MockLabService {
     return template
       .replace(/\{\{faker\.id\}\}/g, () => Math.floor(Math.random() * 90000 + 10000).toString())
       .replace(/\{\{faker\.name\}\}/g, () => {
-        const names = ['Abhishek Mitra', 'Elena Vance', 'Marcus Reed', 'Sarah Connor', 'Devon Miles']
+        const names = ['Alex Mercer', 'Elena Vance', 'Marcus Reed', 'Sarah Connor', 'Devon Miles']
         return names[Math.floor(Math.random() * names.length)]
       })
       .replace(/\{\{faker\.email\}\}/g, () => `user_${Math.floor(Math.random() * 900)}@indoctrinated.io`)

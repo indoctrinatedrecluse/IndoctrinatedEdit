@@ -167,39 +167,78 @@ class GraphQLStudioService {
     }
 
     try {
-      // In live environment, attempt real HTTP POST with fallback to simulated engine
+      const reqHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...headers,
+      }
+      const reqBody = JSON.stringify({ query, variables: parsedVars })
+
+      // Prefer CORS-free Electron main-process HTTP proxy when available
+      if (typeof window !== 'undefined' && window.electronAPI?.infra?.httpRequest) {
+        const proxyRes = await window.electronAPI.infra.httpRequest({
+          url: endpoint,
+          method: 'POST',
+          headers: reqHeaders,
+          body: reqBody,
+          timeoutMs: 15000,
+        })
+        if (proxyRes.status > 0) {
+          try {
+            const json = JSON.parse(proxyRes.body)
+            return {
+              data: json.data,
+              errors: json.errors,
+              durationMs: proxyRes.latencyMs,
+              sizeBytes: proxyRes.sizeBytes,
+              statusCode: proxyRes.status,
+            }
+          } catch {
+            return {
+              errors: [{ message: `HTTP ${proxyRes.status} ${proxyRes.statusText}: Non-JSON response` }],
+              durationMs: proxyRes.latencyMs,
+              sizeBytes: proxyRes.sizeBytes,
+              statusCode: proxyRes.status,
+            }
+          }
+        }
+      }
+
+      // Browser fetch fallback
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 6000)
 
       try {
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            ...headers,
-          },
-          body: JSON.stringify({ query, variables: parsedVars }),
+          headers: reqHeaders,
+          body: reqBody,
           signal: controller.signal,
         })
-        clearTimeout(timeoutId)
-
-        const json = await response.json()
+        const rawText = await response.text()
         const durationMs = Math.round(performance.now() - start)
-        const sizeBytes = new Blob([JSON.stringify(json)]).size
+        const sizeBytes = new Blob([rawText]).size
 
-        return {
-          data: json.data,
-          errors: json.errors,
-          durationMs,
-          sizeBytes,
-          statusCode: response.status,
+        try {
+          const json = JSON.parse(rawText)
+          return {
+            data: json.data,
+            errors: json.errors,
+            durationMs,
+            sizeBytes,
+            statusCode: response.status,
+          }
+        } catch {
+          return {
+            errors: [{ message: `HTTP ${response.status} ${response.statusText}: Non-JSON response` }],
+            durationMs,
+            sizeBytes,
+            statusCode: response.status,
+          }
         }
       } catch {
-        // Fallback simulated GraphQL resolver response
-        await new Promise((resolve) => setTimeout(resolve, 80))
+        // Fallback offline schema resolver only when endpoint is unreachable in browser preview/tests
         const durationMs = Math.round(performance.now() - start)
-
         const simulatedData = this.resolveSimulatedQuery(query)
         const sizeBytes = new Blob([JSON.stringify(simulatedData)]).size
 
@@ -209,6 +248,8 @@ class GraphQLStudioService {
           sizeBytes,
           statusCode: 200,
         }
+      } finally {
+        clearTimeout(timeoutId)
       }
     } catch {
       return {
@@ -220,16 +261,85 @@ class GraphQLStudioService {
     }
   }
 
-  public exportCode(query: string, language: 'apollo' | 'urql' | 'fetch' | 'curl' | 'typescript'): string {
+  /**
+   * Run live GraphQL `__schema` introspection against an endpoint.
+   */
+  public async introspectSchema(endpoint: string, headers: Record<string, string> = {}): Promise<GraphQLType[] | null> {
+    const introspectionQuery = `
+      query IntrospectionQuery {
+        __schema {
+          types {
+            name
+            kind
+            description
+            fields {
+              name
+              description
+              type { name kind ofType { name kind } }
+            }
+          }
+        }
+      }
+    `
+    const res = await this.executeQuery(endpoint, introspectionQuery, '{}', headers)
+    const types = res.data?.__schema?.types
+    if (!Array.isArray(types)) return null
+    return types
+      .filter((t: any) => t?.name && !String(t.name).startsWith('__') && Array.isArray(t.fields) && t.fields.length > 0)
+      .slice(0, 60)
+      .map((t: any) => ({
+        name: t.name,
+        kind: t.kind || 'OBJECT',
+        description: t.description || '',
+        fields: (t.fields || []).map((f: any) => ({
+          name: f.name,
+          type: f.type?.name || f.type?.ofType?.name || f.type?.kind || 'Any',
+          description: f.description || '',
+        })),
+      }))
+  }
+
+  /**
+   * Pure-JS gRPC `.proto` inspection & unary invocation via Electron IPC.
+   */
+  public async inspectGrpcProto(protoPath: string) {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.grpcInspectProto) {
+      return { ok: false, services: [], error: 'gRPC client requires the Electron desktop runtime.' }
+    }
+    return window.electronAPI.infra.grpcInspectProto(protoPath)
+  }
+
+  public async invokeGrpcUnary(options: {
+    protoPath: string
+    address: string
+    serviceName: string
+    methodName: string
+    payload: Record<string, any>
+    metadata?: Record<string, string>
+    useTls?: boolean
+  }) {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.grpcInvoke) {
+      return { ok: false, latencyMs: 0, error: 'gRPC client requires the Electron desktop runtime.' }
+    }
+    return window.electronAPI.infra.grpcInvoke(options)
+  }
+
+  public exportCode(
+    query: string,
+    language: 'apollo' | 'urql' | 'fetch' | 'curl' | 'typescript',
+    endpointUrl = '/graphql'
+  ): string {
     switch (language) {
       case 'apollo':
         return `import { gql, useQuery } from '@apollo/client'\n\nexport const GET_DATA = gql\`\n${query.trim()}\n\`\n\nexport function useWorkspaceQuery() {\n  return useQuery(GET_DATA)\n}\n`
       case 'urql':
         return `import { useQuery } from 'urql'\n\nconst query = \`\n${query.trim()}\n\`\n\nexport function useUrqlData() {\n  return useQuery({ query })\n}\n`
       case 'fetch':
-        return `// Native Fetch API GraphQL Request\nconst response = await fetch('/graphql', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    query: \`${query.trim()}\`,\n  })\n})\nconst { data, errors } = await response.json()\n`
-      case 'curl':
-        return `curl -X POST http://localhost:5173/graphql \\\n  -H "Content-Type: application/json" \\\n  -d '{"query": "${query.replace(/\n/g, ' ').replace(/"/g, '\\"')}"}'\n`
+        return `// Native Fetch API GraphQL Request\nconst response = await fetch('${endpointUrl}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    query: \`${query.trim()}\`,\n  })\n})\nconst { data, errors } = await response.json()\n`
+      case 'curl': {
+        const escapedPayload = JSON.stringify({ query: query.trim() }).replace(/'/g, "'\\''")
+        return `curl -X POST '${endpointUrl}' \\\n  -H "Content-Type: application/json" \\\n  -d '${escapedPayload}'\n`
+      }
       case 'typescript':
         return `// TypeScript GraphQL Document Types\nexport interface GraphQLResponse<T> {\n  data?: T\n  errors?: Array<{ message: string; path?: string[] }>\n}\n`
     }
@@ -251,8 +361,8 @@ class GraphQLStudioService {
         users: [
           {
             id: 'usr_9941a',
-            username: 'indoctrinatedrecluse',
-            email: 'abmitra1999@gmail.com',
+            username: 'demo_architect',
+            email: 'architect@example.local',
             role: 'ARCHITECT',
             createdAt: '2026-09-18T18:00:00Z',
             activeProjectsCount: 4,
@@ -270,7 +380,7 @@ class GraphQLStudioService {
     }
     return {
       success: true,
-      message: 'Query executed successfully against IndoctrinatedEdit simulated GraphQL schema.',
+      message: 'Query executed successfully against offline sample GraphQL schema.',
     }
   }
 }

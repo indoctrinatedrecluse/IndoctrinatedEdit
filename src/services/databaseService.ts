@@ -672,19 +672,49 @@ export class DatabaseService {
   }
 
   private evaluateCondition(condition: string, row: Record<string, any>): boolean {
-    // Handle AND / OR
-    if (/\s+AND\s+/i.test(condition)) {
-      const parts = condition.split(/\s+AND\s+/i)
-      return parts.every((p) => this.evaluateCondition(p.trim(), row))
-    }
-    if (/\s+OR\s+/i.test(condition)) {
-      const parts = condition.split(/\s+OR\s+/i)
-      return parts.some((p) => this.evaluateCondition(p.trim(), row))
+    const trimmed = condition.trim()
+    if (!trimmed) return true
+
+    // Strip outer balanced parentheses if present
+    if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+      let depth = 0
+      let balancedOuter = true
+      for (let i = 0; i < trimmed.length; i++) {
+        if (trimmed[i] === '(') depth++
+        else if (trimmed[i] === ')') depth--
+        if (depth === 0 && i < trimmed.length - 1) {
+          balancedOuter = false
+          break
+        }
+      }
+      if (balancedOuter) return this.evaluateCondition(trimmed.slice(1, -1), row)
     }
 
-    // Match =, !=, >=, <=, >, <, LIKE, IN
-    const compMatch = condition.match(/^([a-zA-Z0-9_.]+)\s*(=|!=|<>|>=|<=|>|<|LIKE|IS\s+NOT\s+NULL|IS\s+NULL)\s*(.*)?$/i)
-    if (!compMatch) return true
+    // Standard SQL precedence: OR has LOWER precedence than AND, so split OR first!
+    if (/\s+OR\s+/i.test(trimmed)) {
+      const parts = trimmed.split(/\s+OR\s+/i)
+      return parts.some((p) => this.evaluateCondition(p.trim(), row))
+    }
+    if (/\s+AND\s+/i.test(trimmed)) {
+      const parts = trimmed.split(/\s+AND\s+/i)
+      return parts.every((p) => this.evaluateCondition(p.trim(), row))
+    }
+
+    // Handle IN (...) clause
+    const inMatch = trimmed.match(/^([a-zA-Z0-9_.]+)\s+(NOT\s+)?IN\s*\((.+)\)$/i)
+    if (inMatch) {
+      const colName = inMatch[1].includes('.') ? inMatch[1].split('.')[1] : inMatch[1]
+      const isNot = Boolean(inMatch[2])
+      const cellStr = String(row[colName]).toLowerCase()
+      const items = inMatch[3].split(',').map((s) => s.trim().replace(/^'|'$/g, '').toLowerCase())
+      const found = items.includes(cellStr)
+      return isNot ? !found : found
+    }
+
+    // Match =, !=, >=, <=, >, <, LIKE, IS NULL, IS NOT NULL
+    const compMatch = trimmed.match(/^([a-zA-Z0-9_.]+)\s*(=|!=|<>|>=|<=|>|<|LIKE|IS\s+NOT\s+NULL|IS\s+NULL)\s*(.*)?$/i)
+    // CRITICAL SAFETY: Unrecognized WHERE predicates return FALSE (never wipe tables on typos!)
+    if (!compMatch) return false
 
     const [, colExp, op, rawVal] = compMatch
     const colName = colExp.includes('.') ? colExp.split('.')[1] : colExp
@@ -697,26 +727,29 @@ export class DatabaseService {
     let expectedVal: any = rawVal?.trim() ?? ''
     if (expectedVal.startsWith("'") && expectedVal.endsWith("'")) {
       expectedVal = expectedVal.slice(1, -1)
-    } else if (!isNaN(Number(expectedVal))) {
+    } else if (!isNaN(Number(expectedVal)) && expectedVal !== '') {
       expectedVal = Number(expectedVal)
     }
 
-    if (upperOp === '=' || upperOp === '==') {
+    if (upperOp === '=') {
       return String(cellValue).toLowerCase() === String(expectedVal).toLowerCase()
     }
     if (upperOp === '!=' || upperOp === '<>') {
       return String(cellValue).toLowerCase() !== String(expectedVal).toLowerCase()
     }
     if (upperOp === 'LIKE') {
-      const regexStr = '^' + String(expectedVal).replace(/%/g, '.*').replace(/_/g, '.') + '$'
-      return new RegExp(regexStr, 'i').test(String(cellValue))
+      const escaped = String(expectedVal)
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/%/g, '.*')
+        .replace(/_/g, '.')
+      return new RegExp(`^${escaped}$`, 'i').test(String(cellValue))
     }
     if (upperOp === '>') return Number(cellValue) > Number(expectedVal)
     if (upperOp === '<') return Number(cellValue) < Number(expectedVal)
     if (upperOp === '>=') return Number(cellValue) >= Number(expectedVal)
     if (upperOp === '<=') return Number(cellValue) <= Number(expectedVal)
 
-    return true
+    return false
   }
 
   /**

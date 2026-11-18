@@ -83,6 +83,42 @@ export interface ElectronMcpAPI {
   disconnect: (serverId: string) => Promise<boolean>
 }
 
+export interface ElectronInfraAPI {
+  httpRequest: (req: { url: string; method: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }) => Promise<{
+    ok: boolean
+    status: number
+    statusText: string
+    headers: Record<string, string>
+    body: string
+    latencyMs: number
+    sizeBytes: number
+    error?: string
+  }>
+  mockStart: (port: number, routes: any[]) => Promise<{ running: boolean; port: number; error?: string }>
+  mockStop: () => Promise<boolean>
+  mockSync: (routes: any[]) => Promise<boolean>
+  mockStatus: () => Promise<{ running: boolean; port: number }>
+  onMockTraffic: (cb: (ev: any) => void) => () => void
+  portsScan: () => Promise<Array<{ port: number; protocol: 'TCP' | 'UDP'; pid: number; processName: string; localAddress: string; state: string }>>
+  portsPing: (port: number, host?: string) => Promise<{ isReachable: boolean; latencyMs: number; statusCode?: number; statusText?: string; serverHeader?: string; error?: string }>
+  portsKill: (pid: number) => Promise<{ success: boolean; message: string }>
+  redisExec: (options: { host: string; port: number; password?: string; db?: number; tls?: boolean; args: string[]; timeoutMs?: number }) => Promise<{ ok: boolean; value?: any; error?: string; latencyMs: number }>
+  dockerExec: (args: string[], timeoutMs?: number) => Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }>
+  k8sExec: (args: string[], timeoutMs?: number) => Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number }>
+  grpcInspectProto: (protoPath: string) => Promise<{ ok: boolean; services: Array<{ name: string; methods: string[] }>; error?: string }>
+  grpcInvoke: (options: { protoPath: string; address: string; serviceName: string; methodName: string; payload: Record<string, any>; metadata?: Record<string, string>; useTls?: boolean; timeoutMs?: number }) => Promise<{ ok: boolean; response?: any; latencyMs: number; error?: string }>
+  smtpSend: (options: { host: string; port: number; security: 'starttls' | 'ssl' | 'none'; username?: string; password?: string; from: string; to: string; subject: string; body: string; timeoutMs?: number }) => Promise<{ ok: boolean; transcript: Array<{ type: 'info' | 'client' | 'server'; text: string }>; error?: string }>
+  wsConnect: (options: { id: string; url: string; headers?: Record<string, string> }) => Promise<{ ok: boolean; error?: string }>
+  wsSend: (id: string, payload: string) => Promise<boolean>
+  wsPing: (id: string) => Promise<boolean>
+  wsDisconnect: (id: string) => Promise<boolean>
+  onWsEvent: (cb: (ev: any) => void) => () => void
+  tcpConnect: (options: { id: string; host: string; port: number; useTls?: boolean }) => Promise<{ ok: boolean; error?: string }>
+  tcpSend: (id: string, data: string) => Promise<boolean>
+  tcpDisconnect: (id: string) => Promise<boolean>
+  onTcpEvent: (cb: (ev: any) => void) => () => void
+}
+
 export interface ElectronAiAPI {
   listOllamaModels: (host?: string) => Promise<string[]>
   cancelStream: (requestId: string) => Promise<void>
@@ -304,6 +340,9 @@ export interface ElectronAPI {
   // Real MCP JSON-RPC 2.0 stdio client operations
   mcp: ElectronMcpAPI
 
+  // Real Network & Infrastructure Studios IPC
+  infra: ElectronInfraAPI
+
   // Lifecycle notification
   notifyReady: () => Promise<void>
 }
@@ -359,6 +398,45 @@ const api: ElectronAPI = {
     listPrompts: (spec) => ipcRenderer.invoke('mcp:listPrompts', spec),
     callTool: (spec, toolName, args) => ipcRenderer.invoke('mcp:callTool', spec, toolName, args),
     disconnect: (serverId) => ipcRenderer.invoke('mcp:disconnect', serverId),
+  },
+
+  infra: {
+    httpRequest: (req) => ipcRenderer.invoke('infra:httpRequest', req),
+    mockStart: (port, routes) => ipcRenderer.invoke('infra:mockStart', port, routes),
+    mockStop: () => ipcRenderer.invoke('infra:mockStop'),
+    mockSync: (routes) => ipcRenderer.invoke('infra:mockSync', routes),
+    mockStatus: () => ipcRenderer.invoke('infra:mockStatus'),
+    onMockTraffic: (cb) => {
+      const handler = (_: unknown, ev: any) => cb(ev)
+      ipcRenderer.on('infra:mockTraffic', handler)
+      return () => ipcRenderer.removeListener('infra:mockTraffic', handler)
+    },
+    portsScan: () => ipcRenderer.invoke('infra:portsScan'),
+    portsPing: (port, host) => ipcRenderer.invoke('infra:portsPing', port, host),
+    portsKill: (pid) => ipcRenderer.invoke('infra:portsKill', pid),
+    redisExec: (options) => ipcRenderer.invoke('infra:redisExec', options),
+    dockerExec: (args, timeoutMs) => ipcRenderer.invoke('infra:dockerExec', args, timeoutMs),
+    k8sExec: (args, timeoutMs) => ipcRenderer.invoke('infra:k8sExec', args, timeoutMs),
+    grpcInspectProto: (protoPath) => ipcRenderer.invoke('infra:grpcInspectProto', protoPath),
+    grpcInvoke: (options) => ipcRenderer.invoke('infra:grpcInvoke', options),
+    smtpSend: (options) => ipcRenderer.invoke('infra:smtpSend', options),
+    wsConnect: (options) => ipcRenderer.invoke('infra:wsConnect', options),
+    wsSend: (id, payload) => ipcRenderer.invoke('infra:wsSend', id, payload),
+    wsPing: (id) => ipcRenderer.invoke('infra:wsPing', id),
+    wsDisconnect: (id) => ipcRenderer.invoke('infra:wsDisconnect', id),
+    onWsEvent: (cb) => {
+      const handler = (_: unknown, ev: any) => cb(ev)
+      ipcRenderer.on('infra:wsEvent', handler)
+      return () => ipcRenderer.removeListener('infra:wsEvent', handler)
+    },
+    tcpConnect: (options) => ipcRenderer.invoke('infra:tcpConnect', options),
+    tcpSend: (id, data) => ipcRenderer.invoke('infra:tcpSend', id, data),
+    tcpDisconnect: (id) => ipcRenderer.invoke('infra:tcpDisconnect', id),
+    onTcpEvent: (cb) => {
+      const handler = (_: unknown, ev: any) => cb(ev)
+      ipcRenderer.on('infra:tcpEvent', handler)
+      return () => ipcRenderer.removeListener('infra:tcpEvent', handler)
+    },
   },
 
   ai: {

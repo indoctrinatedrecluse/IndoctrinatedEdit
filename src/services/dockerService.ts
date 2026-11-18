@@ -573,12 +573,58 @@ class DockerService {
     return [...this.volumes]
   }
 
+  /**
+   * Fetch live containers from the local Docker daemon via Electron IPC (`docker ps -a --format json`).
+   */
+  public async refreshContainersFromDaemon(): Promise<{ live: boolean; containers: DockerContainer[]; error?: string }> {
+    if (typeof window === 'undefined' || !window.electronAPI?.infra?.dockerExec) {
+      return { live: false, containers: this.getContainers() }
+    }
+    const res = await window.electronAPI.infra.dockerExec(['ps', '-a', '--format', '{{json .}}'])
+    if (!res.ok) {
+      return { live: false, containers: this.getContainers(), error: res.stderr || 'Docker daemon unavailable' }
+    }
+    const parsed: DockerContainer[] = []
+    for (const line of res.stdout.split(/\r?\n/).filter(Boolean)) {
+      try {
+        const obj = JSON.parse(line)
+        const stateStr = String(obj.State || obj.Status || '').toLowerCase()
+        const status: DockerContainer['status'] = stateStr.includes('up') || stateStr === 'running'
+          ? 'running'
+          : stateStr.includes('restarting')
+          ? 'restarting'
+          : stateStr.includes('paused')
+          ? 'paused'
+          : 'stopped'
+        parsed.push({
+          id: String(obj.ID || '').slice(0, 12),
+          name: String(obj.Names || 'container'),
+          image: String(obj.Image || ''),
+          status,
+          ports: obj.Ports ? String(obj.Ports).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+          cpuPercent: 0,
+          memoryUsageMb: 0,
+          memoryLimitMb: 512,
+          created: String(obj.RunningFor || obj.CreatedAt || ''),
+          logs: [],
+        })
+      } catch {
+        // skip non-JSON lines
+      }
+    }
+    this.containers = parsed
+    return { live: true, containers: [...this.containers] }
+  }
+
   public startContainer(id: string): boolean {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.dockerExec) {
+      void window.electronAPI.infra.dockerExec(['start', id])
+    }
     const c = this.containers.find((item) => item.id === id)
     if (c) {
       c.status = 'running'
-      c.cpuPercent = +(Math.random() * 3 + 0.5).toFixed(1)
-      c.memoryUsageMb = Math.floor(Math.random() * 100 + 50)
+      c.cpuPercent = 1.2
+      c.memoryUsageMb = 64
       c.logs.push(`[system] Started container ${c.name} at ${new Date().toLocaleTimeString()}`)
       return true
     }
@@ -586,6 +632,9 @@ class DockerService {
   }
 
   public stopContainer(id: string): boolean {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.dockerExec) {
+      void window.electronAPI.infra.dockerExec(['stop', id])
+    }
     const c = this.containers.find((item) => item.id === id)
     if (c) {
       c.status = 'stopped'
@@ -598,16 +647,15 @@ class DockerService {
   }
 
   public restartContainer(id: string): boolean {
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.dockerExec) {
+      void window.electronAPI.infra.dockerExec(['restart', id])
+    }
     const c = this.containers.find((item) => item.id === id)
     if (c) {
-      c.status = 'restarting'
-      c.logs.push(`[system] Restarting container ${c.name}...`)
-      setTimeout(() => {
-        c.status = 'running'
-        c.cpuPercent = +(Math.random() * 2 + 1).toFixed(1)
-        c.memoryUsageMb = Math.floor(Math.random() * 80 + 40)
-        c.logs.push(`[system] Container ${c.name} restarted successfully.`)
-      }, 600)
+      c.status = 'running'
+      c.cpuPercent = 1.5
+      c.memoryUsageMb = 68
+      c.logs.push(`[system] Restarted container ${c.name} at ${new Date().toLocaleTimeString()}`)
       return true
     }
     return false

@@ -35,17 +35,23 @@ export const PortSentinelView: React.FC = () => {
     try {
       const data = await portSentinelService.scanActivePorts(searchQuery)
       setPorts(data)
-      if (data.length > 0 && !selectedPort) {
-        setSelectedPort(data[0])
-      }
+      setSelectedPort((prev) => {
+        if (prev && data.some((p) => p.port === prev.port && p.pid === prev.pid)) return prev
+        return data.length > 0 ? data[0] : null
+      })
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, selectedPort])
+  }, [searchQuery])
 
   useEffect(() => {
     loadPorts()
   }, [loadPorts])
+
+  // Clear stale ping result whenever selected port changes
+  useEffect(() => {
+    setPingResult(null)
+  }, [selectedPort?.port, selectedPort?.pid])
 
   const handlePing = async (port: number) => {
     setIsPinging(true)

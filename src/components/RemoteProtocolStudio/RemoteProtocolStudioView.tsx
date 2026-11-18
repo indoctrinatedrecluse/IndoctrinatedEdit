@@ -17,7 +17,6 @@ import {
   Star,
   Lock,
 } from 'lucide-react'
-import { utf8ToBase64 } from '../../utils/security'
 
 export type RemoteStudioTab = 'ssh' | 'sftp' | 'smtp' | 'telnet'
 
@@ -296,8 +295,8 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
     }, 1000)
   }
 
-  // --- SMTP Actions ---
-  const handleSendTestMail = () => {
+  // --- SMTP Actions (Real Electron ESMTP/STARTTLS client with clean error reporting) ---
+  const handleSendTestMail = async () => {
     setIsSendingMail(true)
     setSmtpResultStatus('idle')
     const now = () => new Date().toLocaleTimeString()
@@ -306,40 +305,48 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
       { type: 'info', text: `Connecting to SMTP host ${smtpHost}:${smtpPort} (Security: ${smtpSecurity.toUpperCase()})...`, time: now() },
     ])
 
-    setTimeout(() => {
-      setSmtpHandshakeLogs((prev) => [
-        ...prev,
-        { type: 'server', text: `220 ${smtpHost} ESMTP Indoctrinated Mail Service ready`, time: now() },
-        { type: 'client', text: `EHLO client.indoctrinated.io`, time: now() },
-        { type: 'server', text: `250-${smtpHost} at your service, [192.168.1.50]\n250-SIZE 35882577\n250-8BITMIME\n250-AUTH LOGIN PLAIN\n250-STARTTLS\n250 ENHANCEDSTATUSCODES`, time: now() },
-      ])
-    }, 400)
+    if (typeof window !== 'undefined' && window.electronAPI?.infra?.smtpSend) {
+      try {
+        const res = await window.electronAPI.infra.smtpSend({
+          host: smtpHost,
+          port: Number(smtpPort) || 587,
+          security: smtpSecurity,
+          username: smtpUser || undefined,
+          password: smtpPass && smtpPass !== '••••••••••••' ? smtpPass : undefined,
+          from: smtpFrom,
+          to: smtpTo,
+          subject: smtpSubject,
+          body: smtpBody,
+        })
+        setSmtpHandshakeLogs(res.transcript.map((t) => ({ ...t, time: now() })))
+        if (res.ok) {
+          setSmtpResultStatus('success')
+        } else {
+          setSmtpHandshakeLogs((prev) => [
+            ...prev,
+            { type: 'info', text: `SMTP Error: ${res.error || 'Delivery failed'}`, time: now() },
+          ])
+          setSmtpResultStatus('failed')
+        }
+      } catch (err: any) {
+        setSmtpHandshakeLogs((prev) => [
+          ...prev,
+          { type: 'info', text: `SMTP Exception: ${err?.message || String(err)}`, time: now() },
+        ])
+        setSmtpResultStatus('failed')
+      } finally {
+        setIsSendingMail(false)
+      }
+      return
+    }
 
-    setTimeout(() => {
-      setSmtpHandshakeLogs((prev) => [
-        ...prev,
-        { type: 'client', text: `STARTTLS`, time: now() },
-        { type: 'server', text: `220 2.0.0 Ready to start TLS (TLSv1.3, TLS_AES_256_GCM_SHA384)`, time: now() },
-        { type: 'client', text: `AUTH LOGIN ${utf8ToBase64(smtpUser || '')}`, time: now() },
-        { type: 'server', text: `235 2.7.0 Authentication successful`, time: now() },
-      ])
-    }, 800)
-
-    setTimeout(() => {
-      setSmtpHandshakeLogs((prev) => [
-        ...prev,
-        { type: 'client', text: `MAIL FROM:<${smtpFrom}>`, time: now() },
-        { type: 'server', text: `250 2.1.0 Ok`, time: now() },
-        { type: 'client', text: `RCPT TO:<${smtpTo}>`, time: now() },
-        { type: 'server', text: `250 2.1.5 Ok`, time: now() },
-        { type: 'client', text: `DATA\nSubject: ${smtpSubject}\nFrom: ${smtpFrom}\nTo: ${smtpTo}\nContent-Type: text/html; charset=UTF-8\n\n${smtpBody}\n.`, time: now() },
-        { type: 'server', text: `250 2.0.0 Ok: queued as ID-${Math.random().toString(36).substring(2, 9).toUpperCase()}`, time: now() },
-        { type: 'client', text: `QUIT`, time: now() },
-        { type: 'server', text: `221 2.0.0 ${smtpHost} closing transmission channel`, time: now() },
-      ])
-      setIsSendingMail(false)
-      setSmtpResultStatus('success')
-    }, 1300)
+    // Browser-only fallback when Electron IPC is unavailable
+    setSmtpHandshakeLogs((prev) => [
+      ...prev,
+      { type: 'info', text: 'Real SMTP socket transmission requires the Electron desktop app.', time: now() },
+    ])
+    setIsSendingMail(false)
+    setSmtpResultStatus('failed')
   }
 
   // --- Telnet / TCP Actions ---
@@ -543,7 +550,7 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
               <div className="ssh-terminal-viewport" ref={sshScrollRef}>
                 {sshTerminalBuffer.map((line, idx) => (
                   <div key={idx} className="term-line">
-                    {line}
+                    {line.replace(/\x1b\[[0-9;]*m/g, '')}
                   </div>
                 ))}
               </div>

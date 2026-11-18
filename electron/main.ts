@@ -15,6 +15,7 @@ import {
 } from './git-service'
 import { setupWorkspaceToolsIPC } from './workspace-tools-service'
 import { mcpClientManager, setupMcpClientIPC } from './mcp-client-service'
+import { infraSocketManager, setupInfraIPC } from './infra-ipc-service'
 import {
   setupIPC as setupAiIPC,
 } from './ai-service'
@@ -454,6 +455,11 @@ setupWorkspaceToolsIPC(ipcMain)
 setupMcpClientIPC(ipcMain)
 
 // ==========================================
+// Real Network & Infrastructure Studios IPC
+// ==========================================
+setupInfraIPC(ipcMain, () => win)
+
+// ==========================================
 // AI Multi-Model Service IPC Handlers
 // ==========================================
 setupAiIPC(ipcMain)
@@ -510,6 +516,7 @@ app.on('before-quit', () => {
   try {
     terminalService.killAll()
     mcpClientManager.disposeAll()
+    infraSocketManager.disposeAll()
     void antigravityAcpClient.disconnect()
   } catch {}
 })
@@ -518,6 +525,7 @@ app.on('will-quit', () => {
   try {
     terminalService.killAll()
     mcpClientManager.disposeAll()
+    infraSocketManager.disposeAll()
     void antigravityAcpClient.disconnect()
   } catch {}
 })

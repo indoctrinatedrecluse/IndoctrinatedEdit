@@ -434,12 +434,59 @@ export class RestClientService {
         }
         body = JSON.stringify({ query, variables })
         if (!headers['Content-Type']) headers['Content-Type'] = 'application/json'
+      } else if (request.bodyType === 'x-www-form-urlencoded' && request.bodyContent) {
+        const raw = this.interpolate(request.bodyContent, env)
+        try {
+          const obj = JSON.parse(raw)
+          const params = new URLSearchParams()
+          for (const [k, v] of Object.entries(obj)) params.append(k, String(v))
+          body = params.toString()
+        } catch {
+          body = raw
+        }
+        if (!headers['Content-Type']) headers['Content-Type'] = 'application/x-www-form-urlencoded'
+      } else if (request.bodyType === 'form-data' && request.bodyContent) {
+        body = this.interpolate(request.bodyContent, env)
       } else if (request.bodyType === 'raw' && request.bodyContent) {
         body = this.interpolate(request.bodyContent, env)
       }
     }
 
     try {
+      // Prefer CORS-free Electron main-process HTTP proxy when available
+      if (typeof window !== 'undefined' && window.electronAPI?.infra?.httpRequest) {
+        const proxyRes = await window.electronAPI.infra.httpRequest({
+          url: fullUrl,
+          method: request.method,
+          headers,
+          body,
+          timeoutMs: 30000,
+        })
+        if (proxyRes.error && proxyRes.status === 0) {
+          throw new Error(proxyRes.error)
+        }
+        let data: any = proxyRes.body
+        try {
+          data = JSON.parse(proxyRes.body)
+        } catch {
+          // Leave raw text if not JSON
+        }
+        const apiResponse: ApiResponse = {
+          status: proxyRes.status,
+          statusText: proxyRes.statusText || (proxyRes.ok ? 'OK' : 'Error'),
+          headers: proxyRes.headers,
+          data,
+          rawText: proxyRes.body,
+          body: proxyRes.body,
+          executionTimeMs: proxyRes.latencyMs,
+          timeMs: proxyRes.latencyMs,
+          sizeBytes: proxyRes.sizeBytes,
+          timestamp,
+        }
+        this.recordHistory(request, apiResponse)
+        return apiResponse
+      }
+
       const response = await fetch(fullUrl, {
         method: request.method,
         headers,

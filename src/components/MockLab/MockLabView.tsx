@@ -41,13 +41,20 @@ export const MockLabView: React.FC = () => {
   const [newDelay, setNewDelay] = useState<number>(100)
   const [newBody, setNewBody] = useState<string>('{\n  "status": "ok"\n}')
 
+  const [revision, setRevision] = useState<number>(0)
+
+  React.useEffect(() => {
+    const unsub = mockLabService.subscribe(() => setRevision((r) => r + 1))
+    return unsub
+  }, [])
+
   const endpoints = useMemo(() => {
     return mockLabService.getEndpoints()
-  }, [showAddModal, isServerOn])
+  }, [revision, showAddModal, isServerOn])
 
   const trafficLogs = useMemo(() => {
     return mockLabService.getTrafficLogs()
-  }, [runnerResult, activeTab])
+  }, [revision, runnerResult, activeTab])
 
   const handleToggleServer = () => {
     const running = mockLabService.toggleServer()

@@ -125,7 +125,7 @@ export class GitWorkflowService {
         status: 'in_progress',
         conclusion: null,
         branch: 'master',
-        actor: { name: 'indoctrinatedrecluse', email: 'abmitra1999@gmail.com' },
+        actor: { name: 'indoctrinatedrecluse', email: 'maintainer@indoctrinated.dev' },
         commit: {
           hash: 'a1b2c3d4e5f67a8b9c0d1e2f3a4b5c6d7e8f9a0b',
           shortHash: 'a1b2c3d',

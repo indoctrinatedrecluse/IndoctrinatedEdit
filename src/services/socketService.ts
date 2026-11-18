@@ -90,21 +90,27 @@ class SocketService {
     },
   ]
 
+  private electronSessionId: string | null = null
+  private unsubElectronWs: (() => void) | null = null
+  private static readonly MAX_MESSAGES = 500
+
   public connect(config: SocketConnectionConfig): Promise<boolean> {
     return new Promise((resolve) => {
       this.disconnect()
 
       const cleanUrl = config.url.trim() || 'wss://echo.websocket.events'
-      const isSse = config.protocolType === 'sse' || cleanUrl.includes('/events') || cleanUrl.startsWith('http')
+      // Only treat as SSE when explicitly selected OR http(s) URL (never misroute wss://.../events)
+      const isSse =
+        config.protocolType === 'sse' ||
+        (!/^wss?:\/\//i.test(cleanUrl) && !cleanUrl.startsWith('mock://') && /^https?:\/\//i.test(cleanUrl))
 
       if (isSse) {
-        // SSE Mode
         this.connectSse(cleanUrl)
         resolve(true)
         return
       }
 
-      // Mock / Virtual Echo Mode
+      // Mock / Virtual Echo Mode (explicit opt-in via mock://)
       if (cleanUrl.startsWith('mock://') || cleanUrl.includes('mock')) {
         this.isConnected = true
         this.notifyStatus(true)
@@ -115,6 +121,58 @@ class SocketService {
         })
         this.startHeartbeat(config.heartbeatIntervalMs || 0)
         resolve(true)
+        return
+      }
+
+      // Prefer real Electron Node `ws` client when available (supports custom Authorization/headers + real Ping/Pong)
+      if (typeof window !== 'undefined' && window.electronAPI?.infra?.wsConnect) {
+        const sessionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        const headers: Record<string, string> = { ...(config.headers || {}) }
+        if (config.authToken && !headers['Authorization']) {
+          headers['Authorization'] = config.authToken.startsWith('Bearer ') ? config.authToken : `Bearer ${config.authToken}`
+        }
+
+        this.unsubElectronWs = window.electronAPI.infra.onWsEvent((ev) => {
+          if (ev.id !== sessionId) return
+          if (ev.type === 'message') {
+            let type: SocketMessage['type'] = ev.isBinary ? 'binary' : 'text'
+            if (!ev.isBinary) {
+              try {
+                JSON.parse(ev.data)
+                type = 'json'
+              } catch {}
+            }
+            this.pushMessage({ direction: 'in', data: ev.data, type })
+          } else if (ev.type === 'pong') {
+            this.pushMessage({ direction: 'in', data: `PONG ${ev.data || ''}`.trim(), type: 'pong' })
+          } else if (ev.type === 'close') {
+            this.isConnected = false
+            this.electronSessionId = null
+            this.stopHeartbeat()
+            this.notifyStatus(false)
+            this.pushMessage({ direction: 'in', data: `[System] WebSocket closed (code ${ev.code ?? 1000})`, type: 'text' })
+          } else if (ev.type === 'error') {
+            this.pushMessage({ direction: 'in', data: `[Error] ${ev.error}`, type: 'text' })
+          }
+        })
+
+        window.electronAPI.infra.wsConnect({ id: sessionId, url: cleanUrl, headers }).then((res) => {
+          if (res.ok) {
+            this.electronSessionId = sessionId
+            this.isConnected = true
+            this.notifyStatus(true)
+            this.pushMessage({ direction: 'in', data: `[System] WebSocket connected to ${cleanUrl}`, type: 'text' })
+            this.startHeartbeat(config.heartbeatIntervalMs || 0)
+            resolve(true)
+          } else {
+            this.unsubElectronWs?.()
+            this.unsubElectronWs = null
+            this.isConnected = false
+            this.notifyStatus(false)
+            this.pushMessage({ direction: 'in', data: `[Error] Connection failed: ${res.error}`, type: 'text' })
+            resolve(false)
+          }
+        })
         return
       }
 
@@ -261,8 +319,21 @@ class SocketService {
 
   public disconnect(): void {
     this.stopHeartbeat()
+    if (this.electronSessionId && typeof window !== 'undefined' && window.electronAPI?.infra?.wsDisconnect) {
+      void window.electronAPI.infra.wsDisconnect(this.electronSessionId)
+      this.electronSessionId = null
+    }
+    if (this.unsubElectronWs) {
+      this.unsubElectronWs()
+      this.unsubElectronWs = null
+    }
     if (this.activeWs) {
       try {
+        // Detach handlers first so old socket close events never race with a new connection
+        this.activeWs.onopen = null
+        this.activeWs.onmessage = null
+        this.activeWs.onerror = null
+        this.activeWs.onclose = null
         this.activeWs.close()
       } catch {
         // ignore
@@ -298,6 +369,11 @@ class SocketService {
       type,
     })
 
+    if (this.electronSessionId && typeof window !== 'undefined' && window.electronAPI?.infra?.wsSend) {
+      void window.electronAPI.infra.wsSend(this.electronSessionId, payload)
+      return true
+    }
+
     if (this.activeWs && this.activeWs.readyState === WebSocket.OPEN) {
       try {
         this.activeWs.send(payload)
@@ -326,6 +402,11 @@ class SocketService {
       data: `PING [${pingTime}]`,
       type: 'ping',
     })
+
+    if (this.electronSessionId && typeof window !== 'undefined' && window.electronAPI?.infra?.wsPing) {
+      void window.electronAPI.infra.wsPing(this.electronSessionId)
+      return
+    }
 
     setTimeout(() => {
       const rtt = Date.now() - pingTime
@@ -392,6 +473,9 @@ class SocketService {
       ...msg,
     }
     this.messages.push(newMsg)
+    if (this.messages.length > SocketService.MAX_MESSAGES) {
+      this.messages = this.messages.slice(-SocketService.MAX_MESSAGES)
+    }
     this.notifyListeners()
   }
 
