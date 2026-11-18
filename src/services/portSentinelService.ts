@@ -140,15 +140,38 @@ class PortSentinelService {
     },
   ]
 
+  private watchlistPorts: ActivePort[] = (() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('indoctrinated:ports:watchlist_v1') : null
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })()
+
+  private persistWatchlist(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('indoctrinated:ports:watchlist_v1', JSON.stringify(this.watchlistPorts))
+      }
+    } catch {}
+  }
+
   /**
-   * Scans active OS listening ports via Electron IPC (`netstat`/`tasklist` or `lsof`),
-   * falling back to sample registry in browser-only preview/tests.
+   * Scans active OS listening ports via Electron IPC (`netstat`/`tasklist` or `lsof`/`ss`),
+   * merges persisted user watchlist entries, and detects real multi-PID port conflicts.
    */
   public async scanActivePorts(customFilter?: string): Promise<ActivePort[]> {
     let list: ActivePort[]
 
     if (typeof window !== 'undefined' && window.electronAPI?.infra?.portsScan) {
       const osPorts = await window.electronAPI.infra.portsScan()
+      // Detect real conflicts (multiple distinct PIDs bound to the same port)
+      const pidsByPort = new Map<number, Set<number>>()
+      for (const p of osPorts) {
+        if (!pidsByPort.has(p.port)) pidsByPort.set(p.port, new Set())
+        pidsByPort.get(p.port)!.add(p.pid)
+      }
       list = osPorts.map((p) => {
         const known = KNOWN_DEV_PORTS[p.port]
         return {
@@ -160,14 +183,21 @@ class PortSentinelService {
           foreignAddress: '0.0.0.0:0',
           state: (p.state === 'LISTENING' || p.state === 'LISTEN' ? 'LISTENING' : 'ESTABLISHED') as ActivePort['state'],
           description: known?.description || `${p.processName} (${p.protocol})`,
-          category: known?.category || 'other',
+          category: known?.category || 'tool',
           isKnownDevPort: Boolean(known),
-          isConflict: false,
+          isConflict: (pidsByPort.get(p.port)?.size || 0) > 1,
           uptimeSeconds: 0,
         }
       })
+      // Merge persisted custom watched ports not already present in live OS scan
+      const livePortNums = new Set(list.map((p) => p.port))
+      for (const w of this.watchlistPorts) {
+        if (!livePortNums.has(w.port)) {
+          list.push(w)
+        }
+      }
     } else {
-      list = [...this.samplePorts]
+      list = [...this.samplePorts, ...this.watchlistPorts]
     }
 
     if (customFilter) {
@@ -268,6 +298,17 @@ class PortSentinelService {
       }
     }
 
+    const watchIdx = this.watchlistPorts.findIndex((p) => p.pid === pid)
+    if (watchIdx !== -1) {
+      this.watchlistPorts.splice(watchIdx, 1)
+      this.persistWatchlist()
+      return {
+        success: true,
+        message: `Watched port (PID ${pid}) removed from registry.`,
+        killCommand,
+      }
+    }
+
     return {
       success: false,
       message: `PID ${pid} not found in active listening registry.`,
@@ -282,8 +323,8 @@ class PortSentinelService {
     const known = KNOWN_DEV_PORTS[port]
     const newPort: ActivePort = {
       port,
-      pid: Math.floor(Math.random() * 30000 + 1000),
-      processName,
+      pid: 0,
+      processName: processName || 'watched-port',
       protocol: 'TCP',
       state: 'LISTENING',
       localAddress: `127.0.0.1:${port}`,
@@ -292,9 +333,11 @@ class PortSentinelService {
       isConflict: this.samplePorts.some((p) => p.port === port),
       description: known ? known.description : description,
       category: known ? known.category : 'tool',
-      uptimeSeconds: 10,
+      uptimeSeconds: 0,
     }
-    this.samplePorts.push(newPort)
+    this.watchlistPorts = this.watchlistPorts.filter((w) => w.port !== port)
+    this.watchlistPorts.push(newPort)
+    this.persistWatchlist()
     return newPort
   }
 }

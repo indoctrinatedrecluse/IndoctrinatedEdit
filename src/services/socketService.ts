@@ -105,13 +105,13 @@ class SocketService {
         (!/^wss?:\/\//i.test(cleanUrl) && !cleanUrl.startsWith('mock://') && /^https?:\/\//i.test(cleanUrl))
 
       if (isSse) {
-        this.connectSse(cleanUrl)
+        this.connectSse(cleanUrl, config)
         resolve(true)
         return
       }
 
-      // Mock / Virtual Echo Mode (explicit opt-in via mock://)
-      if (cleanUrl.startsWith('mock://') || cleanUrl.includes('mock')) {
+      // Mock / Virtual Echo Mode (explicit opt-in ONLY via mock://)
+      if (cleanUrl.startsWith('mock://')) {
         this.isConnected = true
         this.notifyStatus(true)
         this.pushMessage({
@@ -156,7 +156,12 @@ class SocketService {
           }
         })
 
-        window.electronAPI.infra.wsConnect({ id: sessionId, url: cleanUrl, headers }).then((res) => {
+        window.electronAPI.infra.wsConnect({
+          id: sessionId,
+          url: cleanUrl,
+          headers,
+          protocols: config.protocol || undefined,
+        }).then((res) => {
           if (res.ok) {
             this.electronSessionId = sessionId
             this.isConnected = true
@@ -268,7 +273,52 @@ class SocketService {
     })
   }
 
-  private connectSse(url: string): void {
+  private electronSseId: string | null = null
+  private unsubElectronSse: (() => void) | null = null
+
+  private connectSse(url: string, config?: SocketConnectionConfig): void {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (infra?.sseConnect && infra?.onSseEvent) {
+      const sseId = `sse_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const headers: Record<string, string> = { ...(config?.headers || {}) }
+      if (config?.authToken && !headers['Authorization']) {
+        headers['Authorization'] = config.authToken.startsWith('Bearer ') ? config.authToken : `Bearer ${config.authToken}`
+      }
+      this.unsubElectronSse = infra.onSseEvent((ev: any) => {
+        if (ev.id !== sseId) return
+        if (ev.type === 'message') {
+          this.pushMessage({
+            direction: 'in',
+            data: ev.data,
+            type: 'sse',
+            eventName: ev.eventName || 'message',
+          })
+        } else if (ev.type === 'error') {
+          this.pushMessage({ direction: 'in', data: `[SSE Error] ${ev.error}`, type: 'sse' })
+        } else if (ev.type === 'close') {
+          this.isConnected = false
+          this.electronSseId = null
+          this.notifyStatus(false)
+          this.pushMessage({ direction: 'in', data: '[System] SSE stream closed', type: 'sse' })
+        }
+      })
+      infra.sseConnect({ id: sseId, url, headers }).then((res: any) => {
+        if (res.ok) {
+          this.electronSseId = sseId
+          this.isConnected = true
+          this.notifyStatus(true)
+          this.pushMessage({ direction: 'in', data: `[System] CORS-free SSE stream open at ${url} (HTTP ${res.status})`, type: 'sse' })
+        } else {
+          this.unsubElectronSse?.()
+          this.unsubElectronSse = null
+          this.isConnected = false
+          this.notifyStatus(false)
+          this.pushMessage({ direction: 'in', data: `[SSE Error] Failed to connect: ${res.error}`, type: 'sse' })
+        }
+      })
+      return
+    }
+
     if (typeof EventSource !== 'undefined') {
       try {
         this.activeEventSource = new EventSource(url)
@@ -322,6 +372,14 @@ class SocketService {
     if (this.electronSessionId && typeof window !== 'undefined' && window.electronAPI?.infra?.wsDisconnect) {
       void window.electronAPI.infra.wsDisconnect(this.electronSessionId)
       this.electronSessionId = null
+    }
+    if (this.electronSseId && typeof window !== 'undefined' && (window as any).electronAPI?.infra?.sseDisconnect) {
+      void (window as any).electronAPI.infra.sseDisconnect(this.electronSseId)
+      this.electronSseId = null
+    }
+    if (this.unsubElectronSse) {
+      this.unsubElectronSse()
+      this.unsubElectronSse = null
     }
     if (this.unsubElectronWs) {
       this.unsubElectronWs()
@@ -416,6 +474,11 @@ class SocketService {
         type: 'pong',
       })
     }, 40)
+  }
+
+  public setHeartbeatInterval(intervalMs: number): void {
+    if (!this.isConnected) return
+    this.startHeartbeat(intervalMs)
   }
 
   private startHeartbeat(intervalMs: number): void {

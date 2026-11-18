@@ -202,6 +202,13 @@ class GraphQLStudioService {
             }
           }
         }
+        // In Electron desktop mode, surface real network/DNS/TLS errors honestly instead of faking 200 OK
+        return {
+          errors: [{ message: proxyRes.error || `Could not reach GraphQL endpoint: ${endpoint}` }],
+          durationMs: proxyRes.latencyMs,
+          sizeBytes: 0,
+          statusCode: 0,
+        }
       }
 
       // Browser fetch fallback

@@ -65,11 +65,11 @@ export const PortSentinelView: React.FC = () => {
     }
   }
 
-  const handleKill = (pid: number) => {
-    const res = portSentinelService.killProcess(pid)
+  const handleKill = async (pid: number) => {
+    const res = await portSentinelService.killProcessAsync(pid)
     setStatusMessage(res.message)
-    setTimeout(() => setStatusMessage(null), 3000)
-    loadPorts()
+    setTimeout(() => setStatusMessage(null), 4000)
+    await loadPorts()
     if (selectedPort?.pid === pid) {
       setSelectedPort(null)
     }
@@ -243,26 +243,37 @@ export const PortSentinelView: React.FC = () => {
                     </div>
                     <div className="ping-footer">
                       <span>Tested at {pingResult.checkedAt}</span>
+                      {pingResult.serverHeader && (
+                        <span style={{ marginLeft: 8, opacity: 0.85 }}>Server: {pingResult.serverHeader}</span>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Quick Terminal Kill Command */}
-              <div className="cmd-helper-box">
-                <div className="helper-label">Terminal Kill Command:</div>
-                <div className="cmd-snippet">
-                  <code>Stop-Process -Id {selectedPort.pid} -Force</code>
-                  <button
-                    className="copy-btn glass-interactive"
-                    onClick={() =>
-                      copyToClipboard(`Stop-Process -Id ${selectedPort.pid} -Force`, 'killCmd')
-                    }
-                  >
-                    {copiedKey === 'killCmd' ? <Check size={11} /> : <Copy size={11} />}
-                  </button>
-                </div>
-              </div>
+              {(() => {
+                const isWin =
+                  typeof navigator !== 'undefined' &&
+                  /win/i.test(navigator.platform || navigator.userAgent || '')
+                const killCmd = isWin
+                  ? `Stop-Process -Id ${selectedPort.pid} -Force`
+                  : `kill -9 ${selectedPort.pid}`
+                return (
+                  <div className="cmd-helper-box">
+                    <div className="helper-label">Terminal Kill Command:</div>
+                    <div className="cmd-snippet">
+                      <code>{killCmd}</code>
+                      <button
+                        className="copy-btn glass-interactive"
+                        onClick={() => copyToClipboard(killCmd, 'killCmd')}
+                      >
+                        {copiedKey === 'killCmd' ? <Check size={11} /> : <Copy size={11} />}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           ) : (
             <div className="empty-detail">Select a port on the left to inspect properties and test latency</div>

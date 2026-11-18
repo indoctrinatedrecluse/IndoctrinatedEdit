@@ -42,10 +42,19 @@ export const MockLabView: React.FC = () => {
   const [newDelay, setNewDelay] = useState<number>(100)
   const [newBody, setNewBody] = useState<string>('{\n  "status": "ok"\n}')
 
+  const [portInput, setPortInput] = useState<number>(() => mockLabService.getPort())
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [runnerBody, setRunnerBody] = useState<string>('')
   const [revision, setRevision] = useState<number>(0)
 
   React.useEffect(() => {
-    const unsub = mockLabService.subscribe(() => setRevision((r) => r + 1))
+    mockLabService.initElectronSync()
+    const unsub = mockLabService.subscribe(() => {
+      setIsServerOn(mockLabService.isRunning())
+      setPortInput(mockLabService.getPort())
+      setServerError(mockLabService.getLastError())
+      setRevision((r) => r + 1)
+    })
     return unsub
   }, [])
 
@@ -57,15 +66,20 @@ export const MockLabView: React.FC = () => {
     return mockLabService.getTrafficLogs()
   }, [revision, runnerResult, activeTab])
 
-  const handleToggleServer = () => {
-    const running = mockLabService.toggleServer()
-    setIsServerOn(running)
+  const handleToggleServer = async () => {
+    const res = await mockLabService.toggleServerAsync()
+    setIsServerOn(res.running)
+    setServerError(res.error || null)
   }
 
   const handleTestRequest = async () => {
     setIsTesting(true)
     try {
-      const res = await mockLabService.handleRequest(runnerMethod, runnerPath)
+      const res = await mockLabService.sendLiveOrSimulatedRequest(
+        runnerMethod,
+        runnerPath,
+        runnerBody.trim() || undefined
+      )
       setRunnerResult(res)
     } finally {
       setIsTesting(false)
@@ -109,19 +123,32 @@ export const MockLabView: React.FC = () => {
           <Server size={14} className="accent-icon" />
           <span className="title-text">MockLab API Server</span>
           <span className={`status-pill ${isServerOn ? 'online' : 'offline'}`}>
-            {isServerOn ? 'PORT 4040 ONLINE' : 'OFFLINE'}
+            {isServerOn ? `PORT ${portInput} ONLINE` : 'OFFLINE'}
           </span>
         </div>
-        <div className="header-right">
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="number"
+            value={portInput}
+            onChange={(e) => setPortInput(Number(e.target.value) || 4040)}
+            onBlur={() => void mockLabService.setPortAsync(portInput)}
+            title="Server Port"
+            style={{ width: 58, padding: '2px 5px', fontSize: 11, borderRadius: 4, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#E2E8F0' }}
+          />
           <button
             className={`server-toggle-btn glass-interactive ${isServerOn ? 'stop' : 'start'}`}
-            onClick={handleToggleServer}
+            onClick={() => void handleToggleServer()}
           >
             {isServerOn ? <Square size={11} fill="#FF453A" /> : <Play size={11} fill="#30D158" />}
             <span>{isServerOn ? 'Stop' : 'Start'}</span>
           </button>
         </div>
       </div>
+      {serverError && (
+        <div style={{ padding: '4px 12px', fontSize: 11, color: '#FF453A', background: 'rgba(255,69,58,0.12)' }}>
+          {serverError}
+        </div>
+      )}
 
       {/* Sub-Nav Tabs */}
       <div
@@ -208,13 +235,27 @@ export const MockLabView: React.FC = () => {
                     </span>
                     <span className="path-text">{selectedEndpoint.path}</span>
                   </div>
-                  <button
-                    className="del-btn glass-interactive"
-                    onClick={() => handleDeleteEndpoint(selectedEndpoint.id)}
-                    title="Delete Route"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#CBD5E1', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedEndpoint.isEnabled}
+                        onChange={(e) => {
+                          const enabled = e.target.checked
+                          mockLabService.updateEndpoint(selectedEndpoint.id, { isEnabled: enabled })
+                          setSelectedEndpoint({ ...selectedEndpoint, isEnabled: enabled })
+                        }}
+                      />
+                      <span>{selectedEndpoint.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                    </label>
+                    <button
+                      className="del-btn glass-interactive"
+                      onClick={() => handleDeleteEndpoint(selectedEndpoint.id)}
+                      title="Delete Route"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="detail-form">
@@ -288,6 +329,7 @@ export const MockLabView: React.FC = () => {
               <option value="GET">GET</option>
               <option value="POST">POST</option>
               <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
               <option value="DELETE">DELETE</option>
             </select>
             <input
@@ -306,6 +348,19 @@ export const MockLabView: React.FC = () => {
               <span>{isTesting ? 'Sending...' : 'Send'}</span>
             </button>
           </div>
+
+          {(['POST', 'PUT', 'PATCH'] as HttpMethod[]).includes(runnerMethod) && (
+            <div style={{ padding: '0 0 8px 0' }}>
+              <textarea
+                value={runnerBody}
+                onChange={(e) => setRunnerBody(e.target.value)}
+                placeholder='Optional JSON request body (e.g. {"name": "Alice"})'
+                rows={3}
+                className="body-textarea"
+                style={{ width: '100%' }}
+              />
+            </div>
+          )}
 
           <div className="runner-response-area">
             {runnerResult ? (
@@ -375,6 +430,7 @@ export const MockLabView: React.FC = () => {
                 <option value="GET">GET</option>
                 <option value="POST">POST</option>
                 <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
                 <option value="DELETE">DELETE</option>
               </select>
             </div>

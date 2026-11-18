@@ -173,28 +173,45 @@ class RealMockHttpServer {
         }
 
         const { route, params } = matched
-        const send = () => {
-          let body = route.responseBody || ''
-          for (const [k, v] of Object.entries(params)) {
-            body = body.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g'), v)
-          }
-          const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(route.headers || {}) }
-          res.writeHead(Number(route.statusCode) || 200, headers)
-          res.end(body)
-          this.onTraffic?.({
-            id: `tr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            timestamp: new Date().toLocaleTimeString(),
-            method,
-            path: reqUrl,
-            statusCode: Number(route.statusCode) || 200,
-            latencyMs: Date.now() - start,
-            matchedEndpointId: route.id,
-          })
-        }
+        let reqBody = ''
+        req.on('data', (chunk) => {
+          if (reqBody.length < 256_000) reqBody += chunk.toString()
+        })
+        req.on('end', () => {
+          const send = () => {
+            let body = route.responseBody || ''
+            for (const [k, v] of Object.entries(params)) {
+              body = body.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g'), v)
+            }
+            const names = ['Alex Rivera', 'Jordan Lee', 'Morgan Patel', 'Taylor Kim', 'Casey Brooks']
+            const pickName = names[Math.floor(Math.random() * names.length)]
+            body = body
+              .replace(/\{\{\s*faker\.id\s*\}\}/g, `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`)
+              .replace(/\{\{\s*faker\.name\s*\}\}/g, pickName)
+              .replace(/\{\{\s*faker\.email\s*\}\}/g, `${pickName.toLowerCase().replace(/\s+/g, '.')}@example.local`)
+              .replace(/\{\{\s*faker\.price\s*\}\}/g, (Math.random() * 199 + 1).toFixed(2))
+              .replace(/\{\{\s*timestamp\s*\}\}/g, new Date().toISOString())
 
-        const delay = Math.max(0, Math.min(Number(route.delayMs) || 0, 30000))
-        if (delay > 0) setTimeout(send, delay)
-        else send()
+            const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(route.headers || {}) }
+            res.writeHead(Number(route.statusCode) || 200, headers)
+            res.end(body)
+            this.onTraffic?.({
+              id: `tr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              timestamp: new Date().toLocaleTimeString(),
+              method,
+              path: reqUrl,
+              statusCode: Number(route.statusCode) || 200,
+              latencyMs: Date.now() - start,
+              matchedEndpointId: route.id,
+              requestBody: reqBody || undefined,
+              responseBody: body,
+            } as any)
+          }
+
+          const delay = Math.max(0, Math.min(Number(route.delayMs) || 0, 30000))
+          if (delay > 0) setTimeout(send, delay)
+          else send()
+        })
       })
 
       srv.once('error', (err: any) => {
@@ -325,7 +342,36 @@ export async function scanOsActivePorts(): Promise<OsActivePort[]> {
         })
       }
     } catch {
-      return []
+      // Fallback on minimal Linux distros without lsof: parse `ss -tulpn`
+      try {
+        const { stdout } = await execFileAsync('ss', ['-tulpn'], { timeout: 6000, maxBuffer: 8 * 1024 * 1024 })
+        for (const line of stdout.split(/\r?\n/).slice(1)) {
+          const parts = line.trim().split(/\s+/)
+          if (parts.length < 6) continue
+          const proto = parts[0].toUpperCase().startsWith('UDP') ? 'UDP' : 'TCP'
+          const localAddr = parts[4] || ''
+          const m = localAddr.match(/(.*):(\d+)$/)
+          if (!m) continue
+          const port = Number(m[2])
+          const procField = parts.slice(6).join(' ')
+          const pidMatch = procField.match(/pid=(\d+)/)
+          const nameMatch = procField.match(/"([^"]+)"/)
+          const pid = pidMatch ? Number(pidMatch[1]) : 0
+          const key = `${proto}:${port}:${pid}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          results.push({
+            port,
+            protocol: proto,
+            pid,
+            processName: nameMatch ? nameMatch[1] : 'unknown',
+            localAddress: m[1] || '*',
+            state: 'LISTENING',
+          })
+        }
+      } catch {
+        return []
+      }
     }
   }
 
@@ -838,11 +884,14 @@ class InfraSocketManager {
     id: string
     url: string
     headers?: Record<string, string>
+    protocols?: string | string[]
   }): Promise<{ ok: boolean; error?: string }> {
     this.wsDisconnect(options.id)
     return new Promise((resolve) => {
       try {
-        const ws = new WebSocket(options.url, { headers: options.headers })
+        const ws = options.protocols
+          ? new WebSocket(options.url, options.protocols, { headers: options.headers })
+          : new WebSocket(options.url, { headers: options.headers })
         let settled = false
 
         ws.once('open', () => {
@@ -969,10 +1018,95 @@ class InfraSocketManager {
     return true
   }
 
+  private sseSessions = new Map<string, AbortController>()
+
+  public async sseConnect(options: {
+    id: string
+    url: string
+    headers?: Record<string, string>
+  }): Promise<{ ok: boolean; status?: number; error?: string }> {
+    this.sseDisconnect(options.id)
+    const ac = new AbortController()
+    this.sseSessions.set(options.id, ac)
+    try {
+      const resp = await fetch(options.url, {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          ...(options.headers || {}),
+        },
+        signal: ac.signal,
+      })
+      if (!resp.ok || !resp.body) {
+        this.sseSessions.delete(options.id)
+        return { ok: false, status: resp.status, error: `HTTP ${resp.status} ${resp.statusText}` }
+      }
+      this.emit('infra:sseEvent', { id: options.id, type: 'open', status: resp.status })
+
+      // Stream SSE events asynchronously in background
+      ;(async () => {
+        const reader = resp.body!.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let curEvent = 'message'
+        let curData: string[] = []
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split(/\r?\n/)
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+              if (line === '') {
+                if (curData.length > 0) {
+                  this.emit('infra:sseEvent', {
+                    id: options.id,
+                    type: 'message',
+                    eventName: curEvent,
+                    data: curData.join('\n'),
+                  })
+                  curEvent = 'message'
+                  curData = []
+                }
+              } else if (line.startsWith('event:')) {
+                curEvent = line.slice(6).trim() || 'message'
+              } else if (line.startsWith('data:')) {
+                curData.push(line.slice(5).replace(/^ /, ''))
+              }
+            }
+          }
+        } catch (err: any) {
+          if (err?.name !== 'AbortError') {
+            this.emit('infra:sseEvent', { id: options.id, type: 'error', error: err?.message || String(err) })
+          }
+        } finally {
+          this.sseSessions.delete(options.id)
+          this.emit('infra:sseEvent', { id: options.id, type: 'close' })
+        }
+      })()
+
+      return { ok: true, status: resp.status }
+    } catch (err: any) {
+      this.sseSessions.delete(options.id)
+      return { ok: false, error: err?.message || String(err) }
+    }
+  }
+
+  public sseDisconnect(id: string): boolean {
+    const ac = this.sseSessions.get(id)
+    if (!ac) return false
+    try { ac.abort() } catch {}
+    this.sseSessions.delete(id)
+    return true
+  }
+
   public disposeAll(): void {
     for (const id of Array.from(this.wsSessions.keys())) this.wsDisconnect(id)
     for (const id of Array.from(this.tcpSessions.keys())) this.tcpDisconnect(id)
     for (const id of Array.from(this.redisSubSessions.keys())) this.redisUnsubscribe(id)
+    for (const id of Array.from(this.sseSessions.keys())) this.sseDisconnect(id)
     void realMockHttpServer.stop()
     sqliteWasmService.disposeAll()
   }
@@ -1279,6 +1413,8 @@ export function setupInfraIPC(ipcMain: IpcMain, getWin: () => BrowserWindow | nu
   ipcMain.handle('infra:wsSend', (_, id: string, payload: string) => infraSocketManager.wsSend(id, payload))
   ipcMain.handle('infra:wsPing', (_, id: string) => infraSocketManager.wsPing(id))
   ipcMain.handle('infra:wsDisconnect', (_, id: string) => infraSocketManager.wsDisconnect(id))
+  ipcMain.handle('infra:sseConnect', (_, options) => infraSocketManager.sseConnect(options))
+  ipcMain.handle('infra:sseDisconnect', (_, id: string) => infraSocketManager.sseDisconnect(id))
 
   ipcMain.handle('infra:tcpConnect', (_, options) => infraSocketManager.tcpConnect(options))
   ipcMain.handle('infra:tcpSend', (_, id: string, data: string) => infraSocketManager.tcpSend(id, data))

@@ -181,6 +181,106 @@ class MockLabService {
     return this.isServerRunning
   }
 
+  private lastError: string | null = null
+  private unsubTraffic: (() => void) | null = null
+
+  public getLastError(): string | null {
+    return this.lastError
+  }
+
+  public initElectronSync(): void {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra) return
+    if (!this.unsubTraffic && infra.onMockTraffic) {
+      this.unsubTraffic = infra.onMockTraffic((ev: any) => {
+        const ep = this.endpoints.find((e) => e.id === ev.matchedEndpointId)
+        if (ep) ep.callCount += 1
+        this.trafficLogs.unshift({
+          id: ev.id || `tr_${Date.now()}`,
+          timestamp: ev.timestamp || new Date().toLocaleTimeString(),
+          method: ev.method || 'GET',
+          url: ev.path || '/',
+          statusCode: Number(ev.statusCode) || 200,
+          durationMs: Number(ev.latencyMs) || 0,
+          requestHeaders: {},
+          requestBody: ev.requestBody,
+          responseBody: ev.responseBody || '',
+          matchedEndpointId: ev.matchedEndpointId,
+        })
+        if (this.trafficLogs.length > 200) this.trafficLogs.pop()
+        this.notify()
+      })
+    }
+    if (infra.mockStatus) {
+      infra.mockStatus().then((st: any) => {
+        if (st) {
+          this.isServerRunning = Boolean(st.running)
+          if (st.port) this.serverPort = Number(st.port)
+          this.notify()
+        }
+      }).catch(() => {})
+    }
+  }
+
+  public async toggleServerAsync(running?: boolean): Promise<{ running: boolean; port: number; error?: string }> {
+    const next = running !== undefined ? running : !this.isServerRunning
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (infra?.mockStart && infra?.mockStop) {
+      if (next) {
+        const res = await infra.mockStart(this.serverPort, this.endpoints)
+        this.isServerRunning = Boolean(res?.running)
+        if (res?.port) this.serverPort = res.port
+        this.lastError = res?.error || null
+        this.notify()
+        return { running: this.isServerRunning, port: this.serverPort, error: res?.error }
+      } else {
+        await infra.mockStop()
+        this.isServerRunning = false
+        this.lastError = null
+        this.notify()
+        return { running: false, port: this.serverPort }
+      }
+    }
+    this.isServerRunning = next
+    this.notify()
+    return { running: this.isServerRunning, port: this.serverPort }
+  }
+
+  public async setPortAsync(port: number): Promise<{ running: boolean; port: number; error?: string }> {
+    this.serverPort = port
+    if (this.isServerRunning) {
+      return await this.toggleServerAsync(true)
+    }
+    this.notify()
+    return { running: false, port: this.serverPort }
+  }
+
+  public async sendLiveOrSimulatedRequest(
+    method: HttpMethod,
+    reqPath: string,
+    requestBody?: string
+  ): Promise<{ statusCode: number; headers: Record<string, string>; body: string; durationMs: number }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (this.isServerRunning && infra?.httpRequest) {
+      const normalized = reqPath.startsWith('/') ? reqPath : `/${reqPath}`
+      const res = await infra.httpRequest({
+        url: `http://127.0.0.1:${this.serverPort}${normalized}`,
+        method,
+        headers: requestBody ? { 'Content-Type': 'application/json' } : {},
+        body: requestBody,
+      })
+      if (res.status > 0) {
+        return {
+          statusCode: res.status,
+          headers: res.headers,
+          body: res.body,
+          durationMs: res.latencyMs,
+        }
+      }
+    }
+    return this.handleRequest(method, reqPath, {}, requestBody)
+  }
+
   public toggleServer(running?: boolean): boolean {
     this.isServerRunning = running !== undefined ? running : !this.isServerRunning
     if (typeof window !== 'undefined' && window.electronAPI?.infra) {

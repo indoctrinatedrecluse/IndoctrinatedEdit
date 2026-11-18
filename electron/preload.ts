@@ -124,11 +124,14 @@ export interface ElectronInfraAPI {
   grpcInspectProto: (protoPath: string) => Promise<{ ok: boolean; services: Array<{ name: string; methods: string[] }>; error?: string }>
   grpcInvoke: (options: { protoPath: string; address: string; serviceName: string; methodName: string; payload: Record<string, any>; metadata?: Record<string, string>; useTls?: boolean; timeoutMs?: number }) => Promise<{ ok: boolean; response?: any; latencyMs: number; error?: string }>
   smtpSend: (options: { host: string; port: number; security: 'starttls' | 'ssl' | 'none'; username?: string; password?: string; from: string; to: string; subject: string; body: string; timeoutMs?: number }) => Promise<{ ok: boolean; transcript: Array<{ type: 'info' | 'client' | 'server'; text: string }>; error?: string }>
-  wsConnect: (options: { id: string; url: string; headers?: Record<string, string> }) => Promise<{ ok: boolean; error?: string }>
+  wsConnect: (options: { id: string; url: string; headers?: Record<string, string>; protocols?: string | string[] }) => Promise<{ ok: boolean; error?: string }>
   wsSend: (id: string, payload: string) => Promise<boolean>
   wsPing: (id: string) => Promise<boolean>
   wsDisconnect: (id: string) => Promise<boolean>
   onWsEvent: (cb: (ev: any) => void) => () => void
+  sseConnect: (options: { id: string; url: string; headers?: Record<string, string> }) => Promise<{ ok: boolean; status?: number; error?: string }>
+  sseDisconnect: (id: string) => Promise<boolean>
+  onSseEvent: (cb: (ev: any) => void) => () => void
   tcpConnect: (options: { id: string; host: string; port: number; useTls?: boolean }) => Promise<{ ok: boolean; error?: string }>
   tcpSend: (id: string, data: string) => Promise<boolean>
   tcpDisconnect: (id: string) => Promise<boolean>
@@ -471,6 +474,13 @@ const api: ElectronAPI = {
       const handler = (_: unknown, ev: any) => cb(ev)
       ipcRenderer.on('infra:wsEvent', handler)
       return () => ipcRenderer.removeListener('infra:wsEvent', handler)
+    },
+    sseConnect: (options) => ipcRenderer.invoke('infra:sseConnect', options),
+    sseDisconnect: (id) => ipcRenderer.invoke('infra:sseDisconnect', id),
+    onSseEvent: (cb) => {
+      const handler = (_: unknown, ev: any) => cb(ev)
+      ipcRenderer.on('infra:sseEvent', handler)
+      return () => ipcRenderer.removeListener('infra:sseEvent', handler)
     },
     tcpConnect: (options) => ipcRenderer.invoke('infra:tcpConnect', options),
     tcpSend: (id, data) => ipcRenderer.invoke('infra:tcpSend', id, data),

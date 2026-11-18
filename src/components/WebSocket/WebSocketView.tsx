@@ -20,6 +20,9 @@ export const WebSocketView: React.FC = () => {
   const [url, setUrl] = useState<string>('wss://echo.websocket.events')
   const [protocolType, setProtocolType] = useState<'websocket' | 'sse'>('websocket')
   const [authToken, setAuthToken] = useState<string>('')
+  const [subprotocol, setSubprotocol] = useState<string>('')
+  const [customHeadersJson, setCustomHeadersJson] = useState<string>('')
+  const [headersError, setHeadersError] = useState<string | null>(null)
   const [showConfig, setShowConfig] = useState<boolean>(false)
   const [heartbeatActive, setHeartbeatActive] = useState<boolean>(false)
   const [isConnected, setIsConnected] = useState<boolean>(false)
@@ -47,17 +50,51 @@ export const WebSocketView: React.FC = () => {
     }
   }, [])
 
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   const handleToggleConnect = async () => {
     if (isConnected) {
       socketService.disconnect()
       setHeartbeatActive(false)
     } else {
+      let parsedHeaders: Record<string, string> | undefined
+      if (customHeadersJson.trim()) {
+        try {
+          const obj = JSON.parse(customHeadersJson)
+          if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+            parsedHeaders = Object.fromEntries(
+              Object.entries(obj).map(([k, v]) => [String(k), String(v)])
+            )
+            setHeadersError(null)
+          } else {
+            setHeadersError('Headers must be a JSON object (e.g. {"X-Client": "ide"})')
+            return
+          }
+        } catch (err: any) {
+          setHeadersError(`Invalid Headers JSON: ${err?.message || 'parse error'}`)
+          return
+        }
+      } else {
+        setHeadersError(null)
+      }
+
       await socketService.connect({
         url,
         protocolType,
+        protocol: subprotocol.trim() || undefined,
+        headers: parsedHeaders,
         authToken: authToken.trim() || undefined,
         heartbeatIntervalMs: heartbeatActive ? 5000 : 0,
       })
+    }
+  }
+
+  const handleToggleHeartbeat = (checked: boolean) => {
+    setHeartbeatActive(checked)
+    if (isConnected && protocolType === 'websocket') {
+      socketService.setHeartbeatInterval(checked ? 5000 : 0)
     }
   }
 
@@ -87,7 +124,7 @@ export const WebSocketView: React.FC = () => {
             className={`proto-btn ${protocolType === 'websocket' ? 'active' : ''}`}
             onClick={() => {
               setProtocolType('websocket')
-              if (url.includes('/events')) setUrl('wss://echo.websocket.events')
+              if (/^https?:\/\//i.test(url)) setUrl('wss://echo.websocket.events')
             }}
           >
             <Wifi size={11} />
@@ -97,7 +134,7 @@ export const WebSocketView: React.FC = () => {
             className={`proto-btn ${protocolType === 'sse' ? 'active' : ''}`}
             onClick={() => {
               setProtocolType('sse')
-              if (url.startsWith('wss://')) setUrl('https://api.indoctrinated.io/v1/events')
+              if (/^wss?:\/\//i.test(url)) setUrl('http://localhost:4040/events')
             }}
           >
             <Radio size={11} />
@@ -113,7 +150,7 @@ export const WebSocketView: React.FC = () => {
               className="ws-url-input"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder={protocolType === 'websocket' ? 'wss://echo.websocket.events' : 'https://api.domain.io/events'}
+              placeholder={protocolType === 'websocket' ? 'wss://echo.websocket.events' : 'http://localhost:4040/events'}
               disabled={isConnected}
             />
           </div>
@@ -155,18 +192,51 @@ export const WebSocketView: React.FC = () => {
               placeholder="Bearer eyJhbGci..."
               value={authToken}
               onChange={(e) => setAuthToken(e.target.value)}
+              disabled={isConnected}
             />
           </div>
-          <div className="config-field-row">
-            <label className="cfg-checkbox-label">
+          {protocolType === 'websocket' && (
+            <div className="config-field">
+              <label className="cfg-label">Subprotocol (optional):</label>
               <input
-                type="checkbox"
-                checked={heartbeatActive}
-                onChange={(e) => setHeartbeatActive(e.target.checked)}
+                type="text"
+                className="cfg-input"
+                placeholder="graphql-transport-ws, json-rpc..."
+                value={subprotocol}
+                onChange={(e) => setSubprotocol(e.target.value)}
+                disabled={isConnected}
               />
-              <span>Auto Heartbeat (5s Ping/Pong interval)</span>
-            </label>
+            </div>
+          )}
+          <div className="config-field">
+            <label className="cfg-label">Custom Headers (JSON):</label>
+            <textarea
+              className="cfg-input"
+              rows={2}
+              placeholder='{"X-Client-Version": "5.3.0"}'
+              value={customHeadersJson}
+              onChange={(e) => {
+                setCustomHeadersJson(e.target.value)
+                setHeadersError(null)
+              }}
+              disabled={isConnected}
+            />
+            {headersError && (
+              <span style={{ color: '#FF453A', fontSize: 10 }}>{headersError}</span>
+            )}
           </div>
+          {protocolType === 'websocket' && (
+            <div className="config-field-row">
+              <label className="cfg-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={heartbeatActive}
+                  onChange={(e) => handleToggleHeartbeat(e.target.checked)}
+                />
+                <span>Auto Heartbeat (5s Ping/Pong interval)</span>
+              </label>
+            </div>
+          )}
         </div>
       )}
 

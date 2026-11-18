@@ -15,6 +15,8 @@ import {
   Minimize2,
   X,
   History,
+  Save,
+  SlidersHorizontal,
 } from 'lucide-react'
 import {
   restClientService,
@@ -65,6 +67,9 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [expandedCollections, setExpandedCollections] = useState<Record<string, boolean>>({ jsonplaceholder: true, cloud_ai: true })
   const [showHistory, setShowHistory] = useState(false)
+  const [showEnvEditor, setShowEnvEditor] = useState(false)
+  const [envVarsText, setEnvVarsText] = useState<string>('')
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
 
   useEffect(() => {
     return restClientService.subscribe(() => {
@@ -75,12 +80,59 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
     })
   }, [])
 
-  // Auto-run first sample on mount if no response
-  useEffect(() => {
-    if (!response && request) {
-      handleSendRequest()
+  const handleNewRequest = () => {
+    setRequest({
+      id: `req_${Date.now()}`,
+      name: 'New Request',
+      method: 'GET',
+      url: '{{baseUrl}}/',
+      params: [],
+      headers: [{ id: `h_${Date.now()}`, key: 'Accept', value: 'application/json', enabled: true }],
+      auth: { type: 'none' },
+      bodyType: 'none',
+    })
+    setResponse(null)
+  }
+
+  const handleSaveRequest = () => {
+    const targetColId =
+      collections.find((c) => c.requests.some((r) => r.id === request.id))?.id ||
+      collections[0]?.id ||
+      'default'
+    const saved = restClientService.saveRequest(targetColId, {
+      ...request,
+      name: request.name.trim() || `${request.method} ${request.url}`,
+    })
+    setRequest(saved)
+    setSaveNotice('Saved')
+    setTimeout(() => setSaveNotice(null), 1500)
+  }
+
+  const handleDeleteRequest = (colId: string, reqId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    restClientService.deleteRequest(colId, reqId)
+  }
+
+  const handleOpenEnvEditor = () => {
+    if (!showEnvEditor) {
+      setEnvVarsText(JSON.stringify(activeEnv.variables, null, 2))
     }
-  }, [])
+    setShowEnvEditor((prev) => !prev)
+  }
+
+  const handleSaveEnvVars = () => {
+    try {
+      const parsed = JSON.parse(envVarsText)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const cleaned: Record<string, string> = {}
+        for (const [k, v] of Object.entries(parsed)) cleaned[k] = String(v)
+        restClientService.updateEnvironmentVariables(activeEnv.id, cleaned)
+        setShowEnvEditor(false)
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+  }
 
   const handleSendRequest = async () => {
     setIsLoading(true)
@@ -213,6 +265,33 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
 
         <div className="header-actions">
           <button
+            className="action-pill-btn glass-interactive"
+            onClick={handleNewRequest}
+            title="New Request"
+          >
+            <Plus size={13} />
+            <span>New</span>
+          </button>
+
+          <button
+            className="action-pill-btn glass-interactive"
+            onClick={handleSaveRequest}
+            title="Save Request to Collection"
+          >
+            <Save size={13} />
+            <span>{saveNotice || 'Save'}</span>
+          </button>
+
+          <button
+            className={`action-pill-btn glass-interactive ${showEnvEditor ? 'active' : ''}`}
+            onClick={handleOpenEnvEditor}
+            title="Edit Active Environment Variables"
+          >
+            <SlidersHorizontal size={13} />
+            <span>Env</span>
+          </button>
+
+          <button
             className={`action-pill-btn glass-interactive ${showHistory ? 'active' : ''}`}
             onClick={() => setShowHistory((prev) => !prev)}
             title="Toggle Request History"
@@ -239,12 +318,47 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
         </div>
       </div>
 
+      {/* Environment Variables Editor Drawer */}
+      {showEnvEditor && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(15,23,42,0.55)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
+              Environment Variables — {activeEnv.name} (JSON)
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="action-pill-btn glass-interactive" onClick={handleSaveEnvVars}>
+                <Check size={12} /> Apply
+              </button>
+              <button className="action-pill-btn glass-interactive" onClick={() => setShowEnvEditor(false)}>
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+          <textarea
+            className="body-textarea custom-scrollbar"
+            rows={4}
+            value={envVarsText}
+            onChange={(e) => setEnvVarsText(e.target.value)}
+            spellCheck={false}
+          />
+        </div>
+      )}
+
       {/* Main Client Body */}
       <div className="rest-body">
         {/* Left Drawer: Collections Tree & History */}
         <div className="collections-sidebar custom-scrollbar">
-          <div className="sidebar-header">
+          <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="sidebar-title">{showHistory ? 'REQUEST HISTORY' : 'API COLLECTIONS'}</span>
+            {showHistory && historyList.length > 0 && (
+              <button
+                className="kv-delete-btn"
+                onClick={() => restClientService.clearHistory()}
+                title="Clear History"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
           </div>
 
           {!showHistory ? (
@@ -281,6 +395,14 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
                                 {r.method}
                               </span>
                               <span className="req-item-name">{r.name}</span>
+                              <button
+                                className="kv-delete-btn"
+                                onClick={(e) => handleDeleteRequest(col.id, r.id, e)}
+                                title="Delete Saved Request"
+                                style={{ marginLeft: 'auto', opacity: 0.6 }}
+                              >
+                                <Trash2 size={10} />
+                              </button>
                             </div>
                           )
                         })}
@@ -611,7 +733,7 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
               {activeReqTab === 'body' && (
                 <div className="body-editor-container">
                   <div className="body-type-bar">
-                    {(['none', 'json', 'raw', 'graphql'] as BodyType[]).map((bt) => (
+                    {(['none', 'json', 'x-www-form-urlencoded', 'form-data', 'raw', 'graphql'] as BodyType[]).map((bt) => (
                       <button
                         key={bt}
                         className={`body-type-chip ${request.bodyType === bt ? 'active' : ''}`}
@@ -627,10 +749,21 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
                     )}
                   </div>
 
-                  {request.bodyType === 'json' || request.bodyType === 'raw' ? (
+                  {request.bodyType === 'json' ||
+                  request.bodyType === 'raw' ||
+                  request.bodyType === 'x-www-form-urlencoded' ||
+                  request.bodyType === 'form-data' ? (
                     <textarea
                       className="body-textarea custom-scrollbar"
-                      placeholder={request.bodyType === 'json' ? '{\n  "key": "value"\n}' : 'Raw payload...'}
+                      placeholder={
+                        request.bodyType === 'json'
+                          ? '{\n  "key": "value"\n}'
+                          : request.bodyType === 'x-www-form-urlencoded'
+                          ? 'key1=value1\nkey2=value2\n(or JSON object {"key":"value"})'
+                          : request.bodyType === 'form-data'
+                          ? 'field1=value1\nfield2=value2\n(or JSON object {"field":"value"})'
+                          : 'Raw payload...'
+                      }
                       value={request.bodyContent || ''}
                       onChange={(e) => setRequest((prev) => ({ ...prev, bodyContent: e.target.value }))}
                       rows={5}

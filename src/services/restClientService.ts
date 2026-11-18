@@ -253,6 +253,8 @@ const DEFAULT_COLLECTIONS: ApiCollection[] = [
   },
 ]
 
+const STORAGE_KEY = 'ie_rest_client_v1'
+
 export class RestClientService {
   private environments: ApiEnvironment[] = []
   private activeEnvironmentId: string = 'prod'
@@ -261,7 +263,51 @@ export class RestClientService {
   private listeners: Set<() => void> = new Set()
 
   constructor() {
-    this.resetToDefaults()
+    this.environments = JSON.parse(JSON.stringify(DEFAULT_ENVIRONMENTS))
+    this.activeEnvironmentId = 'prod'
+    this.collections = JSON.parse(JSON.stringify(DEFAULT_COLLECTIONS))
+    this.history = []
+    this.loadFromStorage()
+  }
+
+  private loadFromStorage() {
+    try {
+      if (typeof localStorage === 'undefined') return
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed.environments) && parsed.environments.length > 0) {
+        this.environments = parsed.environments
+      }
+      if (typeof parsed.activeEnvironmentId === 'string') {
+        this.activeEnvironmentId = parsed.activeEnvironmentId
+      }
+      if (Array.isArray(parsed.collections) && parsed.collections.length > 0) {
+        this.collections = parsed.collections
+      }
+      if (Array.isArray(parsed.history)) {
+        this.history = parsed.history.slice(0, 40)
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+  }
+
+  private saveToStorage() {
+    try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          environments: this.environments,
+          activeEnvironmentId: this.activeEnvironmentId,
+          collections: this.collections,
+          history: this.history.slice(0, 40),
+        })
+      )
+    } catch {
+      // ignore storage quota errors
+    }
   }
 
   public resetToDefaults() {
@@ -269,6 +315,11 @@ export class RestClientService {
     this.activeEnvironmentId = 'prod'
     this.collections = JSON.parse(JSON.stringify(DEFAULT_COLLECTIONS))
     this.history = []
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore
+    }
     this.notify()
   }
 
@@ -285,12 +336,77 @@ export class RestClientService {
   public setActiveEnvironment(id: string) {
     if (this.environments.some((e) => e.id === id)) {
       this.activeEnvironmentId = id
+      this.saveToStorage()
       this.notify()
     }
   }
 
+  public updateEnvironmentVariables(envId: string, variables: Record<string, string>) {
+    const env = this.environments.find((e) => e.id === envId)
+    if (!env) return
+    env.variables = { ...variables }
+    this.saveToStorage()
+    this.notify()
+  }
+
+  public addEnvironment(name: string, variables: Record<string, string> = {}): ApiEnvironment {
+    const env: ApiEnvironment = {
+      id: `env_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim() || 'Custom Environment',
+      variables: { ...variables },
+    }
+    this.environments = [...this.environments, env]
+    this.activeEnvironmentId = env.id
+    this.saveToStorage()
+    this.notify()
+    return env
+  }
+
   public getCollections(): ApiCollection[] {
     return this.collections
+  }
+
+  public createCollection(name: string, description = ''): ApiCollection {
+    const col: ApiCollection = {
+      id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim() || 'New Collection',
+      description,
+      requests: [],
+    }
+    this.collections = [...this.collections, col]
+    this.saveToStorage()
+    this.notify()
+    return col
+  }
+
+  public saveRequest(collectionId: string, req: ApiRequest): ApiRequest {
+    let col = this.collections.find((c) => c.id === collectionId)
+    if (!col) {
+      col = this.collections[0] || this.createCollection('My Requests')
+    }
+    const cloned: ApiRequest = JSON.parse(JSON.stringify(req))
+    if (!cloned.id) {
+      cloned.id = `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    }
+    const existingIdx = col.requests.findIndex((r) => r.id === cloned.id)
+    if (existingIdx >= 0) {
+      col.requests[existingIdx] = cloned
+    } else {
+      col.requests.push(cloned)
+    }
+    this.collections = [...this.collections]
+    this.saveToStorage()
+    this.notify()
+    return cloned
+  }
+
+  public deleteRequest(collectionId: string, requestId: string) {
+    const col = this.collections.find((c) => c.id === collectionId)
+    if (!col) return
+    col.requests = col.requests.filter((r) => r.id !== requestId)
+    this.collections = [...this.collections]
+    this.saveToStorage()
+    this.notify()
   }
 
   public getHistory(): RequestHistoryItem[] {
@@ -299,6 +415,7 @@ export class RestClientService {
 
   public clearHistory() {
     this.history = []
+    this.saveToStorage()
     this.notify()
   }
 
@@ -389,8 +506,9 @@ export class RestClientService {
     const fullUrl = this.buildFullUrl(request, env)
     const timestamp = new Date().toISOString()
 
-    // Mock response handler for built-in test URLs
-    if (fullUrl.includes('api.indoctrinated.io')) {
+    // Offline test-domain mock handler (disabled when Electron HTTP proxy is available so real traffic is never faked)
+    const hasElectronProxy = typeof window !== 'undefined' && Boolean(window.electronAPI?.infra?.httpRequest)
+    if (fullUrl.includes('api.indoctrinated.io') && !hasElectronProxy) {
       return this.executeMockIndoctrinatedApi(request, fullUrl, startTime, timestamp, env)
     }
 
@@ -446,7 +564,23 @@ export class RestClientService {
         }
         if (!headers['Content-Type']) headers['Content-Type'] = 'application/x-www-form-urlencoded'
       } else if (request.bodyType === 'form-data' && request.bodyContent) {
-        body = this.interpolate(request.bodyContent, env)
+        const raw = this.interpolate(request.bodyContent, env)
+        const entries = this.parseKeyValueBody(raw)
+        if (entries.length > 0) {
+          const boundary = `----IndoctrinatedEditForm${Date.now().toString(36)}`
+          const lines: string[] = []
+          for (const [k, v] of entries) {
+            lines.push(`--${boundary}`)
+            lines.push(`Content-Disposition: form-data; name="${k.replace(/"/g, '\\"')}"`)
+            lines.push('')
+            lines.push(v)
+          }
+          lines.push(`--${boundary}--`, '')
+          body = lines.join('\r\n')
+          headers['Content-Type'] = `multipart/form-data; boundary=${boundary}`
+        } else {
+          body = raw
+        }
       } else if (request.bodyType === 'raw' && request.bodyContent) {
         body = this.interpolate(request.bodyContent, env)
       }
@@ -632,6 +766,27 @@ export class RestClientService {
     return res
   }
 
+  private parseKeyValueBody(raw: string): [string, string][] {
+    const trimmed = raw.trim()
+    if (!trimmed) return []
+    try {
+      const obj = JSON.parse(trimmed)
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        return Object.entries(obj).map(([k, v]) => [k, String(v)])
+      }
+    } catch {
+      // parse key=value lines
+    }
+    const pairs: [string, string][] = []
+    for (const line of trimmed.split(/\r?\n/)) {
+      const eq = line.indexOf('=')
+      if (eq > 0) {
+        pairs.push([line.slice(0, eq).trim(), line.slice(eq + 1).trim()])
+      }
+    }
+    return pairs
+  }
+
   private recordHistory(request: ApiRequest, response: ApiResponse) {
     this.history.unshift({
       id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -640,6 +795,7 @@ export class RestClientService {
       timestamp: new Date().toISOString(),
     })
     if (this.history.length > 40) this.history.pop()
+    this.saveToStorage()
     this.notify()
   }
 
@@ -651,6 +807,7 @@ export class RestClientService {
    * Export ApiRequest into executable cURL syntax.
    */
   public exportToCurl(request: ApiRequest, env?: ApiEnvironment | string): string {
+    const esc = (s: string) => s.replace(/'/g, "'\\''")
     let activeEnv: ApiEnvironment
     if (typeof env === 'string') {
       activeEnv = this.environments.find((e) => e.id === env) || this.getActiveEnvironment()
@@ -658,25 +815,77 @@ export class RestClientService {
       activeEnv = env || this.getActiveEnvironment()
     }
     const fullUrl = this.buildFullUrl(request, activeEnv)
-    const parts: string[] = [`curl -X ${request.method} '${fullUrl}'`]
+    const parts: string[] = [`curl -X ${request.method} '${esc(fullUrl)}'`]
 
+    const headerKeys = new Set<string>()
     request.headers
       .filter((h) => h.enabled && h.key.trim())
       .forEach((h) => {
-        parts.push(`  -H '${this.interpolate(h.key, activeEnv)}: ${this.interpolate(h.value, activeEnv)}'`)
+        const k = this.interpolate(h.key, activeEnv)
+        const v = this.interpolate(h.value, activeEnv)
+        headerKeys.add(k.toLowerCase())
+        parts.push(`  -H '${esc(k)}: ${esc(v)}'`)
       })
 
     if (request.auth.type === 'bearer' && (request.auth.bearerToken || (request.auth as any).token)) {
       const tokenVal = request.auth.bearerToken || (request.auth as any).token
-      parts.push(`  -H 'Authorization: Bearer ${this.interpolate(tokenVal, activeEnv)}'`)
+      parts.push(`  -H 'Authorization: Bearer ${esc(this.interpolate(tokenVal, activeEnv))}'`)
+    } else if (request.auth.type === 'basic') {
+      const creds = `${this.interpolate(request.auth.basicUsername || '', activeEnv)}:${this.interpolate(request.auth.basicPassword || '', activeEnv)}`
+      parts.push(`  -H 'Authorization: Basic ${utf8ToBase64(creds)}'`)
+    } else if (
+      request.auth.type === 'apiKey' &&
+      (request.auth.apiKeyLocation || 'header') === 'header' &&
+      request.auth.apiKeyName
+    ) {
+      const k = this.interpolate(request.auth.apiKeyName, activeEnv)
+      const v = this.interpolate(request.auth.apiKeyValue || '', activeEnv)
+      parts.push(`  -H '${esc(k)}: ${esc(v)}'`)
     }
 
-    if ((request.bodyType === 'json' || (request as any).body?.type === 'json')) {
-      const rawBody = request.bodyContent || (request as any).body?.raw || ''
-      parts.push(`  -d '${this.interpolate(rawBody, activeEnv)}'`)
-    } else if ((request.bodyType === 'graphql' || (request as any).body?.type === 'graphql')) {
-      const query = request.graphqlQuery || (request as any).body?.graphql?.query || ''
-      parts.push(`  -d '{"query": "${this.interpolate(query, activeEnv)}"}'`)
+    const bodyType = request.bodyType || (request as any).body?.type || 'none'
+    const rawBody = request.bodyContent ?? (request as any).body?.raw ?? ''
+
+    if (bodyType === 'json') {
+      parts.push(`  -d '${esc(this.interpolate(rawBody, activeEnv))}'`)
+    } else if (bodyType === 'graphql') {
+      const query = this.interpolate(request.graphqlQuery || (request as any).body?.graphql?.query || '', activeEnv)
+      let variables: any = undefined
+      const rawVars = request.graphqlVariables || (request as any).body?.graphql?.variables
+      if (rawVars && rawVars.trim() && rawVars.trim() !== '{}') {
+        try {
+          variables = JSON.parse(this.interpolate(rawVars, activeEnv))
+        } catch {
+          // ignore
+        }
+      }
+      const payload = variables !== undefined ? JSON.stringify({ query, variables }) : JSON.stringify({ query })
+      parts.push(`  -d '${esc(payload)}'`)
+    } else if (bodyType === 'x-www-form-urlencoded' && rawBody) {
+      if (!headerKeys.has('content-type')) {
+        parts.push(`  -H 'Content-Type: application/x-www-form-urlencoded'`)
+      }
+      const interpolated = this.interpolate(rawBody, activeEnv)
+      const entries = this.parseKeyValueBody(interpolated)
+      if (entries.length > 0) {
+        const params = new URLSearchParams()
+        for (const [k, v] of entries) params.append(k, v)
+        parts.push(`  -d '${esc(params.toString())}'`)
+      } else {
+        parts.push(`  -d '${esc(interpolated)}'`)
+      }
+    } else if (bodyType === 'form-data' && rawBody) {
+      const interpolated = this.interpolate(rawBody, activeEnv)
+      const entries = this.parseKeyValueBody(interpolated)
+      if (entries.length > 0) {
+        for (const [k, v] of entries) {
+          parts.push(`  -F '${esc(k)}=${esc(v)}'`)
+        }
+      } else {
+        parts.push(`  -d '${esc(interpolated)}'`)
+      }
+    } else if (bodyType === 'raw' && rawBody) {
+      parts.push(`  -d '${esc(this.interpolate(rawBody, activeEnv))}'`)
     }
 
     return parts.join(' \\\n')
