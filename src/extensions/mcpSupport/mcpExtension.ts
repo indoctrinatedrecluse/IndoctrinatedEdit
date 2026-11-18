@@ -45,7 +45,7 @@ export const mcpExtensionManifest: ExtensionManifest = {
       id: 'json',
       extensions: ['.json', '.mcp.json'],
       aliases: ['JSON', 'MCP Config'],
-      snippets: mcpSnippets,
+      snippets: mcpSnippets.filter((s) => s.label.startsWith('mcp-config-')),
     },
     {
       id: 'typescript',
@@ -64,34 +64,41 @@ export const mcpExtensionManifest: ExtensionManifest = {
 
 let isRegistered = false
 
-export function registerMcpExtension(monacoInstance?: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
+export function registerMcpExtension(monacoInstance?: typeof monaco): monaco.IDisposable[] {
+  if (isRegistered || !monacoInstance) return []
   isRegistered = true
 
-  try {
-    monacoInstance.languages.registerCompletionItemProvider('json', {
-      provideCompletionItems: (model, position) => {
-        const word = model.getWordUntilPosition(position)
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn,
-        }
+  const disposables: monaco.IDisposable[] = []
+  for (const langEntry of mcpExtensionManifest.languages || []) {
+    const snippets = langEntry.snippets || []
+    if (snippets.length === 0) continue
+    try {
+      const d = monacoInstance.languages.registerCompletionItemProvider(langEntry.id, {
+        provideCompletionItems: (model, position) => {
+          const word = model.getWordUntilPosition(position)
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+          }
 
-        const suggestions: monaco.languages.CompletionItem[] = mcpSnippets.map((s) => ({
-          label: s.label,
-          kind: monacoInstance.languages.CompletionItemKind.Snippet,
-          documentation: s.documentation,
-          insertText: s.insertText,
-          insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-          range,
-        }))
+          const suggestions: monaco.languages.CompletionItem[] = snippets.map((s) => ({
+            label: s.label,
+            kind: monacoInstance.languages.CompletionItemKind.Snippet,
+            documentation: s.documentation,
+            insertText: s.insertText,
+            insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            range,
+          }))
 
-        return { suggestions }
-      },
-    })
-  } catch (err) {
-    console.warn('Could not register MCP Extension completion items:', err)
+          return { suggestions }
+        },
+      })
+      if (d) disposables.push(d)
+    } catch (err) {
+      console.warn(`Could not register MCP Extension completion items for ${langEntry.id}:`, err)
+    }
   }
+  return disposables
 }

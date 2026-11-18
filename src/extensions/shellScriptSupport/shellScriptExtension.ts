@@ -7,7 +7,6 @@ import {
   shellScriptSnippets,
 } from './shellScriptSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const shellScriptExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.shell-powershell',
@@ -112,6 +111,4 @@ export function registerShellScriptExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://github.com/PowerShell/PowerShell',
     description: 'Cross-platform task automation and configuration management framework',
   })
-
-  notificationService.notifyInfo('Extension System', '📜 Universal Shell & PowerShell Suite activated')
 }

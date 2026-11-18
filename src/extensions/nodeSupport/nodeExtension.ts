@@ -39,54 +39,56 @@ export const nodeExtensionManifest: ExtensionManifest = {
 
 let isRegistered = false
 
-export function registerNodeExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
+export function registerNodeExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (isRegistered || !monacoInstance) return []
   isRegistered = true
 
-  const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {
-    try {
-      const word = model.getWordUntilPosition(position)
-      const range: monaco.IRange = {
-        startLineNumber: position.lineNumber,
-        endLineNumber: position.lineNumber,
-        startColumn: word.startColumn,
-        endColumn: word.endColumn,
+  const disposables: monaco.IDisposable[] = []
+  const makeProvider = (snippetsList: typeof nodeSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
+      try {
+        const word = model.getWordUntilPosition(position)
+        const range: monaco.IRange = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn,
+        }
+
+        const suggestions: monaco.languages.CompletionItem[] = snippetsList.map((snippet) => ({
+          label: snippet.label,
+          kind: monacoInstance.languages.CompletionItemKind.Snippet,
+          detail: snippet.detail || 'Node.js Snippet',
+          documentation: snippet.documentation,
+          insertText: snippet.insertText,
+          insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          range,
+        }))
+
+        return { suggestions }
+      } catch (err) {
+        notificationService.notifyError(
+          'Node.js Extension Completion Error',
+          String(err),
+          'Node.js Language Service'
+        )
+        return { suggestions: [] }
       }
-
-      const suggestions: monaco.languages.CompletionItem[] = nodeSnippets.map((snippet) => ({
-        label: snippet.label,
-        kind: monacoInstance.languages.CompletionItemKind.Snippet,
-        detail: snippet.detail || 'Node.js Snippet',
-        documentation: snippet.documentation,
-        insertText: snippet.insertText,
-        insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-        range,
-      }))
-
-      return { suggestions }
-    } catch (err) {
-      notificationService.notifyError(
-        'Node.js Extension Completion Error',
-        err,
-        'Node.js Language Service'
-      )
-      return { suggestions: [] }
-    }
-  }
-
-  monacoInstance.languages.registerCompletionItemProvider('javascript', {
-    provideCompletionItems: provideSnippets,
+    },
   })
 
-  monacoInstance.languages.registerCompletionItemProvider('typescript', {
-    provideCompletionItems: provideSnippets,
-  })
+  const jsCodeSnippets = nodeSnippets.filter((s) => s.label !== 'node-package-json')
+  const jsonSnippets = nodeSnippets.filter((s) => s.label === 'node-package-json')
 
-  monacoInstance.languages.registerCompletionItemProvider('json', {
-    provideCompletionItems: provideSnippets,
-  })
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('javascript', makeProvider(jsCodeSnippets))
+  const d2 = monacoInstance.languages.registerCompletionItemProvider('typescript', makeProvider(jsCodeSnippets))
+  const d3 = monacoInstance.languages.registerCompletionItemProvider('json', makeProvider(jsonSnippets))
+  if (d1) disposables.push(d1)
+  if (d2) disposables.push(d2)
+  if (d3) disposables.push(d3)
 
   triggerNodeToolchainCheck()
+  return disposables
 }
 
 export function triggerNodeToolchainCheck() {

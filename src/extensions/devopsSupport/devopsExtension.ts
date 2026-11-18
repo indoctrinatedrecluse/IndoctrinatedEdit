@@ -7,7 +7,6 @@ import {
   devopsSnippets,
 } from './devopsSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const devopsExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.devops-iac',
@@ -112,6 +111,4 @@ export function registerDevopsExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://www.docker.com',
     description: 'Container application development and virtualization engine',
   })
-
-  notificationService.notifyInfo('Extension System', '☁️ DevOps, Cloud IaC & Container Suite activated')
 }

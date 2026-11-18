@@ -65,7 +65,9 @@ describe('Java and .NET / C# Universal Extensions & Toolchain Detection', () => 
     const csharpLang = dotnetExtensionManifest.languages?.find((l) => l.id === 'csharp')
     expect(csharpLang).toBeDefined()
     expect(csharpLang?.extensions).toContain('.cs')
-    expect(csharpLang?.extensions).toContain('.csproj')
+
+    const xmlProjLang = dotnetExtensionManifest.languages?.find((l) => l.id === 'xml')
+    expect(xmlProjLang?.extensions).toContain('.csproj')
   })
 
   it('verifies toolchain definitions for Java and .NET in toolchainService', () => {

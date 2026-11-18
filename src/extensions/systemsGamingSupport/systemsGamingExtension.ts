@@ -7,7 +7,6 @@ import {
   systemsGamingSnippets,
 } from './systemsGamingSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const systemsGamingExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.systems-gaming',
@@ -120,6 +119,4 @@ export function registerSystemsGamingExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://nim-lang.org',
     description: 'Expressive, efficient, systems-oriented compiled language',
   })
-
-  notificationService.notifyInfo('Extension System', '🎮 Systems & Game Engine Suite activated')
 }

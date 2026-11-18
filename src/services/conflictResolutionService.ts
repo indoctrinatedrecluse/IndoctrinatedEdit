@@ -60,7 +60,7 @@ const CONTENT_HEURISTICS: Record<string, ContentHeuristic[]> = {
   // .m: Objective-C vs MATLAB / Octave vs Mercury
   'm': [
     { patterns: [/@interface\b/, /@implementation\b/, /#import\s+<Foundation\//, /#import\s+<UIKit\//], languageId: 'objective-c', targetExtensionId: 'indoctrinated.ext.swift-apple', weight: 10 },
-    { patterns: [/\bfunction\s+.*=/, /\bmeshgrid\b/, /%[^\n]*/, /\bclc\s*;/, /\bclear\s+all\b/], languageId: 'matlab', targetExtensionId: 'indoctrinated.ext.datascience-scientific', weight: 8 },
+    { patterns: [/\bfunction\s+.*=/, /\bmeshgrid\b/, /^\s*%[^@%]/m, /\bclc\s*;/, /\bclear\s+all\b/], languageId: 'matlab', targetExtensionId: 'indoctrinated.ext.datascience-scientific', weight: 8 },
     { patterns: [/:- module\b/, /:- interface\b/, /:- pred\b/], languageId: 'prolog', targetExtensionId: 'indoctrinated.ext.logic-formal-methods', weight: 7 },
   ],
   // .pl: Prolog vs Perl
@@ -71,7 +71,7 @@ const CONTENT_HEURISTICS: Record<string, ContentHeuristic[]> = {
   // .v: Coq vs Verilog / SystemVerilog
   'v': [
     { patterns: [/\bRequire\s+Import\b/, /\bInductive\b/, /\bLemma\b/, /\bProof\./, /\bQed\./], languageId: 'coq', targetExtensionId: 'indoctrinated.ext.logic-formal-methods', weight: 10 },
-    { patterns: [/\bmodule\b[\s\S]*?\bendmodule\b/, /\balways\s*@/, /\bwire\b/, /\breg\b/], languageId: 'systemverilog', targetExtensionId: 'indoctrinated.ext.devops-iac', weight: 9 },
+    { patterns: [/\bmodule\b[\s\S]*?\bendmodule\b/, /\balways\s*@/, /\bwire\b/, /\breg\b/], languageId: 'systemverilog', targetExtensionId: 'indoctrinated.ext.systems-gaming', weight: 9 },
   ],
   // .h: C vs C++ vs Objective-C
   'h': [
@@ -83,14 +83,14 @@ const CONTENT_HEURISTICS: Record<string, ContentHeuristic[]> = {
   'r': [
     { patterns: [/library\(/, /<-/, /%>/, /\|\>/, /ggplot\(/], languageId: 'r', targetExtensionId: 'indoctrinated.ext.datascience-scientific', weight: 10 },
   ],
-  // .ts / .tsx: React vs Angular vs NestJS vs Vanilla TypeScript
+  // .ts / .tsx: React vs Angular vs NestJS vs Vanilla TypeScript (Monaco built-in ID is 'typescript')
   'tsx': [
-    { patterns: [/import\s+React/, /from\s+['"]react['"]/, /<[A-Z]\w*/, /className=/], languageId: 'typescriptreact', targetExtensionId: 'indoctrinated.ext.react-pack', weight: 10 },
+    { patterns: [/import\s+React/, /from\s+['"]react['"]/, /<[A-Z]\w*/, /className=/], languageId: 'typescript', targetExtensionId: 'indoctrinated.ext.react-pack', weight: 10 },
   ],
   'ts': [
     { patterns: [/@Component\s*\(/, /@Injectable\s*\(/, /@NgModule\s*\(/, /@Directive\s*\(/, /templateUrl:/], languageId: 'typescript', targetExtensionId: 'indoctrinated.ext.angular-pack', weight: 10 },
     { patterns: [/@Controller\s*\(/, /@Get\s*\(/, /@Post\s*\(/, /@Module\s*\(/], languageId: 'typescript', targetExtensionId: 'indoctrinated.ext.backend-mega-pack', weight: 9 },
-    { patterns: [/import\s+React/, /from\s+['"]react['"]/, /useState\s*\(/, /useEffect\s*\(/], languageId: 'typescriptreact', targetExtensionId: 'indoctrinated.ext.react-pack', weight: 8 },
+    { patterns: [/import\s+React/, /from\s+['"]react['"]/, /useState\s*\(/, /useEffect\s*\(/], languageId: 'typescript', targetExtensionId: 'indoctrinated.ext.react-pack', weight: 8 },
   ],
   'vue': [
     { patterns: [/<template>/, /<script\s+setup/, /defineProps\s*\(/], languageId: 'vue', targetExtensionId: 'indoctrinated.ext.frontend-mega-pack', weight: 10 },
@@ -118,6 +118,9 @@ export class ConflictResolutionService {
   
   // Language alias graph for cycle detection: 'alias' -> 'targetLanguage'
   private aliasGraph: Map<string, string> = new Map()
+
+  // Track disabled extensions so heuristics and resolvers never route to them
+  private disabledExtensionIds: Set<string> = new Set()
 
   // Track resolved conflicts to avoid duplicate notifications
   private loggedConflicts: Set<string> = new Set()
@@ -227,9 +230,14 @@ export class ConflictResolutionService {
   public indexManifests(manifests: ExtensionManifest[]): void {
     this.fileExtensionMap.clear()
     this.aliasGraph.clear()
+    this.disabledExtensionIds.clear()
 
     for (const manifest of manifests) {
-      if (!manifest.languages || manifest.status === 'Disabled') continue
+      if (manifest.status === 'Disabled') {
+        this.disabledExtensionIds.add(manifest.id)
+        continue
+      }
+      if (!manifest.languages) continue
 
       for (const lang of manifest.languages) {
         // Register file extensions
@@ -277,15 +285,29 @@ export class ConflictResolutionService {
       }
 
       const basename = filename.split(/[/\\]/).pop() || filename
-      const rawExt = basename.split('.').pop()?.toLowerCase() || ''
-      const extKey = basename.toLowerCase() === rawExt ? basename.toLowerCase() : rawExt
+      const lowerBase = basename.toLowerCase()
+      const parts = lowerBase.split('.')
+      const rawExt = parts.length > 1 ? parts[parts.length - 1] : lowerBase
+      const extKey = lowerBase === rawExt ? lowerBase : rawExt
 
-      const claimants = this.fileExtensionMap.get(extKey)
+      // Support exact filenames (e.g. "package.json", "dockerfile") and multi-dot extensions
+      // (e.g. "gradle.kts", "mcp.json", "blade.php") while keeping .ts/.js path-heuristic tiers intact.
+      let claimants = this.fileExtensionMap.get(lowerBase)
+      if (!claimants && parts.length >= 3) {
+        const multiDotKey = parts.slice(-2).join('.')
+        const multiClaimants = this.fileExtensionMap.get(multiDotKey)
+        if (multiClaimants && multiClaimants.length > 0 && extKey !== 'ts' && extKey !== 'js') {
+          claimants = multiClaimants
+        }
+      }
+      if (!claimants) {
+        claimants = this.fileExtensionMap.get(extKey)
+      }
 
       // Tier 3 Early: In-File Content & AST/Token Signatures (e.g. .m, .pl, .v, .ts decorators)
       if (fileContent && CONTENT_HEURISTICS[extKey]) {
         const contentResult = this.evaluateHeuristics(extKey, fileContent, claimants)
-        if (contentResult) {
+        if (contentResult && (!contentResult.extensionId || !this.disabledExtensionIds.has(contentResult.extensionId))) {
           return contentResult
         }
       }
@@ -529,11 +551,11 @@ export class ConflictResolutionService {
 
     if (bestMatch) {
       const canonical = this.resolveAliasWithCycleCheck(bestMatch.languageId)
-      const winningClaimant = claimants?.find((c) =>
-        (bestMatch!.targetExtensionId && c.extensionId === bestMatch!.targetExtensionId) ||
-        c.language.id === canonical ||
-        c.language.id === bestMatch!.languageId
-      )
+      const winningClaimant =
+        (bestMatch.targetExtensionId
+          ? claimants?.find((c) => c.extensionId === bestMatch!.targetExtensionId)
+          : undefined) ||
+        claimants?.find((c) => c.language.id === canonical || c.language.id === bestMatch!.languageId)
 
       return {
         languageId: canonical,
@@ -557,7 +579,32 @@ export class ConflictResolutionService {
     const getScore = (c: { extensionId: string; category?: string }): number => {
       const id = c.extensionId.toLowerCase()
       // Dedicated language suites have highest affinity
-      if (id.includes('angular') || id.includes('react') || id.includes('python') || id.includes('rust') || id.includes('go') || id.includes('cpp') || id.includes('java') || id.includes('dotnet') || id.includes('php') || id.includes('ruby') || id.includes('swift') || id.includes('kotlin') || id.includes('flutter')) {
+      if (
+        id.includes('angular') ||
+        id.includes('react') ||
+        id.includes('python') ||
+        id.includes('rust') ||
+        id.includes('go') ||
+        id.includes('cpp') ||
+        id.includes('java') ||
+        id.includes('dotnet') ||
+        id.includes('php') ||
+        id.includes('ruby') ||
+        id.includes('swift') ||
+        id.includes('kotlin') ||
+        id.includes('flutter') ||
+        id.includes('zig') ||
+        id.includes('lua') ||
+        id.includes('gdscript') ||
+        id.includes('julia') ||
+        id.includes('shell') ||
+        id.includes('beam-functional') ||
+        id.includes('systems-gaming') ||
+        id.includes('web3') ||
+        id.includes('logic-formal') ||
+        id.includes('datascience') ||
+        id.includes('text-pack')
+      ) {
         return 100
       }
       // Framework mega-packs

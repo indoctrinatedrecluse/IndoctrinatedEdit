@@ -66,50 +66,53 @@ export const frontendExtensionManifest: ExtensionManifest = {
 
 let isRegistered = false
 
-export function registerFrontendMegaPackExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
+export function registerFrontendMegaPackExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (isRegistered || !monacoInstance) return []
   isRegistered = true
 
-  const targetLanguages = ['html', 'javascript', 'typescript', 'python', 'php', 'csharp', 'ruby']
+  const disposables: monaco.IDisposable[] = []
+  const langEntries = frontendExtensionManifest.languages || []
 
-  const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {
+  for (const langEntry of langEntries) {
+    const langSnippets = langEntry.snippets || frontendSnippets
     try {
-      const word = model.getWordUntilPosition(position)
-      const range: monaco.IRange = {
-        startLineNumber: position.lineNumber,
-        endLineNumber: position.lineNumber,
-        startColumn: word.startColumn,
-        endColumn: word.endColumn,
-      }
+      const d = monacoInstance.languages.registerCompletionItemProvider(langEntry.id, {
+        provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
+          try {
+            const word = model.getWordUntilPosition(position)
+            const range: monaco.IRange = {
+              startLineNumber: position.lineNumber,
+              endLineNumber: position.lineNumber,
+              startColumn: word.startColumn,
+              endColumn: word.endColumn,
+            }
 
-      const suggestions: monaco.languages.CompletionItem[] = frontendSnippets.map((snippet) => ({
-        label: snippet.label,
-        kind: monacoInstance.languages.CompletionItemKind.Snippet,
-        detail: snippet.detail || 'Frontend Mega-Pack Snippet',
-        documentation: snippet.documentation,
-        insertText: snippet.insertText,
-        insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-        range,
-      }))
+            const suggestions: monaco.languages.CompletionItem[] = langSnippets.map((snippet) => ({
+              label: snippet.label,
+              kind: monacoInstance.languages.CompletionItemKind.Snippet,
+              detail: snippet.detail || 'Frontend Mega-Pack Snippet',
+              documentation: snippet.documentation,
+              insertText: snippet.insertText,
+              insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            }))
 
-      return { suggestions }
-    } catch (err) {
-      notificationService.notifyError(
-        'Frontend Mega-Pack Completion Warning',
-        err,
-        'Frontend Language Service'
-      )
-      return { suggestions: [] }
-    }
-  }
-
-  for (const lang of targetLanguages) {
-    try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
-        provideCompletionItems: provideSnippets,
+            return { suggestions }
+          } catch (err) {
+            notificationService.notifyError(
+              'Frontend Mega-Pack Completion Warning',
+              String(err),
+              'Frontend Language Service'
+            )
+            return { suggestions: [] }
+          }
+        },
       })
+      if (d) disposables.push(d)
     } catch (err) {
-      console.warn(`Could not register Frontend Mega-Pack for language \${lang}:`, err)
+      console.warn(`Could not register Frontend Mega-Pack for language ${langEntry.id}:`, err)
     }
   }
+
+  return disposables
 }

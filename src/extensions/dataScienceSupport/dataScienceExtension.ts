@@ -7,7 +7,6 @@ import {
   dataScienceSnippets,
 } from './dataScienceSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const dataScienceExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.datascience-scientific',
@@ -24,7 +23,7 @@ export const dataScienceExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'r',
-      extensions: ['.r', '.R', '.Rmd'],
+      extensions: ['.r', '.Rmd'],
       aliases: ['R', 'r', 'Shiny', 'RMarkdown'],
       snippets: R_SNIPPETS,
     },
@@ -90,19 +89,7 @@ export function registerDataScienceExtension(monacoInstance: typeof monaco) {
   registerForLang('scala', SCALA_SNIPPETS)
   registerForLang('matlab', MATLAB_SNIPPETS)
 
-  // Register toolchain for R
-  toolchainService.registerToolchain({
-    id: 'toolchain.r',
-    name: 'R Language Environment',
-    language: 'r',
-    binaryNames: ['R', 'Rscript'],
-    versionFlag: '--version',
-    versionPattern: 'R\\s+version\\s+([0-9]+\\.[0-9]+\\.[0-9]+)',
-    downloadUrl: 'https://www.r-project.org',
-    description: 'Statistical computing and graphics environment',
-  })
-
-  // Register toolchain for Scala
+  // Register toolchain for Scala (toolchain.r is already defined in core toolchainService)
   toolchainService.registerToolchain({
     id: 'toolchain.scala',
     name: 'Scala Compiler & Runner',
@@ -113,6 +100,4 @@ export function registerDataScienceExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://www.scala-lang.org',
     description: 'Object-oriented and functional language running on the JVM',
   })
-
-  notificationService.notifyInfo('Extension System', '📊 Data Science & R Analytics Suite activated')
 }

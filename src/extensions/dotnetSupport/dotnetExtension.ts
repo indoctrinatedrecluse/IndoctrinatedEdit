@@ -18,10 +18,20 @@ export const dotnetExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'csharp',
-      extensions: ['.cs', '.csx', '.csproj', '.sln', '.fsproj', '.vb'],
+      extensions: ['.cs', '.csx', '.sln'],
       aliases: ['C#', 'csharp', 'dotnet'],
       mimetypes: ['text/x-csharp', 'text/x-csharp-source'],
       snippets: dotnetSnippets,
+    },
+    {
+      id: 'xml',
+      extensions: ['.csproj', '.fsproj', '.vbproj'],
+      aliases: ['MSBuild Project XML'],
+    },
+    {
+      id: 'vb',
+      extensions: ['.vb'],
+      aliases: ['Visual Basic .NET'],
     },
   ],
 }

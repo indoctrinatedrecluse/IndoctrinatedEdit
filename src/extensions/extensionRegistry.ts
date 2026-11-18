@@ -38,11 +38,19 @@ import { jupyterExtensionManifest, registerJupyterExtension } from './jupyterSup
 import { prettierExtensionManifest, registerPrettierExtension } from './formatterSupport/prettierExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
+import { ensureCustomLanguagesRegistered } from './extensionHelpers'
+
+const DISABLED_EXTENSIONS_STORAGE_KEY = 'indoctrinated_disabled_extensions_v1'
 
 class ExtensionRegistry {
   private extensions: Map<string, ExtensionManifest> = new Map()
+  private disabledIds: Set<string> = new Set()
+  private disposablesByExtension: Map<string, monaco.IDisposable[]> = new Map()
+  private listeners: Set<() => void> = new Set()
+  private isConstructing = true
 
   constructor() {
+    this.loadDisabledState()
     // 1. Universal Text & Prose Pack
     this.register(textSupportManifest)
 
@@ -311,42 +319,246 @@ class ExtensionRegistry {
       type: 'Built-in',
     })
 
-    // 39. Liquid Glass Shader Shaper
+    // 39. Liquid Glass Shader Shaper (Core Theme Engine)
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
-      name: 'Liquid Glass Shader Shaper',
-      version: '1.0.1',
-      description: 'Specular reflection, frosted glass blur, and dynamic chromatic aberration theme rendering engine.',
+      name: 'Liquid Glass Theme & Shader Engine',
+      version: '5.3.0',
+      description: 'Built-in glassmorphism theme presets, frosted glass surfaces, and specular reflection CSS styling.',
       author: 'indoctrinatedrecluse',
       category: 'Themes',
       iconName: 'Sparkles',
-      status: 'Running',
-      type: 'Microservice',
+      status: 'Active',
+      type: 'Built-in',
     })
 
-    // 40. Unified Diagnostics & Toolchain Bus
+    // 40. Unified Diagnostics & Toolchain Bus (Core Diagnostics Engine)
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
-      version: '1.0.1',
+      version: '5.3.0',
       description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, Lua, GDScript, SQL, Solidity, and Shell with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
       iconName: 'Cpu',
-      status: 'Running',
-      type: 'Microservice',
+      status: 'Active',
+      type: 'Built-in',
     })
 
-    // 33. Universal Code Formatter (Prettier Multi-Language Engine)
+    // 41. Universal Code Formatter (Prettier Multi-Language Engine)
     this.register(prettierExtensionManifest)
 
-    // Index all registered manifests into the conflict arbiter
+    // 42-50. Built-in Free RightDock Studios (previously unlisted in Extensions Sidebar)
+    this.register({
+      id: 'indoctrinated.ext.portsentinel',
+      name: 'Port Sentinel & Process Monitor',
+      version: '1.0.0',
+      description: 'Inspect listening TCP/UDP dev ports, probe local endpoints, and terminate stuck processes.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Radio',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.redisstudio',
+      name: 'Redis & Key-Value Studio',
+      version: '1.0.0',
+      description: 'Key-value explorer, TTL inspector, interactive command REPL, and Pub/Sub stream monitor.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Database',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.envvault',
+      name: 'Env & Secret Vault Studio',
+      version: '1.0.0',
+      description: 'Manage .env profiles, mask secrets, scan for credential leaks, and export AES-256-GCM encrypted bundles.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Lock',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.diagramstudio',
+      name: 'Diagram & Architecture Studio',
+      version: '1.0.0',
+      description: 'Visual Mermaid diagram workbench and workspace dependency radar graph.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'GitBranch',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.bundleanalyzer',
+      name: 'Bundle & Chunk Analyzer',
+      version: '1.0.0',
+      description: 'Inspect build bundle sizes, tree-shaking estimates, and duplicate dependency alerts.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Package',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.diffstudio',
+      name: 'Diff & 3-Way Merge Studio',
+      version: '1.0.0',
+      description: 'Compare code revisions, inspect unified patches, and resolve Git merge conflicts interactively.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'FileCode2',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.hexinspector',
+      name: 'Binary & Hex Inspector',
+      version: '1.0.0',
+      description: 'Byte-level hex dump viewer with signed/unsigned int, float, binary, and ASCII decoding.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Cpu',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.snippetvault',
+      name: 'Snippet Vault & Scratchpad',
+      version: '1.0.0',
+      description: 'Persistent personal code snippet library and quick developer scratchpad.',
+      author: 'indoctrinatedrecluse',
+      category: 'Tools',
+      iconName: 'Code2',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.register({
+      id: 'indoctrinated.ext.colorstudio',
+      name: 'Color & Liquid Glass Studio',
+      version: '1.0.0',
+      description: 'Color space converter, WCAG contrast checker, harmony generator, and glassmorphism shader builder.',
+      author: 'indoctrinatedrecluse',
+      category: 'Themes',
+      iconName: 'Sparkles',
+      status: 'Active',
+      type: 'Built-in',
+    })
+
+    this.isConstructing = false
+    // Batch-index all registered manifests ONCE into the conflict arbiter
     this.reindexConflicts()
   }
 
-  public register(manifest: ExtensionManifest) {
-    this.extensions.set(manifest.id, manifest)
+  private loadDisabledState(): void {
+    try {
+      if (typeof localStorage === 'undefined') return
+      const raw = localStorage.getItem(DISABLED_EXTENSIONS_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        for (const id of parsed) {
+          if (typeof id === 'string') this.disabledIds.add(id)
+        }
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+
+  private persistDisabledState(): void {
+    try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem(DISABLED_EXTENSIONS_STORAGE_KEY, JSON.stringify(Array.from(this.disabledIds)))
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+
+  private notify(): void {
+    this.listeners.forEach((fn) => {
+      try {
+        fn()
+      } catch {
+        // Isolate subscriber errors
+      }
+    })
+  }
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  public register(manifest: ExtensionManifest, options?: { skipReindex?: boolean }) {
+    const hydrated: ExtensionManifest = {
+      ...manifest,
+      status: this.disabledIds.has(manifest.id) ? 'Disabled' : manifest.status,
+    }
+    this.extensions.set(manifest.id, hydrated)
+    if (!this.isConstructing && !options?.skipReindex) {
+      this.reindexConflicts()
+      this.notify()
+    }
+  }
+
+  public isEnabled(id: string): boolean {
+    const ext = this.extensions.get(id)
+    if (!ext) return false
+    return ext.status !== 'Disabled' && !this.disabledIds.has(id)
+  }
+
+  public disable(id: string): boolean {
+    const ext = this.extensions.get(id)
+    if (!ext) return false
+    this.disabledIds.add(id)
+    this.extensions.set(id, { ...ext, status: 'Disabled' })
+
+    const disposables = this.disposablesByExtension.get(id)
+    if (disposables) {
+      for (const d of disposables) {
+        try {
+          d.dispose()
+        } catch {
+          // Ignore disposal errors
+        }
+      }
+      this.disposablesByExtension.delete(id)
+    }
+
+    this.persistDisabledState()
     this.reindexConflicts()
+    this.notify()
+    return true
+  }
+
+  public enable(id: string): boolean {
+    const ext = this.extensions.get(id)
+    if (!ext) return false
+    this.disabledIds.delete(id)
+    this.extensions.set(id, { ...ext, status: 'Active' })
+    this.persistDisabledState()
+    this.reindexConflicts()
+    this.notify()
+    return true
+  }
+
+  public toggle(id: string): boolean {
+    return this.isEnabled(id) ? !this.disable(id) : this.enable(id)
   }
 
   public get(id: string): ExtensionManifest | undefined {
@@ -367,9 +579,16 @@ class ExtensionRegistry {
   }
 
   public initializeMonacoExtensions(monacoInstance: typeof monaco) {
-    const safeInit = (name: string, fn: () => void) => {
+    // Register all custom non-builtin Monaco language IDs + Monarch tokenizers FIRST
+    ensureCustomLanguagesRegistered(monacoInstance)
+
+    const safeInit = (id: string, name: string, fn: () => monaco.IDisposable[] | void) => {
+      if (!this.isEnabled(id)) return
       try {
-        fn()
+        const result = fn()
+        if (Array.isArray(result) && result.length > 0) {
+          this.disposablesByExtension.set(id, result)
+        }
       } catch (err) {
         notificationService.notifyError(
           'Extension System',
@@ -378,42 +597,42 @@ class ExtensionRegistry {
       }
     }
 
-    safeInit('Text Support', () => registerTextSupportExtension(monacoInstance))
-    safeInit('Go Universal', () => registerGoExtension(monacoInstance))
-    safeInit('Rust Ecosystem', () => registerRustExtension(monacoInstance))
-    safeInit('C/C++ Universal', () => registerCppExtension(monacoInstance))
-    safeInit('Python AI', () => registerPythonExtension(monacoInstance))
-    safeInit('Java Universal', () => registerJavaExtension(monacoInstance))
-    safeInit('Dotnet Suite', () => registerDotnetExtension(monacoInstance))
-    safeInit('PHP & Laravel', () => registerPhpExtension(monacoInstance))
-    safeInit('Angular Enterprise', () => registerAngularExtension(monacoInstance))
-    safeInit('React Ecosystem', () => registerReactExtension(monacoInstance))
-    safeInit('Flutter & Dart', () => registerFlutterExtension(monacoInstance))
-    safeInit('Ruby & Rails', () => registerRubyExtension(monacoInstance))
-    safeInit('Node.js Core', () => registerNodeExtension(monacoInstance))
-    safeInit('Frontend Mega-Pack', () => registerFrontendMegaPackExtension(monacoInstance))
-    safeInit('Backend Mega-Pack', () => registerBackendMegaPackExtension(monacoInstance))
-    safeInit('Native Apple & Swift', () => registerSwiftExtension(monacoInstance))
-    safeInit('Kotlin & Android Multiplatform', () => registerKotlinExtension(monacoInstance))
-    safeInit('DevOps & Cloud IaC', () => registerDevopsExtension(monacoInstance))
-    safeInit('Data Science & R Analytics', () => registerDataScienceExtension(monacoInstance))
-    safeInit('BEAM & Functional Programming', () => registerBeamFunctionalExtension(monacoInstance))
-    safeInit('Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
-    safeInit('Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
-    safeInit('Database Studio', () => registerDatabaseExtension(monacoInstance))
-    safeInit('REST & GraphQL Client', () => registerRestClientExtension(monacoInstance))
-    safeInit('Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
-    safeInit('Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
-    safeInit('Lua & Luau Game Engine', () => registerLuaExtension(monacoInstance))
-    safeInit('Zig Native Systems', () => registerZigExtension(monacoInstance))
-    safeInit('Godot & GDScript', () => registerGDScriptExtension(monacoInstance))
-    safeInit('Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
-    safeInit('Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
-    safeInit('MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
-    safeInit('Google Antigravity', () => registerAntigravityExtension(monacoInstance))
-    safeInit('Remote Protocol Studio (SSH/SFTP/SMTP)', () => registerRemoteProtocolExtension(monacoInstance))
-    safeInit('Jupyter Notebooks & Live Kernel Studio', () => registerJupyterExtension(monacoInstance))
-    safeInit('Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
+    safeInit(textSupportManifest.id, 'Text Support', () => registerTextSupportExtension(monacoInstance))
+    safeInit(goExtensionManifest.id, 'Go Universal', () => registerGoExtension(monacoInstance))
+    safeInit(rustExtensionManifest.id, 'Rust Ecosystem', () => registerRustExtension(monacoInstance))
+    safeInit(cppExtensionManifest.id, 'C/C++ Universal', () => registerCppExtension(monacoInstance))
+    safeInit(pythonExtensionManifest.id, 'Python AI', () => registerPythonExtension(monacoInstance))
+    safeInit(javaExtensionManifest.id, 'Java Universal', () => registerJavaExtension(monacoInstance))
+    safeInit(dotnetExtensionManifest.id, 'Dotnet Suite', () => registerDotnetExtension(monacoInstance))
+    safeInit(phpExtensionManifest.id, 'PHP & Laravel', () => registerPhpExtension(monacoInstance))
+    safeInit(angularExtensionManifest.id, 'Angular Enterprise', () => registerAngularExtension(monacoInstance))
+    safeInit(reactExtensionManifest.id, 'React Ecosystem', () => registerReactExtension(monacoInstance))
+    safeInit(flutterExtensionManifest.id, 'Flutter & Dart', () => registerFlutterExtension(monacoInstance))
+    safeInit(rubyExtensionManifest.id, 'Ruby & Rails', () => registerRubyExtension(monacoInstance))
+    safeInit(nodeExtensionManifest.id, 'Node.js Core', () => registerNodeExtension(monacoInstance))
+    safeInit(frontendExtensionManifest.id, 'Frontend Mega-Pack', () => registerFrontendMegaPackExtension(monacoInstance))
+    safeInit(backendExtensionManifest.id, 'Backend Mega-Pack', () => registerBackendMegaPackExtension(monacoInstance))
+    safeInit(swiftExtensionManifest.id, 'Native Apple & Swift', () => registerSwiftExtension(monacoInstance))
+    safeInit(kotlinExtensionManifest.id, 'Kotlin & Android Multiplatform', () => registerKotlinExtension(monacoInstance))
+    safeInit(devopsExtensionManifest.id, 'DevOps & Cloud IaC', () => registerDevopsExtension(monacoInstance))
+    safeInit(dataScienceExtensionManifest.id, 'Data Science & R Analytics', () => registerDataScienceExtension(monacoInstance))
+    safeInit(beamFunctionalExtensionManifest.id, 'BEAM & Functional Programming', () => registerBeamFunctionalExtension(monacoInstance))
+    safeInit(systemsGamingExtensionManifest.id, 'Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
+    safeInit(databaseSchemaExtensionManifest.id, 'Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
+    safeInit(databaseExtensionManifest.id, 'Database Studio', () => registerDatabaseExtension(monacoInstance))
+    safeInit(restClientExtensionManifest.id, 'REST & GraphQL Client', () => registerRestClientExtension(monacoInstance))
+    safeInit(web3ExtensionManifest.id, 'Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
+    safeInit(logicFormalExtensionManifest.id, 'Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
+    safeInit(luaExtensionManifest.id, 'Lua & Luau Game Engine', () => registerLuaExtension(monacoInstance))
+    safeInit(zigExtensionManifest.id, 'Zig Native Systems', () => registerZigExtension(monacoInstance))
+    safeInit(gdscriptExtensionManifest.id, 'Godot & GDScript', () => registerGDScriptExtension(monacoInstance))
+    safeInit(shellScriptExtensionManifest.id, 'Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
+    safeInit(juliaExtensionManifest.id, 'Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
+    safeInit(mcpExtensionManifest.id, 'MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
+    safeInit(antigravityExtensionManifest.id, 'Google Antigravity', () => registerAntigravityExtension(monacoInstance))
+    safeInit(remoteProtocolExtensionManifest.id, 'Remote Protocol Studio (SSH/SFTP/SMTP)', () => registerRemoteProtocolExtension(monacoInstance))
+    safeInit(jupyterExtensionManifest.id, 'Jupyter Notebooks & Live Kernel Studio', () => registerJupyterExtension(monacoInstance))
+    safeInit(prettierExtensionManifest.id, 'Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
   }
 }
 

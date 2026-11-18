@@ -2,7 +2,6 @@ import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import { juliaSnippets } from './juliaSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const juliaExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.julia',
@@ -78,6 +77,4 @@ export function registerJuliaExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://julialang.org',
     description: 'High-level, high-performance dynamic programming language for numerical computing',
   })
-
-  notificationService.notifyInfo('Extension System', '🧬 Julia Scientific Suite activated')
 }

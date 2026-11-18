@@ -22,6 +22,20 @@ import {
   Download,
   Wrench,
   BookOpen,
+  Database,
+  LineChart,
+  Gamepad,
+  Gamepad2,
+  Shapes,
+  Bot,
+  FileCode2,
+  Container,
+  Radio,
+  Package,
+  Play,
+  Lock,
+  GitBranch,
+  Search,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
@@ -78,6 +92,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => rendererUpdateService.getStatus())
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(() => rendererUpdateService.getUpdateInfo())
   const [formatOptions, setFormatOptions] = useState<FormatterOptions>(() => formatterService.getOptions())
+  const [extensionsList, setExtensionsList] = useState(() => extensionRegistry.getAll())
+  const [extSearch, setExtSearch] = useState('')
 
   useEffect(() => {
     const unsubAi = AiService.onAutoApproveChanged((newSettings) => {
@@ -90,10 +106,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setUpdateStatus(rendererUpdateService.getStatus())
       setUpdateInfo(rendererUpdateService.getUpdateInfo())
     })
+    const unsubExt = extensionRegistry.subscribe(() => {
+      setExtensionsList(extensionRegistry.getAll())
+    })
     return () => {
       unsubAi()
       unsubMcp()
       unsubUpdate()
+      unsubExt()
     }
   }, [])
 
@@ -110,7 +130,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   if (!activeView) return null
 
-  const extensions = extensionRegistry.getAll()
+  const extensions = extSearch.trim()
+    ? extensionsList.filter((ext) => {
+        const q = extSearch.toLowerCase()
+        return (
+          ext.name.toLowerCase().includes(q) ||
+          ext.description.toLowerCase().includes(q) ||
+          ext.category.toLowerCase().includes(q)
+        )
+      })
+    : extensionsList
+
+  const activeExtensionsCount = extensionsList.filter((e) => e.status !== 'Disabled').length
 
   const renderExtensionIcon = (iconName?: string) => {
     switch (iconName) {
@@ -127,6 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'Layers':
         return <Layers size={16} />
       case 'Smartphone':
+      case 'Apple':
         return <Smartphone size={16} />
       case 'Gem':
         return <Gem size={16} />
@@ -138,8 +170,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return <Box size={16} />
       case 'ShieldCheck':
         return <ShieldCheck size={16} />
-      case 'Apple':
-        return <Smartphone size={16} />
+      case 'Database':
+        return <Database size={16} />
+      case 'LineChart':
+        return <LineChart size={16} />
+      case 'Gamepad':
+        return <Gamepad size={16} />
+      case 'Gamepad2':
+        return <Gamepad2 size={16} />
+      case 'BookOpen':
+        return <BookOpen size={16} />
+      case 'Shapes':
+        return <Shapes size={16} />
+      case 'Bot':
+        return <Bot size={16} />
+      case 'FileCode2':
+        return <FileCode2 size={16} />
+      case 'Container':
+        return <Container size={16} />
+      case 'Radio':
+        return <Radio size={16} />
+      case 'Package':
+        return <Package size={16} />
+      case 'Play':
+        return <Play size={16} />
+      case 'Lock':
+        return <Lock size={16} />
+      case 'GitBranch':
+        return <GitBranch size={16} />
       case 'Cpu':
       default:
         return <Cpu size={16} />
@@ -248,15 +306,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-section">
           <div className="sidebar-header">
             <span className="sidebar-title">INSTALLED EXTENSIONS</span>
-            <span className="ext-count-badge">{extensions.length} active</span>
+            <span className="ext-count-badge">{activeExtensionsCount}/{extensionsList.length} active</span>
           </div>
           <div className="extension-badge-banner">
             <ShieldCheck size={14} className="shield-icon" />
-            <span>Process-Isolated Microservices Sandbox</span>
+            <span>Modular Built-In Extension Registry</span>
+          </div>
+          <div style={{ padding: '0 8px 8px', position: 'relative' }}>
+            <Search size={12} style={{ position: 'absolute', left: 16, top: 8, opacity: 0.55, pointerEvents: 'none' }} />
+            <input
+              type="text"
+              value={extSearch}
+              onChange={(e) => setExtSearch(e.target.value)}
+              placeholder="Filter extensions..."
+              style={{
+                width: '100%',
+                padding: '5px 8px 5px 26px',
+                fontSize: '11px',
+                borderRadius: '6px',
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.05)',
+                color: 'inherit',
+                outline: 'none',
+              }}
+            />
           </div>
           <div className="ext-list">
-            {extensions.map((ext) => (
-              <div key={ext.id} className="ext-card glass-panel glass-interactive">
+            {extensions.map((ext) => {
+              const enabled = ext.status !== 'Disabled'
+              return (
+              <div
+                key={ext.id}
+                className="ext-card glass-panel glass-interactive"
+                style={{ opacity: enabled ? 1 : 0.6 }}
+              >
                 <div className="ext-header">
                   <div className="ext-icon-wrapper">
                     {renderExtensionIcon(ext.iconName)}
@@ -292,12 +375,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                     )}
                   </div>
-                  <span className={`ext-status ${ext.status.toLowerCase()}`}>
-                    <span className="status-dot" /> {ext.status}
-                  </span>
+                  <button
+                    type="button"
+                    className={`ext-status ${ext.status.toLowerCase()}`}
+                    onClick={() => extensionRegistry.toggle(ext.id)}
+                    title={enabled ? 'Click to disable extension' : 'Click to enable extension'}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: '10px',
+                      padding: '2px 8px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span className="status-dot" /> {enabled ? 'Enabled' : 'Disabled'}
+                  </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

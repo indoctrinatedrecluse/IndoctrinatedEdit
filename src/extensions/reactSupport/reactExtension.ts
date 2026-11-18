@@ -18,14 +18,14 @@ export const reactExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'typescript',
-      extensions: ['.tsx', '.jsx', '.ts', '.js'],
-      aliases: ['React TypeScript', 'React JSX'],
+      extensions: ['.tsx', '.ts'],
+      aliases: ['React TypeScript', 'React TSX'],
       snippets: reactSnippets,
     },
     {
       id: 'javascript',
       extensions: ['.jsx', '.js'],
-      aliases: ['React JavaScript'],
+      aliases: ['React JavaScript', 'React JSX'],
       snippets: reactSnippets,
     },
   ],

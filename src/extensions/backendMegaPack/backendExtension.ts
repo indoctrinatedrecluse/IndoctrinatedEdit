@@ -74,9 +74,15 @@ export const backendExtensionManifest: ExtensionManifest = {
     },
     {
       id: 'java',
-      extensions: ['.java', '.kt'],
-      aliases: ['Java/Kotlin Backend (Ktor, Spring Boot, Micronaut, Quarkus)'],
-      snippets: [...SPRING_BOOT_SNIPPETS, ...MICRONAUT_SNIPPETS, ...QUARKUS_SNIPPETS, ...KTOR_SNIPPETS],
+      extensions: ['.java'],
+      aliases: ['Java Backend (Spring Boot, Micronaut, Quarkus)'],
+      snippets: [...SPRING_BOOT_SNIPPETS, ...MICRONAUT_SNIPPETS, ...QUARKUS_SNIPPETS],
+    },
+    {
+      id: 'kotlin',
+      extensions: ['.kt'],
+      aliases: ['Kotlin Backend (Ktor)'],
+      snippets: [...KTOR_SNIPPETS],
     },
     {
       id: 'go',

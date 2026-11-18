@@ -2,7 +2,6 @@ import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import { gdscriptSnippets } from './gdscriptSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const gdscriptExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.gdscript',
@@ -78,6 +77,4 @@ export function registerGDScriptExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://godotengine.org',
     description: 'Free, open-source 2D and 3D game engine and editor runtime',
   })
-
-  notificationService.notifyInfo('Extension System', '🚀 Godot 4 & GDScript Suite activated')
 }

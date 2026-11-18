@@ -2,7 +2,6 @@ import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import { zigSnippets } from './zigSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const zigExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.zig',
@@ -78,6 +77,4 @@ export function registerZigExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://ziglang.org',
     description: 'Robust, optimal, and reusable systems programming compiler',
   })
-
-  notificationService.notifyInfo('Extension System', '⚡ Zig Native Systems Suite activated')
 }

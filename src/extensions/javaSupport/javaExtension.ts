@@ -18,7 +18,7 @@ export const javaExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'java',
-      extensions: ['.java', '.jav', '.class', '.jar', '.gradle', '.pom'],
+      extensions: ['.java', '.jav', '.gradle'],
       aliases: ['Java', 'java', 'JVM'],
       mimetypes: ['text/x-java-source', 'text/x-java'],
       snippets: javaSnippets,

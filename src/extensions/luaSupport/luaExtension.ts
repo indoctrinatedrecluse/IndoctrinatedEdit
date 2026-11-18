@@ -2,7 +2,6 @@ import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import { luaSnippets } from './luaSnippets'
 import { toolchainService } from '../../services/toolchainService'
-import { notificationService } from '../../services/notificationService'
 
 export const luaExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.lua-luau',
@@ -78,6 +77,4 @@ export function registerLuaExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://www.lua.org/download.html',
     description: 'Powerful, efficient, lightweight, embeddable scripting language',
   })
-
-  notificationService.notifyInfo('Extension System', '🌙 Lua & Luau Game Engine Suite activated')
 }
