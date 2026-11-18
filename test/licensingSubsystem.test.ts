@@ -1,14 +1,36 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { ClientLicenseService } from '../src/services/licenseService'
 import { LicenseService } from '../electron/license-service'
 
 describe('Licensing & Node-Locking Subsystem', () => {
   let clientService: ClientLicenseService
   let electronService: LicenseService
+  let tmpDir: string
+  let anchorHome: string
+  let anchorAppData: string
+  let anchorProgramData: string
 
   beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'indoctrinated-license-test-'))
+    anchorHome = path.join(tmpDir, 'home', 'license.json')
+    anchorAppData = path.join(tmpDir, 'appdata', 'license.json')
+    anchorProgramData = path.join(tmpDir, 'programdata', 'license.json')
+
     clientService = ClientLicenseService.getInstance()
-    electronService = LicenseService.getInstance()
+    // Strictly isolated temp anchors — NEVER touches host machine Registry or real license files!
+    electronService = LicenseService.createIsolated({
+      fileAnchors: [anchorHome, anchorAppData, anchorProgramData],
+      disableRegistry: true,
+    })
+  })
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    } catch {}
   })
 
   describe('Hardware Fingerprinting & Key Masking', () => {
@@ -72,12 +94,10 @@ describe('Licensing & Node-Locking Subsystem', () => {
     })
 
     it('should allow removing an active license and cleanly reverting to a 30-day Trial', async () => {
-      // First ensure an active license
       await electronService.activateLicense({
         licenseKey: 'ADM-1234-5678-9012',
       })
 
-      // Remove the license
       const removeResult = await electronService.removeLicense()
       expect(removeResult.success).toBe(true)
       expect(removeResult.message).toContain('Reverted to a 30-day Trial License')
@@ -102,7 +122,6 @@ describe('Licensing & Node-Locking Subsystem', () => {
       expect(notifiedInfo.username).toBe('dev_user')
       expect(notifiedInfo.maskedKey).toBe('DEV-xxxx-xxxx-xxxx')
 
-      // Clean up and revert to trial
       await clientService.remove()
       expect(notifiedInfo.type).toBe('TRIAL')
       expect(notifiedInfo.isTrial).toBe(true)
@@ -111,7 +130,6 @@ describe('Licensing & Node-Locking Subsystem', () => {
     })
 
     it('should lock out expired TRIAL licenses and expired USER/DEV licenses while keeping ADM lifetime valid', async () => {
-      // 1. ADM license: always lifetime valid, never expired
       await electronService.activateLicense({
         licenseKey: 'ADM-LIFETIME-MASTER-KEY',
         username: 'RootAdmin',
@@ -122,22 +140,142 @@ describe('Licensing & Node-Locking Subsystem', () => {
       expect(admInfo.isValid).toBe(true)
       expect(admInfo.expiresAt).toBeNull()
 
-      // 2. Clean remove to revert to trial
       await electronService.removeLicense()
       const trialInfo = electronService.getLicenseInfo()
       expect(trialInfo.type).toBe('TRIAL')
       expect(trialInfo.isValid).toBe(true)
       expect(trialInfo.status).toBe('trial')
 
-      // 3. Client mock expiration behavior
       const clientExpired = clientService.isExpired(trialInfo)
       expect(clientExpired).toBe(false)
     })
   })
 
+  describe('Persistence Across Updates, Reinstalls & Legacy Migration', () => {
+    it('should persist and self-heal an active license even if 2 of 3 anchors are wiped during reinstall', async () => {
+      await electronService.activateLicense({
+        licenseKey: 'ADM-PERSIST-2026-9999',
+        username: 'PersistentOwner',
+      })
+
+      // Simulate an installer/reinstall wiping AppData and ProgramData anchors
+      fs.unlinkSync(anchorAppData)
+      fs.unlinkSync(anchorProgramData)
+      expect(fs.existsSync(anchorAppData)).toBe(false)
+      expect(fs.existsSync(anchorProgramData)).toBe(false)
+
+      // Fresh service instance simulates app relaunch after update/reinstall
+      const afterReinstall = LicenseService.createIsolated({
+        fileAnchors: [anchorHome, anchorAppData, anchorProgramData],
+        disableRegistry: true,
+      })
+
+      const info = afterReinstall.getLicenseInfo()
+      expect(info.type).toBe('ADM')
+      expect(info.isValid).toBe(true)
+      expect(info.isTrial).toBe(false)
+      expect(info.username).toBe('PersistentOwner')
+      expect(info.licenseKey).toBe('ADM-PERSIST-2026-9999')
+
+      // Verify wiped anchors were automatically self-healed
+      expect(fs.existsSync(anchorAppData)).toBe(true)
+      expect(fs.existsSync(anchorProgramData)).toBe(true)
+    })
+
+    it('should prevent a fresh-install trial stub in one anchor from clobbering an active paid license in another anchor', () => {
+      // Anchor 1 (e.g. fresh HKCU/LocalAppData) has a newer unactivated trial stub
+      fs.mkdirSync(path.dirname(anchorAppData), { recursive: true })
+      fs.writeFileSync(
+        anchorAppData,
+        JSON.stringify({
+          schemaVersion: 2,
+          updatedAt: Date.now() + 5000,
+          licenseType: 'TRIAL',
+          status: 'trial',
+          trialStartedAt: new Date().toISOString(),
+          explicitlyRemoved: false,
+        }),
+        'utf8'
+      )
+
+      // Anchor 2 (e.g. surviving Home anchor) has an active DEV license
+      fs.mkdirSync(path.dirname(anchorHome), { recursive: true })
+      fs.writeFileSync(
+        anchorHome,
+        JSON.stringify({
+          schemaVersion: 2,
+          updatedAt: Date.now() - 10000,
+          licenseKey: 'DEV-ABCD-1234-5678',
+          licenseType: 'DEV',
+          username: 'pro_developer',
+          status: 'active',
+          activatedAt: new Date().toISOString(),
+          expiresAt: null,
+        }),
+        'utf8'
+      )
+
+      const info = electronService.getLicenseInfo()
+      expect(info.type).toBe('DEV')
+      expect(info.isValid).toBe(true)
+      expect(info.isTrial).toBe(false)
+      expect(info.username).toBe('pro_developer')
+      expect(info.licenseKey).toBe('DEV-ABCD-1234-5678')
+    })
+
+    it('should seamlessly migrate legacy v1 flat license.json files from pre-5.3.0 installs', () => {
+      fs.mkdirSync(path.dirname(anchorHome), { recursive: true })
+      fs.writeFileSync(
+        anchorHome,
+        JSON.stringify({
+          LicenseKey: 'USER-LEGACY-5110-KEY1',
+          LicenseType: 'USER',
+          LicenseUsername: 'early_adopter',
+          LicenseStatus: 'active',
+          LicenseActivatedAt: '2026-10-10T10:00:00.000Z',
+          LicenseExpiresAt: '',
+        }),
+        'utf8'
+      )
+
+      const info = electronService.getLicenseInfo()
+      expect(info.type).toBe('USER')
+      expect(info.isValid).toBe(true)
+      expect(info.isTrial).toBe(false)
+      expect(info.username).toBe('early_adopter')
+      expect(info.licenseKey).toBe('USER-LEGACY-5110-KEY1')
+
+      // Verify anchor was upgraded to schemaVersion 2 and mirrored
+      const upgraded = JSON.parse(fs.readFileSync(anchorAppData, 'utf8'))
+      expect(upgraded.schemaVersion).toBe(2)
+      expect(upgraded.licenseKey).toBe('USER-LEGACY-5110-KEY1')
+    })
+
+    it('should honor explicit license removal even if a stale anchor still holds an older paid record', async () => {
+      await electronService.activateLicense({
+        licenseKey: 'ADM-OLD-KEY-1111',
+        username: 'OldAdmin',
+      })
+      const stalePaidSnapshot = fs.readFileSync(anchorProgramData, 'utf8')
+
+      await electronService.removeLicense()
+
+      // Simulate ProgramData/HKLM being read-only and still holding the old pre-removal record
+      fs.writeFileSync(anchorProgramData, stalePaidSnapshot, 'utf8')
+
+      const restarted = LicenseService.createIsolated({
+        fileAnchors: [anchorHome, anchorAppData, anchorProgramData],
+        disableRegistry: true,
+      })
+
+      const info = restarted.getLicenseInfo()
+      expect(info.type).toBe('TRIAL')
+      expect(info.isTrial).toBe(true)
+    })
+  })
+
   describe('Pro Extensions & Gated Microservices Subsystem', () => {
     it('should correctly flag exactly the 9 designated extensions as isPro and leave all other extensions free', async () => {
-      // Dynamic import to avoid circular references
       const { extensionRegistry } = await import('../src/extensions/extensionRegistry')
 
       const proExtensionIds = new Set([
@@ -171,7 +309,6 @@ describe('Licensing & Node-Locking Subsystem', () => {
         }
       }
 
-      // Assert that exactly the 9 requested extensions are marked Pro
       expect(proCount).toBe(9)
       expect(freeCount).toBe(allExtensions.length - 9)
     })

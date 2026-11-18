@@ -43,6 +43,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": "always",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },

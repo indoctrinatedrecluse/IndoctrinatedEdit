@@ -14,25 +14,60 @@ export type {
 
 export type LicenseChangeListener = (info: LicenseInfo) => void
 
+const FALLBACK_LICENSE_STORAGE_KEY = 'indoctrinated_license_fallback_v2'
+
 export class ClientLicenseService {
   private static instance: ClientLicenseService
   private customElectronAPI: any = null
   private listeners: Set<LicenseChangeListener> = new Set()
   private cachedInfo: LicenseInfo | null = null
 
-  // Fallback state for in-browser / test environment
+  // Fallback state for in-browser / test environment (persisted to localStorage when available)
   private mockState: {
     key: string | null
     type: LicenseType
     username: string | null
     trialStartedAt: string
     status: 'active' | 'trial' | 'expired'
-  } = {
-    key: null,
-    type: 'TRIAL',
-    username: null,
-    trialStartedAt: new Date().toISOString(),
-    status: 'trial',
+  }
+
+  private constructor() {
+    this.mockState = this.loadFallbackState()
+  }
+
+  private loadFallbackState() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(FALLBACK_LICENSE_STORAGE_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (parsed && typeof parsed === 'object') {
+            return {
+              key: parsed.key ?? null,
+              type: (parsed.type as LicenseType) || 'TRIAL',
+              username: parsed.username ?? null,
+              trialStartedAt: parsed.trialStartedAt || new Date().toISOString(),
+              status: parsed.status || 'trial',
+            }
+          }
+        }
+      }
+    } catch {}
+    return {
+      key: null,
+      type: 'TRIAL' as LicenseType,
+      username: null,
+      trialStartedAt: new Date().toISOString(),
+      status: 'trial' as const,
+    }
+  }
+
+  private saveFallbackState(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(FALLBACK_LICENSE_STORAGE_KEY, JSON.stringify(this.mockState))
+      }
+    } catch {}
   }
 
   public static getInstance(): ClientLicenseService {
@@ -191,6 +226,7 @@ export class ClientLicenseService {
       trialStartedAt: this.mockState.trialStartedAt,
       status: 'active',
     }
+    this.saveFallbackState()
 
     const info = this.getFallbackInfo()
     this.cachedInfo = info
@@ -247,6 +283,7 @@ export class ClientLicenseService {
       trialStartedAt: new Date().toISOString(),
       status: 'trial',
     }
+    this.saveFallbackState()
 
     const info = this.getFallbackInfo()
     this.cachedInfo = info

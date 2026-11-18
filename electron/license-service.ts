@@ -38,45 +38,107 @@ export interface LicenseActionResult {
   info?: LicenseInfo
 }
 
+/**
+ * Atomic, versioned license record stored identically across all persistent anchors
+ * (Windows Registry HKCU/HKLM + Home + Roaming AppData + LocalAppData + ProgramData)
+ * so updates, reinstalls, or partial anchor wipes can never cause split-brain state loss.
+ */
+export interface PersistedLicenseRecord {
+  schemaVersion: 2
+  updatedAt: number
+  licenseKey?: string
+  licenseType?: LicenseType
+  username?: string
+  status: LicenseStatus
+  activatedAt?: string
+  expiresAt?: string | null
+  trialStartedAt?: string
+  hwid?: string
+  explicitlyRemoved?: boolean
+}
+
+export interface LicenseServiceOptions {
+  /** Override file anchor paths (used for isolated testing without touching host machine anchors) */
+  fileAnchors?: string[]
+  /** Disable Windows Registry reads/writes (used for isolated testing) */
+  disableRegistry?: boolean
+}
+
 const LICENSOR_SERVER_URL = process.env.LICENSOR_SERVER_URL || 'https://licensor-h5zdysrkqa-uc.a.run.app'
 const PRODUCT_ID = 'indoctrinated-edit'
 const APP_VERSION = '5.3.0'
 const REG_KEY_USER = 'HKCU\\Software\\Indoctrinated\\IndoctrinatedEdit'
 const REG_KEY_MACHINE = 'HKLM\\Software\\Indoctrinated\\IndoctrinatedEdit'
+const REG_PAYLOAD_VALUE = 'LicensePayload'
+
+const LEGACY_REG_KEYS = [
+  'LicenseKey',
+  'LicenseType',
+  'LicenseUsername',
+  'LicenseStatus',
+  'LicenseActivatedAt',
+  'LicenseExpiresAt',
+  'TrialStartedAt',
+  'MachineHWID',
+] as const
 
 export class LicenseService {
   private static instance: LicenseService
-  private configDir: string
-  private licenseFilePath: string
-  private programDataFilePath: string
-  private localAppDataFilePath: string
+  private fileAnchors: string[]
+  private disableRegistry: boolean
   private cachedHwid: string | null = null
+  private cachedRecord: PersistedLicenseRecord | null = null
 
-  private constructor() {
-    this.configDir = path.join(os.homedir(), '.indoctrinated')
-    this.licenseFilePath = path.join(this.configDir, 'license.json')
-    
-    // System-wide permanent machine storage (survives app updates & uninstalls)
-    const programData = process.env.ProgramData || process.env.ALLUSERSPROFILE || 'C:\\ProgramData'
-    const programDataDir = path.join(programData, 'Indoctrinated')
-    this.programDataFilePath = path.join(programDataDir, 'license.json')
+  private constructor(options?: LicenseServiceOptions) {
+    this.disableRegistry = Boolean(options?.disableRegistry)
 
-    // Local user app data persistent directory
-    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
-    const localAppDir = path.join(localAppData, 'Indoctrinated')
-    this.localAppDataFilePath = path.join(localAppDir, 'license.json')
+    if (options?.fileAnchors && options.fileAnchors.length > 0) {
+      this.fileAnchors = options.fileAnchors
+    } else {
+      this.fileAnchors = this.buildDefaultFileAnchors()
+    }
+  }
 
-    try {
-      if (!fs.existsSync(this.configDir)) {
-        fs.mkdirSync(this.configDir, { recursive: true })
+  private buildDefaultFileAnchors(): string[] {
+    const anchors: string[] = []
+    const home = os.homedir()
+
+    // 1. User home directory (~/.indoctrinated/license.json) — untouched by all OS installers
+    if (home) {
+      anchors.push(path.join(home, '.indoctrinated', 'license.json'))
+    }
+
+    if (process.platform === 'win32') {
+      // 2. Roaming AppData vendor folder (outside Electron's app-specific userData folder)
+      const appData = process.env.APPDATA || (home ? path.join(home, 'AppData', 'Roaming') : '')
+      if (appData) {
+        anchors.push(path.join(appData, 'Indoctrinated', 'license.json'))
       }
-      if (!fs.existsSync(programDataDir)) {
-        fs.mkdirSync(programDataDir, { recursive: true })
+
+      // 3. Local AppData vendor folder
+      const localAppData = process.env.LOCALAPPDATA || (home ? path.join(home, 'AppData', 'Local') : '')
+      if (localAppData) {
+        anchors.push(path.join(localAppData, 'Indoctrinated', 'license.json'))
       }
-      if (!fs.existsSync(localAppDir)) {
-        fs.mkdirSync(localAppDir, { recursive: true })
+
+      // 4. Machine-wide ProgramData vendor folder (survives per-user reinstalls & updates)
+      const programData = process.env.ProgramData || process.env.ALLUSERSPROFILE || 'C:\\ProgramData'
+      if (programData) {
+        anchors.push(path.join(programData, 'Indoctrinated', 'license.json'))
       }
-    } catch {}
+    } else if (process.platform === 'darwin') {
+      if (home) {
+        anchors.push(path.join(home, 'Library', 'Application Support', 'Indoctrinated', 'license.json'))
+      }
+    } else {
+      const xdgConfig = process.env.XDG_CONFIG_HOME || (home ? path.join(home, '.config') : '')
+      if (xdgConfig) {
+        anchors.push(path.join(xdgConfig, 'Indoctrinated', 'license.json'))
+      }
+    }
+
+    // Deduplicate normalized paths
+    return Array.from(new Set(anchors.map((p) => path.resolve(p))))
   }
 
   public static getInstance(): LicenseService {
@@ -84,6 +146,24 @@ export class LicenseService {
       LicenseService.instance = new LicenseService()
     }
     return LicenseService.instance
+  }
+
+  /**
+   * Creates an isolated LicenseService instance bound strictly to custom file anchors
+   * with Registry access disabled (ideal for automated tests without touching host state).
+   */
+  public static createIsolated(options: LicenseServiceOptions): LicenseService {
+    return new LicenseService({
+      ...options,
+      disableRegistry: options.disableRegistry ?? true,
+    })
+  }
+
+  /**
+   * Clears in-memory cached record so the next read re-inspects all persistent anchors.
+   */
+  public invalidateCache(): void {
+    this.cachedRecord = null
   }
 
   /**
@@ -125,172 +205,6 @@ export class LicenseService {
   }
 
   /**
-   * Reads string value from Windows Registry or multi-anchor persistent storage
-   */
-  private readRegistryValue(valueName: string): string | null {
-    let foundValue: string | null = null
-
-    // 1. Try HKCU Windows Registry
-    if (process.platform === 'win32') {
-      try {
-        const res = spawnSync('reg', ['query', REG_KEY_USER, '/v', valueName], {
-          encoding: 'utf8',
-          windowsHide: true,
-        })
-        if (res.status === 0 && res.stdout) {
-          const lines = res.stdout.split(/\r?\n/)
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (trimmed.startsWith(valueName)) {
-              const parts = trimmed.split(/\s+REG_\w+\s+/)
-              if (parts.length >= 2) {
-                foundValue = parts[1].trim()
-                break
-              }
-            }
-          }
-        }
-      } catch {}
-
-      // 2. Try HKLM Windows Registry fallback
-      if (!foundValue) {
-        try {
-          const res = spawnSync('reg', ['query', REG_KEY_MACHINE, '/v', valueName], {
-            encoding: 'utf8',
-            windowsHide: true,
-          })
-          if (res.status === 0 && res.stdout) {
-            const lines = res.stdout.split(/\r?\n/)
-            for (const line of lines) {
-              const trimmed = line.trim()
-              if (trimmed.startsWith(valueName)) {
-                const parts = trimmed.split(/\s+REG_\w+\s+/)
-                if (parts.length >= 2) {
-                  foundValue = parts[1].trim()
-                  break
-                }
-              }
-            }
-          }
-        } catch {}
-      }
-    }
-
-    // 3. Try persistent ProgramData storage
-    if (!foundValue) {
-      try {
-        if (fs.existsSync(this.programDataFilePath)) {
-          const raw = fs.readFileSync(this.programDataFilePath, 'utf8')
-          const data = JSON.parse(raw)
-          if (data[valueName] !== undefined && data[valueName] !== null) {
-            foundValue = String(data[valueName])
-          }
-        }
-      } catch {}
-    }
-
-    // 4. Try User home directory storage
-    if (!foundValue) {
-      try {
-        if (fs.existsSync(this.licenseFilePath)) {
-          const raw = fs.readFileSync(this.licenseFilePath, 'utf8')
-          const data = JSON.parse(raw)
-          if (data[valueName] !== undefined && data[valueName] !== null) {
-            foundValue = String(data[valueName])
-          }
-        }
-      } catch {}
-    }
-
-    // 5. Try LocalAppData directory storage
-    if (!foundValue) {
-      try {
-        if (fs.existsSync(this.localAppDataFilePath)) {
-          const raw = fs.readFileSync(this.localAppDataFilePath, 'utf8')
-          const data = JSON.parse(raw)
-          if (data[valueName] !== undefined && data[valueName] !== null) {
-            foundValue = String(data[valueName])
-          }
-        }
-      } catch {}
-    }
-
-    // If found in any anchor, self-heal / replicate to all other anchors
-    if (foundValue) {
-      this.writeRegistryValue(valueName, foundValue)
-    }
-
-    return foundValue
-  }
-
-  /**
-   * Writes value to Windows Registry and all persistent storage anchors
-   */
-  private writeRegistryValue(valueName: string, value: string): void {
-    if (process.platform === 'win32') {
-      try {
-        spawnSync('reg', ['add', REG_KEY_USER, '/v', valueName, '/d', value, '/f'], {
-          windowsHide: true,
-        })
-      } catch {}
-
-      try {
-        spawnSync('reg', ['add', REG_KEY_MACHINE, '/v', valueName, '/d', value, '/f'], {
-          windowsHide: true,
-        })
-      } catch {}
-    }
-
-    // Mirror to all persistent file anchors
-    const fileTargets = [this.licenseFilePath, this.programDataFilePath, this.localAppDataFilePath]
-    for (const targetPath of fileTargets) {
-      try {
-        const dir = path.dirname(targetPath)
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true })
-        }
-        let data: Record<string, any> = {}
-        if (fs.existsSync(targetPath)) {
-          try {
-            data = JSON.parse(fs.readFileSync(targetPath, 'utf8'))
-          } catch {}
-        }
-        data[valueName] = value
-        fs.writeFileSync(targetPath, JSON.stringify(data, null, 2), 'utf8')
-      } catch {}
-    }
-  }
-
-  /**
-   * Deletes a value from Windows Registry and persistent storage anchors
-   */
-  private deleteRegistryValue(valueName: string): void {
-    if (process.platform === 'win32') {
-      try {
-        spawnSync('reg', ['delete', REG_KEY_USER, '/v', valueName, '/f'], {
-          windowsHide: true,
-        })
-      } catch {}
-      try {
-        spawnSync('reg', ['delete', REG_KEY_MACHINE, '/v', valueName, '/f'], {
-          windowsHide: true,
-        })
-      } catch {}
-    }
-
-    const fileTargets = [this.licenseFilePath, this.programDataFilePath, this.localAppDataFilePath]
-    for (const targetPath of fileTargets) {
-      try {
-        if (fs.existsSync(targetPath)) {
-          const data = JSON.parse(fs.readFileSync(targetPath, 'utf8'))
-          delete data[valueName]
-          fs.writeFileSync(targetPath, JSON.stringify(data, null, 2), 'utf8')
-        }
-      } catch {}
-    }
-  }
-
-  /**
    * Detects license type from key prefix
    */
   public parseLicenseType(key: string): LicenseType {
@@ -318,6 +232,295 @@ export class LicenseService {
     }
   }
 
+  /* =========================================================================
+   * Atomic Multi-Anchor Persistence Engine (v2 + Legacy v1 Auto-Migration)
+   * ========================================================================= */
+
+  private parseAnyRawRecord(rawObj: Record<string, any> | null | undefined, fallbackMtimeMs = 0): PersistedLicenseRecord | null {
+    if (!rawObj || typeof rawObj !== 'object') return null
+
+    // Schema v2 atomic record
+    if (rawObj.schemaVersion === 2 && typeof rawObj.updatedAt === 'number') {
+      const key = typeof rawObj.licenseKey === 'string' && rawObj.licenseKey.trim() ? rawObj.licenseKey.trim() : undefined
+      const parsedType: LicenseType | undefined =
+        rawObj.licenseType || (key ? this.parseLicenseType(key) : undefined)
+      return {
+        schemaVersion: 2,
+        updatedAt: rawObj.updatedAt,
+        licenseKey: key,
+        licenseType: parsedType,
+        username: typeof rawObj.username === 'string' ? rawObj.username : undefined,
+        status: (rawObj.status as LicenseStatus) || (key ? 'active' : 'trial'),
+        activatedAt: typeof rawObj.activatedAt === 'string' ? rawObj.activatedAt : undefined,
+        expiresAt: typeof rawObj.expiresAt === 'string' && rawObj.expiresAt ? rawObj.expiresAt : null,
+        trialStartedAt: typeof rawObj.trialStartedAt === 'string' ? rawObj.trialStartedAt : undefined,
+        hwid: typeof rawObj.hwid === 'string' ? rawObj.hwid : undefined,
+        explicitlyRemoved: Boolean(rawObj.explicitlyRemoved),
+      }
+    }
+
+    // Legacy v1 flat keys migration (`LicenseKey`, `LicenseType`, `TrialStartedAt`, etc.)
+    const legacyKey = typeof rawObj.LicenseKey === 'string' && rawObj.LicenseKey.trim()
+      ? rawObj.LicenseKey.trim()
+      : undefined
+    const legacyTrial = typeof rawObj.TrialStartedAt === 'string' && rawObj.TrialStartedAt.trim()
+      ? rawObj.TrialStartedAt.trim()
+      : undefined
+    const legacyStatus = typeof rawObj.LicenseStatus === 'string' ? (rawObj.LicenseStatus as LicenseStatus) : undefined
+
+    if (!legacyKey && !legacyTrial && !legacyStatus) {
+      return null
+    }
+
+    const activatedMs = rawObj.LicenseActivatedAt ? new Date(rawObj.LicenseActivatedAt).getTime() : 0
+    const trialMs = legacyTrial ? new Date(legacyTrial).getTime() : 0
+    const inferredUpdatedAt =
+      (!isNaN(activatedMs) && activatedMs > 0 ? activatedMs : 0) ||
+      (!isNaN(trialMs) && trialMs > 0 ? trialMs : 0) ||
+      fallbackMtimeMs ||
+      1
+
+    return {
+      schemaVersion: 2,
+      updatedAt: inferredUpdatedAt,
+      licenseKey: legacyKey,
+      licenseType:
+        (rawObj.LicenseType as LicenseType) ||
+        (legacyKey ? this.parseLicenseType(legacyKey) : 'TRIAL'),
+      username: typeof rawObj.LicenseUsername === 'string' ? rawObj.LicenseUsername : undefined,
+      status: legacyStatus || (legacyKey ? 'active' : 'trial'),
+      activatedAt: typeof rawObj.LicenseActivatedAt === 'string' ? rawObj.LicenseActivatedAt : undefined,
+      expiresAt: typeof rawObj.LicenseExpiresAt === 'string' && rawObj.LicenseExpiresAt ? rawObj.LicenseExpiresAt : null,
+      trialStartedAt: legacyTrial,
+      hwid: typeof rawObj.MachineHWID === 'string' ? rawObj.MachineHWID : undefined,
+      explicitlyRemoved: false,
+    }
+  }
+
+  private readFileAnchor(filePath: string): PersistedLicenseRecord | null {
+    try {
+      if (!fs.existsSync(filePath)) return null
+      const stat = fs.statSync(filePath)
+      const raw = fs.readFileSync(filePath, 'utf8')
+      if (!raw.trim()) return null
+      const parsed = JSON.parse(raw)
+      return this.parseAnyRawRecord(parsed, stat.mtimeMs)
+    } catch {
+      return null
+    }
+  }
+
+  private writeFileAnchorAtomic(filePath: string, record: PersistedLicenseRecord): boolean {
+    try {
+      const dir = path.dirname(filePath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      // Write schema v2 + mirror legacy keys so older/external readers stay compatible
+      const payload = {
+        ...record,
+        ...(record.licenseKey ? { LicenseKey: record.licenseKey } : {}),
+        ...(record.licenseType ? { LicenseType: record.licenseType } : {}),
+        ...(record.username ? { LicenseUsername: record.username } : {}),
+        LicenseStatus: record.status,
+        ...(record.activatedAt ? { LicenseActivatedAt: record.activatedAt } : {}),
+        ...(record.expiresAt ? { LicenseExpiresAt: record.expiresAt } : {}),
+        ...(record.trialStartedAt ? { TrialStartedAt: record.trialStartedAt } : {}),
+        ...(record.hwid ? { MachineHWID: record.hwid } : {}),
+      }
+      const jsonText = JSON.stringify(payload, null, 2)
+      const tmpPath = `${filePath}.tmp.${process.pid}`
+      try {
+        fs.writeFileSync(tmpPath, jsonText, 'utf8')
+        fs.renameSync(tmpPath, filePath)
+      } catch {
+        // Fallback direct write if rename hits Windows AV/lock contention
+        try {
+          if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath)
+        } catch {}
+        fs.writeFileSync(filePath, jsonText, 'utf8')
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private readWindowsRegistryHive(regKey: string): PersistedLicenseRecord | null {
+    if (this.disableRegistry || process.platform !== 'win32') return null
+    try {
+      // Single `reg query` call reads ALL values in the key at once (10x faster than per-field queries)
+      const res = spawnSync('reg', ['query', regKey], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 3000,
+      })
+      if (res.status !== 0 || !res.stdout) return null
+
+      const kv: Record<string, string> = {}
+      for (const line of res.stdout.split(/\r?\n/)) {
+        const match = line.match(/^\s+([^\s]+)\s+REG_\w+\s+(.*)$/)
+        if (match) {
+          kv[match[1].trim()] = match[2].trim()
+        }
+      }
+
+      // Prefer atomic Base64 v2 payload when present
+      if (kv[REG_PAYLOAD_VALUE]) {
+        try {
+          const decoded = Buffer.from(kv[REG_PAYLOAD_VALUE], 'base64').toString('utf8')
+          const parsed = JSON.parse(decoded)
+          const rec = this.parseAnyRawRecord(parsed)
+          if (rec) return rec
+        } catch {
+          // Fall through to legacy flat keys if corrupted
+        }
+      }
+
+      // Migrate legacy flat Registry values from pre-5.3.1 installs
+      const legacyObj: Record<string, string> = {}
+      let hasLegacy = false
+      for (const k of LEGACY_REG_KEYS) {
+        if (kv[k]) {
+          legacyObj[k] = kv[k]
+          hasLegacy = true
+        }
+      }
+      return hasLegacy ? this.parseAnyRawRecord(legacyObj) : null
+    } catch {
+      return null
+    }
+  }
+
+  private writeWindowsRegistryRecord(record: PersistedLicenseRecord): void {
+    if (this.disableRegistry || process.platform !== 'win32') return
+    const encoded = Buffer.from(JSON.stringify(record), 'utf8').toString('base64')
+
+    // Write single atomic Base64 REG_SZ payload to HKCU (always writable for current user)
+    // and best-effort to HKLM (succeeds when elevated; ignored cleanly otherwise).
+    for (const regKey of [REG_KEY_USER, REG_KEY_MACHINE]) {
+      try {
+        spawnSync('reg', ['add', regKey, '/v', REG_PAYLOAD_VALUE, '/t', 'REG_SZ', '/d', encoded, '/f'], {
+          windowsHide: true,
+          timeout: 3000,
+        })
+      } catch {}
+    }
+  }
+
+  /**
+   * Resolves the single authoritative license record across all anchors, preventing split-brain
+   * state and ensuring a fresh-install trial stub never clobbers an active paid license.
+   */
+  private resolveAuthoritativeRecord(candidates: PersistedLicenseRecord[]): PersistedLicenseRecord | null {
+    if (candidates.length === 0) return null
+    if (candidates.length === 1) return candidates[0]
+
+    const isPaid = (r: PersistedLicenseRecord) =>
+      Boolean(r.licenseKey && r.licenseType && r.licenseType !== 'TRIAL')
+
+    const paidRecords = candidates.filter(isPaid).sort((a, b) => b.updatedAt - a.updatedAt)
+    const explicitRemovals = candidates
+      .filter((r) => !isPaid(r) && r.explicitlyRemoved)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+
+    const newestPaid = paidRecords[0]
+    const newestRemoval = explicitRemovals[0]
+
+    // If an explicit user removal happened AFTER the newest paid activation, honor the removal
+    if (newestRemoval && (!newestPaid || newestRemoval.updatedAt > newestPaid.updatedAt)) {
+      return newestRemoval
+    }
+
+    // Active paid license always beats an accidental fresh-install trial stub
+    if (newestPaid) {
+      return newestPaid
+    }
+
+    // All candidates are trials: preserve the earliest valid trial start date so reinstalls stay consistent
+    const trialsWithStart = candidates
+      .filter((r) => r.trialStartedAt && !isNaN(new Date(r.trialStartedAt).getTime()))
+      .sort((a, b) => new Date(a.trialStartedAt!).getTime() - new Date(b.trialStartedAt!).getTime())
+
+    if (trialsWithStart.length > 0) {
+      const earliest = trialsWithStart[0]
+      const newest = [...candidates].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+      return {
+        ...newest,
+        trialStartedAt: earliest.trialStartedAt,
+      }
+    }
+
+    return [...candidates].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  }
+
+  /**
+   * Loads the authoritative record from all anchors and self-heals any missing or stale anchors.
+   */
+  private loadAuthoritativeRecord(): PersistedLicenseRecord | null {
+    if (this.cachedRecord) {
+      return this.cachedRecord
+    }
+
+    const candidates: Array<{ source: string; record: PersistedLicenseRecord }> = []
+    let missingAnchorCount = 0
+
+    // 1. Windows Registry hives
+    if (!this.disableRegistry && process.platform === 'win32') {
+      const hkcu = this.readWindowsRegistryHive(REG_KEY_USER)
+      if (hkcu) candidates.push({ source: 'hkcu', record: hkcu })
+      else missingAnchorCount++
+
+      const hklm = this.readWindowsRegistryHive(REG_KEY_MACHINE)
+      if (hklm) candidates.push({ source: 'hklm', record: hklm })
+    }
+
+    // 2. Persistent cross-platform file anchors
+    for (const anchorPath of this.fileAnchors) {
+      const rec = this.readFileAnchor(anchorPath)
+      if (rec) {
+        candidates.push({ source: anchorPath, record: rec })
+      } else {
+        missingAnchorCount++
+      }
+    }
+
+    const authoritative = this.resolveAuthoritativeRecord(candidates.map((c) => c.record))
+    if (!authoritative) {
+      return null
+    }
+
+    // Self-heal: if any writable anchor was missing or out-of-date (e.g. after reinstall/update),
+    // replicate the authoritative record back across all anchors in one pass.
+    const needsHeal =
+      missingAnchorCount > 0 ||
+      candidates.some(
+        (c) =>
+          c.record.updatedAt !== authoritative.updatedAt ||
+          c.record.licenseKey !== authoritative.licenseKey
+      )
+
+    if (needsHeal) {
+      this.persistRecord(authoritative)
+    } else {
+      this.cachedRecord = authoritative
+    }
+
+    return authoritative
+  }
+
+  private persistRecord(record: PersistedLicenseRecord): void {
+    this.cachedRecord = record
+    this.writeWindowsRegistryRecord(record)
+    for (const anchorPath of this.fileAnchors) {
+      this.writeFileAnchorAtomic(anchorPath, record)
+    }
+  }
+
+  /* =========================================================================
+   * Public License Lifecycle API
+   * ========================================================================= */
+
   /**
    * Retrieves complete current license info, validating trial or active status.
    */
@@ -325,42 +528,43 @@ export class LicenseService {
     const hwid = this.getHwid()
     const machineName = os.hostname() || 'Local Machine'
 
-    const savedKey = this.readRegistryValue('LicenseKey')
-    const savedType = (this.readRegistryValue('LicenseType') as LicenseType) || (savedKey ? this.parseLicenseType(savedKey) : null)
-    const savedUsername = this.readRegistryValue('LicenseUsername')
-    const savedStatus = (this.readRegistryValue('LicenseStatus') as LicenseStatus) || 'trial'
-    const activatedAt = this.readRegistryValue('LicenseActivatedAt') || undefined
-    const expiresAt = this.readRegistryValue('LicenseExpiresAt') || null
+    let record = this.loadAuthoritativeRecord()
 
-    // Check if an authentic ADM, DEV, or USER license is saved
-    if (savedKey && savedType && savedType !== 'TRIAL') {
+    // Active paid license (ADM / DEV / USER)
+    if (record && record.licenseKey && record.licenseType && record.licenseType !== 'TRIAL') {
+      const savedType = record.licenseType
+      const expiresAt = record.expiresAt || null
       let isExpired = false
+
       if (savedType === 'ADM') {
         // ADM (Admin) licenses are always lifetime valid
         isExpired = false
       } else if (expiresAt) {
-        // Check if expiration timestamp has passed for USER/DEV
         const expMs = new Date(expiresAt).getTime()
         if (!isNaN(expMs) && Date.now() > expMs) {
           isExpired = true
         }
       }
 
-      if (savedStatus === 'expired') {
+      if (record.status === 'expired' || record.status === 'revoked') {
         isExpired = true
       }
 
-      const activeStatus: LicenseStatus = isExpired ? 'expired' : 'active'
+      const activeStatus: LicenseStatus = isExpired
+        ? record.status === 'revoked'
+          ? 'revoked'
+          : 'expired'
+        : 'active'
 
       return {
         type: savedType,
         typeName: this.getLicenseTypeName(savedType),
-        licenseKey: savedKey,
-        maskedKey: this.maskLicenseKey(savedKey),
-        username: savedUsername || (savedType === 'ADM' ? 'System Administrator' : 'Authorized User'),
+        licenseKey: record.licenseKey,
+        maskedKey: this.maskLicenseKey(record.licenseKey),
+        username: record.username || (savedType === 'ADM' ? 'System Administrator' : 'Authorized User'),
         hwid,
         status: activeStatus,
-        activatedAt,
+        activatedAt: record.activatedAt,
         expiresAt,
         isValid: !isExpired,
         isTrial: false,
@@ -368,15 +572,22 @@ export class LicenseService {
       }
     }
 
-    // Otherwise, calculate Trial License state
-    let trialStartedAt = this.readRegistryValue('TrialStartedAt')
-    if (!trialStartedAt) {
-      trialStartedAt = new Date().toISOString()
-      this.writeRegistryValue('TrialStartedAt', trialStartedAt)
-      this.writeRegistryValue('LicenseStatus', 'trial')
+    // Otherwise, initialize or evaluate 30-day Trial License state
+    if (!record || !record.trialStartedAt) {
+      const trialStartedAt = new Date().toISOString()
+      record = {
+        schemaVersion: 2,
+        updatedAt: Date.now(),
+        licenseType: 'TRIAL',
+        status: 'trial',
+        trialStartedAt,
+        hwid,
+        explicitlyRemoved: false,
+      }
+      this.persistRecord(record)
     }
 
-    const startDate = new Date(trialStartedAt).getTime()
+    const startDate = new Date(record.trialStartedAt!).getTime()
     const now = Date.now()
     const trialDurationMs = 30 * 24 * 60 * 60 * 1000
     const expiresTimestamp = startDate + trialDurationMs
@@ -389,7 +600,7 @@ export class LicenseService {
       hwid,
       status: isExpired ? 'expired' : 'trial',
       trialDaysRemaining: daysRemaining,
-      trialStartedAt,
+      trialStartedAt: record.trialStartedAt,
       expiresAt: new Date(expiresTimestamp).toISOString(),
       isValid: !isExpired,
       isTrial: true,
@@ -412,19 +623,26 @@ export class LicenseService {
     const hwid = this.getHwid()
     const machineName = os.hostname() || 'Local Machine'
     const platformStr = `${os.platform().toLowerCase()}-${os.arch().toLowerCase()}`
+    const existingRecord = this.loadAuthoritativeRecord()
 
     // 1. ADM (Admin) License: Immediate bypass activation
     if (licenseType === 'ADM') {
       const username = req.username?.trim() || 'Administrator'
       const now = new Date().toISOString()
 
-      this.writeRegistryValue('LicenseKey', rawKey)
-      this.writeRegistryValue('LicenseType', 'ADM')
-      this.writeRegistryValue('LicenseUsername', username)
-      this.writeRegistryValue('LicenseStatus', 'active')
-      this.writeRegistryValue('LicenseActivatedAt', now)
-      this.writeRegistryValue('LicenseExpiresAt', '')
-      this.writeRegistryValue('MachineHWID', hwid)
+      this.persistRecord({
+        schemaVersion: 2,
+        updatedAt: Date.now(),
+        licenseKey: rawKey,
+        licenseType: 'ADM',
+        username,
+        status: 'active',
+        activatedAt: now,
+        expiresAt: null,
+        trialStartedAt: existingRecord?.trialStartedAt,
+        hwid,
+        explicitlyRemoved: false,
+      })
 
       return {
         success: true,
@@ -467,15 +685,21 @@ export class LicenseService {
       }
 
       const now = new Date().toISOString()
-      const expiresAt = (data as any)?.expires_at || ''
+      const expiresAt = (data as any)?.expires_at || null
 
-      this.writeRegistryValue('LicenseKey', rawKey)
-      this.writeRegistryValue('LicenseType', licenseType)
-      this.writeRegistryValue('LicenseUsername', username)
-      this.writeRegistryValue('LicenseStatus', 'active')
-      this.writeRegistryValue('LicenseActivatedAt', now)
-      this.writeRegistryValue('LicenseExpiresAt', expiresAt)
-      this.writeRegistryValue('MachineHWID', hwid)
+      this.persistRecord({
+        schemaVersion: 2,
+        updatedAt: Date.now(),
+        licenseKey: rawKey,
+        licenseType,
+        username,
+        status: 'active',
+        activatedAt: now,
+        expiresAt,
+        trialStartedAt: existingRecord?.trialStartedAt,
+        hwid,
+        explicitlyRemoved: false,
+      })
 
       return {
         success: true,
@@ -504,7 +728,6 @@ export class LicenseService {
       return { valid: true, message: 'Admin license verified.', info }
     }
 
-    // Query Licensor validation endpoint
     try {
       const payload = {
         license_key: info.licenseKey,
@@ -528,7 +751,6 @@ export class LicenseService {
         }
       }
     } catch {
-      // Offline grace period allowed
       return { valid: true, message: 'License verified locally (offline grace mode).', info }
     }
 
@@ -541,7 +763,6 @@ export class LicenseService {
   public async removeLicense(): Promise<LicenseActionResult> {
     const currentInfo = this.getLicenseInfo()
 
-    // If USER or DEV, attempt to notify Licensor server to release seat
     if (currentInfo.type === 'USER' || currentInfo.type === 'DEV') {
       try {
         const payload = {
@@ -560,17 +781,18 @@ export class LicenseService {
       }
     }
 
-    // Delete stored license entries
-    this.deleteRegistryValue('LicenseKey')
-    this.deleteRegistryValue('LicenseType')
-    this.deleteRegistryValue('LicenseUsername')
-    this.deleteRegistryValue('LicenseActivatedAt')
-    this.deleteRegistryValue('LicenseExpiresAt')
-
-    // Reset fresh 30-day Trial License
+    // Stamp `explicitlyRemoved: true` with a newer `updatedAt` so even a read-only
+    // system anchor (e.g. elevated HKLM / ProgramData) cannot resurrect the removed key.
     const newTrialStart = new Date().toISOString()
-    this.writeRegistryValue('TrialStartedAt', newTrialStart)
-    this.writeRegistryValue('LicenseStatus', 'trial')
+    this.persistRecord({
+      schemaVersion: 2,
+      updatedAt: Date.now() + 1,
+      licenseType: 'TRIAL',
+      status: 'trial',
+      trialStartedAt: newTrialStart,
+      hwid: this.getHwid(),
+      explicitlyRemoved: true,
+    })
 
     return {
       success: true,
