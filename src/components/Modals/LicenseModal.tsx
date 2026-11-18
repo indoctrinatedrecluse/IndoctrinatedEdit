@@ -87,7 +87,7 @@ THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`
 export const LicenseModal: React.FC<LicenseModalProps> = ({
   isOpen,
   onClose,
-  version = '6.0.0',
+  version = '6.1.0',
   isForceLockout = false,
 }) => {
   const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null)

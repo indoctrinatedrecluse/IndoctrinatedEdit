@@ -5,6 +5,72 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0] - 2026-11-18
+
+### 🚀 Complete Ecosystem Hardening & Round 3 Feature Completeness Across All 60 Extensions & 24 Studios
+
+IndoctrinatedEdit **6.1.0** is an exhaustive hardening and feature-completeness release verifying and finalizing every registered capability across all 60 extensions, 28 language packs, and 24 built-in studios. Every component, Monaco language tokenizer, snippet pack, formatting engine, and protocol driver has been audited, strengthened with end-to-end unit tests, and verified across a 95-file, 705-test suite:
+
+#### 🧩 Shell, Extension Lifecycle, Shortcuts & Core/AI Wiring
+- **Right Auxiliary Pane Identifier Parity**: Realigned all 26 auxiliary dock IDs to match `extensionRegistry.ts` exactly (`indoctrinated.ext.jupyter`, `indoctrinated.ext.cryptotools`, `indoctrinated.ext.socket`, `indoctrinated.ext.database`, `indoctrinated.ext.taskrunner`, `indoctrinated.ext.colorstudio`, etc.), complete with keyboard shortcut badges (`Ctrl+Alt+1`..`8` + studio hotkeys).
+- **Graceful Extension Disposal & Monaco Teardown**: Toggling extensions in `extensionRegistry.ts` now disposes registered Monaco language configurations, snippets, formatters, and hover providers cleanly through tracked `IDisposable` handles without window reloads.
+- **Dynamic Glass FX & CSS Root Synchronizer**: Wired Glass Blur (`--glass-blur`) and Specular Highlight (`--glass-specular`) CSS custom properties directly to document root styles with live slider responsiveness.
+- **StatusBar Formatting Indicator**: Connected the status bar formatter pill directly to `formatterService` active document subscriptions, showing real-time formatting status and configuration.
+- **Shortcuts Modal & Keybinding Deconfliction**: Added interactive keyboard shortcut reference (`Ctrl+K Ctrl+S`) and resolved modifier collisions across multi-pane navigation and studio toggles.
+- **Direct Monaco Inline Diagnostic Squiggles**: Wired workspace lint diagnostics directly into Monaco via `monaco.editor.setModelMarkers` inside `EditorHost.tsx`.
+- **Hardened AI Multi-Model Service**: Implemented UTF-8 safe base64 storage keys for API credentials and added automated tool deduplication for parallel tool calls.
+- **Lossless MCP Server Configuration Round-Trip**: Hardened `mcpService.ts` and `McpStudioModal.tsx` for lossless import, export, and editing of stdio and HTTP/SSE MCP server configs.
+
+#### 🛠️ Language Infrastructure, CLI Formatters, Diagnostics & Toolchains
+- **Custom Monaco Language Configurations**: Registered `monaco.languages.setLanguageConfiguration` and Monarch syntax tokenizers for all 29 custom Monaco languages via `extensionHelpers.ts`.
+- **First-Class CSV Language Support**: Added comprehensive delimiter detection, column tokenization, and language configuration for CSV and TSV formats in `textSupportExtension.ts`.
+- **Prettier 34-Language Coverage**: Extended Prettier formatting integration to support 34 web, data, and config formats.
+- **Native CLI Formatter Fallbacks**: Implemented fallback to installed CLI formatters in `formatterService.ts` for Python (`black`/`autopep8`), Rust (`rustfmt`), Go (`gofmt`), and C/C++ (`clang-format`).
+- **Dedicated YAML & SQL Formatters**: Built pure-format depth-aware indentation engines for multi-statement SQL scripts and YAML manifests.
+- **Go Vet Diagnostic Parser**: Added native `go vet` output parsing to `diagnosticsService.ts` with line/column extraction, while guarding single non-project files from false-positive JS/TS lint errors.
+- **PowerShell Binary Execution & 18 Missing Run Profiles**: Hardened Windows execution syntax in `toolchain-service.ts` using `& "<binary>"` wrappers and added 18 run profiles for seamless run/debug workflows.
+
+#### 📚 All 28 Language Packs: Snippet Escaping, Collision Resolution & Universal Hover Docs
+- **Escaped Variable Placeholders**: Repaired unescaped `$ident` and `${ident}` syntax across all 28 language packs (PHP, Shell, Node, Dart/Flutter, Angular, React, Frontend, Backend, DataScience, SystemsGaming, Kotlin, DevOps) so Monaco expands snippets with valid code.
+- **Full Snippet Registry**: Added all 16 missing claimed snippets (`phpunit-test`, `go-echo-server`, `rust-serde-json`, `gd-character-body-3d`, `julia-makie-plot`, `dotnet-minimal-api`, `helm-deployment-tpl`, `reasonml-component`, `asm-arm64-entry`, `sql-mysql-upsert`, `sql-sqlite-fts5`, `sql-tsql-merge`, `hardhat-test`, `aptos-move-coin`, `elisp-interactive-command`, `alloy-model-spec`).
+- **Monaco Alias Collision Resolution**: Disambiguated overlapping language IDs and file extensions across mega-packs.
+- **Universal Hover Documentation**: Added universal hover provider delivering keyword, type, and standard-library documentation across all supported languages.
+
+#### 🗄️ Data, Network & Protocol Studios
+- **Database Studio**: Added real `CREATE TABLE` execution, multi-table `LEFT JOIN`, `GROUP BY` grouping with aggregate calculations (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`), and `ORDER BY`/`LIMIT` clauses.
+- **REST Client**: Implemented `x-www-form-urlencoded` key-value body parser, pre-send cURL command generation, inline editable request names, and multi-environment/collection switcher.
+- **Remote Protocol Studio**: Added pure-Node RFC 959 FTP client implementation, SSH password vs key authentication switcher, SFTP remote file download and deletion, and persistent connection bookmark management.
+- **Redis Studio**: Paired `ZRANGE WITHSCORES` tuples into score/member pairs, added `zset` persistence and key insertion, preserved live Pub/Sub streams across publish operations, and enabled inline Value/TTL editing.
+- **Mock Lab**: Sanitized `NaN` status and latency inputs, enabled live route modification, and added an expandable request/response headers and body drawer.
+- **GraphQL Studio**: Added active endpoint indicators, recursive type introspection (`formatTypeRef`), `ENUM`/`INPUT_OBJECT`/argument schema discovery, field documentation tooltips, and code generator exports.
+- **WebSocket & SSE**: Fully awaited native `infra.sseConnect` stream initialization and locked protocol configuration toggles while streams are active.
+- **Port Sentinel**: Added UDP listening port support and guarded PID termination.
+
+#### ⚙️ DevOps, Jupyter, Crypto, Env & System Studios
+- **Docker & Kubernetes Studio**: Defaulted engine mode to `'docker'`, added visual CPU and memory gauges, embedded container interactive exec console, and added 1-click Compose generation from active containers.
+- **Jupyter Notebook Studio**: Added table row search, dataset dimensions badge, and 1-click CSV export for Pandas DataFrames; cell SVG export; Markdown formatting toolbar; and `sklearn` import alias mapping.
+- **Crypto DevTools Lab**: Fixed raw-DER X.509 SHA-256 fingerprinting, added numeric vs ISO Epoch parsing with sub-millisecond precision, TOML/YAML/JSON/XML data transformers with XML entity escaping, explicit Encoders/Decoders mode swap, and HS256/384/512 JWT signing with editable payload.
+- **Env Vault**: Fixed key input focus loss during editing, preserved duplicate keys and comments during file merges, added global profile bar, duplicate key warnings, and escaped K8s secret YAML generation.
+- **Bundle Analyzer**: Fixed stale duplicate dependency alerts when live lockfile contains zero duplicates, added honest offline bundle size estimation badges, and missing build directory notices.
+- **Package Manager**: Added workspace manifest selector (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`), preserved outdated/audit fields across runs, added `go.mod` `require (...)` parsing, and integrated PyPI/Cargo offline CVE advisories.
+- **Task Runner**: Added visual 5-field Cron builder syncing bidirectionally with cron expressions, human-readable schedule explanations for ranges and lists, custom task persistence in `localStorage`, and immediate `'running'` status badges.
+
+#### 🎨 Visual, Media & Editor Utility Studios
+- **SVG Studio**: Added interactive path & bezier coordinate inspector (`parsePathCommands`/`serializePathCommands`), multi-format raster exporter (PNG, WebP, JPEG at 1x/2x/4x), SVG sprite sheet generator, and authentic color retention toggles.
+- **JSON Studio**: Added full JMESPath expression querying (`users[*].name`, `users[?id == \`1\`].name`, `length(@)`), quote-safe pipe splitting, nested YAML parser, XML entity escaping, and JMESPath quick presets.
+- **Live Preview Studio**: Added multi-line GitHub Alerts (`> [!NOTE]`), rich LaTeX mathematical formula rendering with accessible raw LaTeX token preservation, rank-ordered flowchart TD layout, sequence self-call loops, Gantt chart SVG rendering, and full-width responsive preview for Markdown/SVG.
+- **Diagram Studio**: Dynamic SVG `viewBox` and bounding box calculation for large architecture graphs, and Reset Zoom controls in DepGraph mode.
+- **Regex Lab**: Token-by-token syntax explainer (escaped sequences, lookarounds, character classes, quantifiers), live inline match highlight box with alternating color pills, password generator preset, and language-specific regex snippet generators with flags.
+- **Diff Studio**: Added explicit "Apply to Active Editor" button for conflict resolutions, true 2-column Side-by-Side (`.split`) view with empty placeholder alignment, preserved Git HEAD diff display, and clean trailing newline handling.
+- **Hex Inspector**: Guarded against infinite loops on empty/odd hex searches, raw Uint8Array ELF magic byte detection, stripped non-hex characters in search highlight calculation, and safe 64-bit integer decoding.
+- **Snippet Vault**: Added tag deduplication at the service layer, web `<input type="file">` fallback for snippet imports, Cancel button & "Update Snippet" label when editing, and deduplicated React keys.
+- **Color Studio**: Added OKLCH and CMYK syntax parsing, HSV/HSB calculation and display, named CSS color parsing, WCAG 2.2 contrast ratio with translucent alpha compositing, live foreground-on-background contrast preview with swap (⇄) button, and wired click-to-copy on Triadic & Analogous swatches.
+
+#### 🧪 Full Verification Gate
+- **TypeScript**: `npx tsc --noEmit` clean with 0 errors.
+- **Vitest**: 95/95 test files passed, 705/705 tests passed (100% pass rate).
+- **Vite & Electron Builder**: Clean production build bundling 4,043 client modules, main, and preload bundles.
+
 ## [6.0.0] - 2026-11-18
 
 ### 🚀 Major Architecture Release — Full End-to-End Native Runtime Implementation Across Every Studio & Extension

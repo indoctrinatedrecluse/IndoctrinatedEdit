@@ -326,7 +326,7 @@ class ExtensionRegistry {
     this.register({
       id: 'indoctrinated.ext.liquid-glass-fx',
       name: 'Liquid Glass Theme & Shader Engine',
-      version: '6.0.0',
+      version: '6.1.0',
       description: 'Built-in glassmorphism theme presets, frosted glass surfaces, and specular reflection CSS styling.',
       author: 'indoctrinatedrecluse',
       category: 'Themes',
@@ -339,7 +339,7 @@ class ExtensionRegistry {
     this.register({
       id: 'indoctrinated.ext.linter',
       name: 'Unified Diagnostics & Toolchain Bus',
-      version: '6.0.0',
+      version: '6.1.0',
       description: 'Multi-compiler discovery for Node, Python, Rust, Go, GCC, C#, Java, PHP, Ruby, Flutter, Swift, Kotlin, R, Julia, Elixir, Zig, Lua, GDScript, SQL, Solidity, and Shell with real-time error markers.',
       author: 'indoctrinatedrecluse',
       category: 'Linters',
