@@ -374,7 +374,7 @@ export class GitWorkflowService {
   ): WorkflowRun {
     const wf = this.workflows.find((w) => w.id === workflowId) || this.workflows[0]
     const runNumber = this.runs.length + 1
-    const newRunId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`
+    const newRunId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
     const newRun: WorkflowRun = {
       id: newRunId,

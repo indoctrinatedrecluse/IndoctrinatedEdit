@@ -327,7 +327,7 @@ export class DatabaseService {
       }
 
       this.history.unshift({
-        id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         query: trimmed,
         timestamp: nowIso,
         executionTimeMs: durationMs,
@@ -343,7 +343,7 @@ export class DatabaseService {
       const errorMsg = err?.message || 'SQL Execution error.'
 
       this.history.unshift({
-        id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         query: trimmed,
         timestamp: nowIso,
         executionTimeMs: durationMs,

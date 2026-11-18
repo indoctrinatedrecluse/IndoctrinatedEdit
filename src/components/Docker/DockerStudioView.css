@@ -1,0 +1,919 @@
+/* Extracted and root-scoped (.docker-studio-root) from DockerStudioView.tsx */
+
+.docker-studio-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-normal);
+  font-size: 12px;
+  user-select: none;
+}
+
+.docker-studio-root .engine-mode-header {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.docker-studio-root .engine-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.docker-studio-root .engine-mode-btn.active {
+  background: rgba(10, 132, 255, 0.18);
+  border-color: rgba(10, 132, 255, 0.45);
+  color: #FFF;
+  box-shadow: 0 0 12px rgba(10, 132, 255, 0.2);
+}
+
+.docker-studio-root .cluster-badge-healthy {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(48, 209, 88, 0.2);
+  color: #30D158;
+}
+
+.docker-studio-root .counter-pill {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #CBD5E1;
+}
+
+.docker-studio-root .k8s-view-container,
+.docker-studio-root .docker-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.docker-studio-root .cluster-metrics-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 10px;
+  margin: 8px 10px 0 10px;
+  border-radius: 6px;
+  background: rgba(10, 132, 255, 0.05);
+  border: 1px solid rgba(10, 132, 255, 0.15);
+}
+
+.docker-studio-root .metric-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.docker-studio-root .metric-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.docker-studio-root .metric-val {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #FFF;
+}
+
+.docker-studio-root .metric-val.primary {
+  color: #64D2FF;
+}
+
+.docker-studio-root .k8s-controls-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.docker-studio-root .k8s-subnav-strip,
+.docker-studio-root .docker-subnav-strip {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.docker-studio-root .k8s-nav-btn,
+.docker-studio-root .docker-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.docker-studio-root .k8s-nav-btn.active,
+.docker-studio-root .docker-nav-btn.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #FFF;
+}
+
+.docker-studio-root .ns-filter-row {
+  display: flex;
+  gap: 6px;
+}
+
+.docker-studio-root .search-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.docker-studio-root .search-icon {
+  color: var(--text-muted);
+}
+
+.docker-studio-root .k8s-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #FFF;
+  font-size: 11px;
+  padding: 4px 0;
+  outline: none;
+}
+
+.docker-studio-root .ns-select {
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: #64D2FF;
+  font-size: 11px;
+  outline: none;
+}
+
+.docker-studio-root .k8s-body-viewport,
+.docker-studio-root .docker-body-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.docker-studio-root .k8s-section,
+.docker-studio-root .docker-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Deployments */
+.docker-studio-root .deployments-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docker-studio-root .deployment-card {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.docker-studio-root .dep-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.docker-studio-root .dep-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docker-studio-root .dep-name {
+  font-weight: 700;
+  color: #FFF;
+  font-size: 12px;
+}
+
+.docker-studio-root .dep-ns-badge {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(10, 132, 255, 0.15);
+  color: #64D2FF;
+}
+
+.docker-studio-root .scale-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.docker-studio-root .scale-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #FFF;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.docker-studio-root .scale-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.docker-studio-root .replica-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #30D158;
+  min-width: 28px;
+  text-align: center;
+}
+
+.docker-studio-root .dep-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.docker-studio-root .dep-progress-bar-wrap {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.docker-studio-root .dep-progress-fill {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+/* Pods */
+.docker-studio-root .pods-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docker-studio-root .pod-card {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.docker-studio-root .pod-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.docker-studio-root .pod-card.selected {
+  border-color: rgba(10, 132, 255, 0.5);
+  box-shadow: 0 0 10px rgba(10, 132, 255, 0.2);
+}
+
+.docker-studio-root .pod-card.crash {
+  border-color: rgba(255, 69, 58, 0.4);
+}
+
+.docker-studio-root .pod-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.docker-studio-root .pod-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docker-studio-root .pod-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.docker-studio-root .pod-status-dot.running { background: #30D158; box-shadow: 0 0 6px #30D158; }
+.docker-studio-root .pod-status-dot.crashloopbackoff,
+.docker-studio-root .pod-status-dot.failed { background: #FF453A; box-shadow: 0 0 6px #FF453A; }
+.docker-studio-root .pod-status-dot.pending { background: #FFD60A; }
+
+.docker-studio-root .pod-name {
+  font-weight: 700;
+  color: #FFF;
+  font-size: 11.5px;
+}
+
+.docker-studio-root .pod-phase-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.docker-studio-root .pod-phase-badge.running { background: rgba(48, 209, 88, 0.15); color: #30D158; }
+.docker-studio-root .pod-phase-badge.crashloopbackoff { background: rgba(255, 69, 58, 0.15); color: #FF453A; }
+.docker-studio-root .pod-phase-badge.pending { background: rgba(255, 214, 10, 0.15); color: #FFD60A; }
+
+.docker-studio-root .pod-metrics-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  margin-bottom: 6px;
+}
+
+.docker-studio-root .pod-telemetry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #64D2FF;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 6px;
+  margin-bottom: 6px;
+}
+
+.docker-studio-root .telemetry-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.docker-studio-root .pod-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.docker-studio-root .pod-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #CBD5E1;
+  cursor: pointer;
+}
+
+.docker-studio-root .pod-action-btn.restart:hover { background: rgba(10, 132, 255, 0.2); color: #FFF; }
+.docker-studio-root .pod-action-btn.delete:hover { background: rgba(255, 69, 58, 0.2); color: #FF453A; }
+
+.docker-studio-root .pod-log-peek {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.docker-studio-root .log-peek-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64D2FF;
+  margin-bottom: 6px;
+}
+
+.docker-studio-root .open-full-logs-btn {
+  background: transparent;
+  border: none;
+  color: #0A84FF;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.docker-studio-root .log-stream-preview {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: #CBD5E1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Services & Ingress */
+.docker-studio-root .section-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.docker-studio-root .services-grid,
+.docker-studio-root .ingress-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docker-studio-root .svc-card,
+.docker-studio-root .ingress-card {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.docker-studio-root .svc-header,
+.docker-studio-root .ingress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.docker-studio-root .svc-name,
+.docker-studio-root .ingress-host {
+  font-weight: 700;
+  color: #FFF;
+  font-size: 12px;
+}
+
+.docker-studio-root .svc-type-badge,
+.docker-studio-root .tls-badge {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(191, 90, 242, 0.15);
+  color: #BF5AF2;
+}
+
+.docker-studio-root .tls-badge {
+  background: rgba(48, 209, 88, 0.15);
+  color: #30D158;
+}
+
+.docker-studio-root .svc-details,
+.docker-studio-root .ingress-route {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Nodes */
+.docker-studio-root .nodes-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docker-studio-root .node-card {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.docker-studio-root .node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.docker-studio-root .node-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docker-studio-root .node-name {
+  font-weight: 700;
+  color: #FFF;
+  font-size: 12px;
+}
+
+.docker-studio-root .node-status-badge {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(48, 209, 88, 0.2);
+  color: #30D158;
+}
+
+.docker-studio-root .node-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.docker-studio-root .node-gauge-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.docker-studio-root .gauge-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.docker-studio-root .gauge-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+.docker-studio-root .gauge-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.docker-studio-root .gauge-fill {
+  height: 100%;
+}
+
+/* Live Logs Terminal */
+.docker-studio-root .logs-full-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.docker-studio-root .log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 8px;
+}
+
+.docker-studio-root .log-pod-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.docker-studio-root .picker-label {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.docker-studio-root .pod-picker-select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  color: #64D2FF;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.docker-studio-root .log-filter-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  color: #FFF;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.docker-studio-root .log-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFF;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.docker-studio-root .live-log-terminal {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.docker-studio-root .terminal-log-line {
+  display: flex;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.docker-studio-root .log-index {
+  color: rgba(255, 255, 255, 0.25);
+  user-select: none;
+}
+
+.docker-studio-root .log-text {
+  color: #E2E8F0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Manifest Lab */
+.docker-studio-root .manifest-inputs-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) auto;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.docker-studio-root .input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.docker-studio-root .input-group label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.docker-studio-root .input-group input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  color: #FFF;
+  font-size: 11px;
+  padding: 3px 6px;
+  outline: none;
+}
+
+.docker-studio-root .copy-yaml-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(10, 132, 255, 0.2);
+  border: 1px solid rgba(10, 132, 255, 0.4);
+  color: #FFF;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.docker-studio-root .yaml-preview-box,
+.docker-studio-root .compose-pre {
+  padding: 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: #E2E8F0;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 0;
+  overflow-x: auto;
+  line-height: 1.4;
+}
+
+/* Existing Docker styles */
+.docker-studio-root .containers-list,
+.docker-studio-root .images-list,
+.docker-studio-root .volumes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.docker-studio-root .container-item-card,
+.docker-studio-root .image-card,
+.docker-studio-root .volume-card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.docker-studio-root .container-item-card:hover,
+.docker-studio-root .image-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.docker-studio-root .container-item-card.selected {
+  border-color: rgba(10, 132, 255, 0.5);
+  box-shadow: 0 0 12px rgba(10, 132, 255, 0.25);
+}
+
+.docker-studio-root .container-header-row,
+.docker-studio-root .img-title-row,
+.docker-studio-root .vol-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.docker-studio-root .c-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docker-studio-root .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.docker-studio-root .status-dot.running { background: #30D158; box-shadow: 0 0 8px #30D158; }
+.docker-studio-root .status-dot.stopped { background: #FF453A; }
+.docker-studio-root .status-dot.restarting { background: #FFD60A; }
+
+.docker-studio-root .c-name,
+.docker-studio-root .img-repo,
+.docker-studio-root .vol-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #FFF;
+}
+
+.docker-studio-root .c-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.docker-studio-root .ctrl-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFF;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.docker-studio-root .ctrl-btn.start:hover { background: rgba(48, 209, 88, 0.3); }
+.docker-studio-root .ctrl-btn.stop:hover { background: rgba(255, 69, 58, 0.3); }
+.docker-studio-root .ctrl-btn.restart:hover { background: rgba(255, 214, 10, 0.3); }
+
+.docker-studio-root .container-meta-row,
+.docker-studio-root .img-meta-row,
+.docker-studio-root .vol-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.docker-studio-root .container-telemetry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #64D2FF;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 4px;
+}
+
+.docker-studio-root .telemetry-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.docker-studio-root .container-logs-box {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.docker-studio-root .logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64D2FF;
+  margin-bottom: 6px;
+}
+
+.docker-studio-root .logs-status-pill {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(48, 209, 88, 0.15);
+  color: #30D158;
+}
+
+.docker-studio-root .logs-stream {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: #CBD5E1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.docker-studio-root .log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.docker-studio-root .section-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.docker-studio-root .section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.docker-studio-root .section-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFF;
+  border-radius: 4px;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.docker-studio-root .img-inuse-badge.active { color: #30D158; }
+.docker-studio-root .img-inuse-badge.dangling { color: #FF453A; }

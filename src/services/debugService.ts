@@ -215,7 +215,7 @@ export class DebugService {
     }
 
     const newBp: BreakpointItem = {
-      id: `bp_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: `bp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       filePath,
       line,
       enabled: true,
@@ -298,7 +298,7 @@ export class DebugService {
   public addFunctionBreakpoint(functionName: string, condition?: string): FunctionBreakpoint {
     const trimmed = functionName.trim()
     const newFb: FunctionBreakpoint = {
-      id: `fb_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: `fb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       functionName: trimmed,
       enabled: true,
       hitCount: 0,
@@ -487,7 +487,7 @@ export class DebugService {
   public addWatchExpression(expression: string): void {
     const trimmed = expression.trim()
     if (!trimmed) return
-    const id = `w_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`
+    const id = `w_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
     const evaluated = this.evaluateExpression(trimmed)
     this.watchExpressions.push({
       id,
@@ -525,7 +525,7 @@ export class DebugService {
 
   public logToConsole(type: DebugConsoleLog['type'], text: string): void {
     this.consoleLogs.push({
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       type,
       text,
       timestamp: new Date().toLocaleTimeString(),

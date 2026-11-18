@@ -1,0 +1,397 @@
+/* Extracted and root-scoped (.env-vault-root) from EnvVaultView.tsx */
+
+.env-vault-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: rgba(10, 14, 24, 0.95);
+  color: #E2E8F0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.78rem;
+  overflow: hidden;
+}
+
+.env-vault-root .env-subnav-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.35);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.env-vault-root .env-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.env-vault-root .env-tab-btn.active {
+  color: #FFF;
+  background: rgba(10, 132, 255, 0.22);
+  border-color: rgba(10, 132, 255, 0.4);
+  box-shadow: 0 0 8px rgba(10, 132, 255, 0.2);
+}
+
+.env-vault-root .sec-alert-badge {
+  background: #FF453A;
+  color: #FFF;
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.env-vault-root .diff-missing-badge {
+  background: #FF9F0A;
+  color: #000;
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.env-vault-root .profile-selector-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+
+.env-vault-root .profile-chips {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.env-vault-root .profile-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.env-vault-root .profile-chip.active {
+  background: rgba(10, 132, 255, 0.2);
+  border-color: rgba(10, 132, 255, 0.4);
+  color: #64D2FF;
+}
+
+.env-vault-root .vault-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.env-vault-root .toggle-mask-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.env-vault-root .add-var-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  background: rgba(48, 209, 88, 0.2);
+  border: 1px solid rgba(48, 209, 88, 0.4);
+  color: #30D158;
+  cursor: pointer;
+}
+
+.env-vault-root .env-content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.env-vault-root .variables-table-pane,
+.env-vault-root .matrix-view-pane,
+.env-vault-root .security-scanner-pane,
+.env-vault-root .diff-view-pane,
+.env-vault-root .export-view-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.env-vault-root .var-count-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.env-vault-root .variables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.env-vault-root .variable-card {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.env-vault-root .card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.env-vault-root .key-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.env-vault-root .cat-pill {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.env-vault-root .cat-pill.api_key { background: rgba(255, 69, 58, 0.2); color: #FF453A; }
+.env-vault-root .cat-pill.database { background: rgba(191, 90, 242, 0.2); color: #BF5AF2; }
+.env-vault-root .cat-pill.auth { background: rgba(255, 159, 10, 0.2); color: #FF9F0A; }
+.env-vault-root .cat-pill.port { background: rgba(100, 210, 255, 0.2); color: #64D2FF; }
+.env-vault-root .cat-pill.url { background: rgba(48, 209, 88, 0.2); color: #30D158; }
+.env-vault-root .cat-pill.boolean { background: rgba(255, 214, 10, 0.2); color: #FFD60A; }
+.env-vault-root .cat-pill.general { background: rgba(255, 255, 255, 0.1); color: #E2E8F0; }
+
+.env-vault-root .key-name {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  color: #FFF;
+}
+
+.env-vault-root .card-actions {
+  display: flex;
+  gap: 3px;
+}
+
+.env-vault-root .action-icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.env-vault-root .action-icon-btn:hover { color: #FFF; }
+.env-vault-root .action-icon-btn.del:hover { color: #FF453A; }
+
+.env-vault-root .var-value-input,
+.env-vault-root .vault-pass-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #CBD5E1;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.env-vault-root .matrix-table-wrap {
+  overflow-x: auto;
+  padding: 8px;
+}
+
+.env-vault-root .matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+}
+
+.env-vault-root .matrix-table th {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+}
+
+.env-vault-root .matrix-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.env-vault-root .row-missing { background: rgba(255, 159, 10, 0.06); }
+.env-vault-root .key-cell { font-family: var(--font-mono); font-weight: 700; color: #FFF; }
+.env-vault-root .present-val { font-family: var(--font-mono); color: #30D158; }
+.env-vault-root .missing-val { font-size: 9px; font-weight: 700; color: #FF453A; background: rgba(255, 69, 58, 0.15); padding: 1px 4px; border-radius: 2px; }
+
+.env-vault-root .sec-hero-card,
+.env-vault-root .sec-clean-card,
+.env-vault-root .finding-card,
+.env-vault-root .diff-summary-card,
+.env-vault-root .missing-alert-box,
+.env-vault-root .extra-box,
+.env-vault-root .code-output-wrap,
+.env-vault-root .vault-encrypt-box {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.env-vault-root .sec-hero-title,
+.env-vault-root .diff-title,
+.env-vault-root .box-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 11px;
+  color: #FFF;
+  margin-bottom: 4px;
+}
+
+.env-vault-root .accent-red { color: #FF453A; }
+.env-vault-root .accent-green { color: #30D158; }
+
+.env-vault-root .sec-hero-desc,
+.env-vault-root .diff-desc {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.env-vault-root .sec-clean-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+  gap: 6px;
+}
+
+.env-vault-root .clean-title { font-weight: 700; color: #FFF; font-size: 12px; }
+.env-vault-root .clean-desc { font-size: 10.5px; color: var(--text-muted); margin: 0; }
+
+.env-vault-root .findings-list { display: flex; flex-direction: column; gap: 6px; }
+
+.env-vault-root .finding-card { display: flex; flex-direction: column; gap: 4px; }
+.env-vault-root .finding-card.critical { border-left: 3px solid #FF453A; }
+.env-vault-root .finding-card.high { border-left: 3px solid #FF9F0A; }
+.env-vault-root .finding-card.medium { border-left: 3px solid #FFD60A; }
+
+.env-vault-root .finding-top { display: flex; align-items: center; gap: 6px; font-size: 10.5px; }
+.env-vault-root .sev-pill { font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 2px; }
+.env-vault-root .sev-pill.critical { background: rgba(255, 69, 58, 0.25); color: #FF453A; }
+.env-vault-root .sev-pill.high { background: rgba(255, 159, 10, 0.25); color: #FF9F0A; }
+.env-vault-root .sev-pill.medium { background: rgba(255, 214, 10, 0.25); color: #FFD60A; }
+
+.env-vault-root .rule-name { font-weight: 700; color: #FFF; }
+.env-vault-root .finding-key { font-family: var(--font-mono); color: #64D2FF; font-size: 10px; }
+.env-vault-root .finding-desc { margin: 0; font-size: 10.5px; color: var(--text-secondary); }
+
+.env-vault-root .remediation-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #FFD60A;
+  background: rgba(255, 214, 10, 0.08);
+  padding: 3px 6px;
+  border-radius: 3px;
+}
+
+.env-vault-root .export-lang-tabs { display: flex; gap: 4px; }
+.env-vault-root .lang-tab-btn {
+  font-size: 9.5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.env-vault-root .lang-tab-btn.active { background: rgba(10, 132, 255, 0.25); color: #64D2FF; }
+
+.env-vault-root .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.env-vault-root .code-label { font-size: 10px; font-weight: 700; color: var(--text-muted); }
+.env-vault-root .copy-code-btn,
+.env-vault-root .gen-example-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #64D2FF;
+  background: rgba(10, 132, 255, 0.15);
+  border: 1px solid rgba(10, 132, 255, 0.3);
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.env-vault-root .code-block {
+  margin: 0;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #E2E8F0;
+  overflow-x: auto;
+}
+
+.env-vault-root .encrypt-controls { display: flex; gap: 6px; margin-top: 6px; }
+.env-vault-root .encrypt-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: rgba(191, 90, 242, 0.25);
+  border: 1px solid rgba(191, 90, 242, 0.45);
+  color: #BF5AF2;
+  cursor: pointer;
+  white-space: nowrap;
+}

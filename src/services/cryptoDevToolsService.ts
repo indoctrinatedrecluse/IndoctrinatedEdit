@@ -722,7 +722,7 @@ class CryptoDevToolsService {
     const cleanHex = hex.replace(/[^0-9a-fA-F]/g, '')
     let str = ''
     for (let i = 0; i < cleanHex.length; i += 2) {
-      str += String.fromCharCode(parseInt(cleanHex.substr(i, 2), 16))
+      str += String.fromCharCode(parseInt(cleanHex.slice(i, i + 2), 16))
     }
     return str
   }
@@ -988,7 +988,7 @@ class CryptoDevToolsService {
     // Simplified RFC 6238 HMAC-SHA1 simulation for web / sandbox
     const hmacVal = this.hmacSha256(timeStep.toString(), secret)
     const offset = parseInt(hmacVal.slice(-1), 16) & 0xf
-    const binary = (parseInt(hmacVal.substr(offset * 2, 8), 16) & 0x7fffffff)
+    const binary = (parseInt(hmacVal.slice(offset * 2, offset * 2 + 8), 16) & 0x7fffffff)
     const otp = (binary % Math.pow(10, digits)).toString().padStart(digits, '0')
     const uri = `otpauth://totp/IndoctrinatedEdit:user@indoctrinated.io?secret=${secret}&issuer=IndoctrinatedEdit&period=${period}&digits=${digits}`
 

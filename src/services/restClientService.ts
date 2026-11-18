@@ -634,7 +634,7 @@ export class RestClientService {
 
   private recordHistory(request: ApiRequest, response: ApiResponse) {
     this.history.unshift({
-      id: `h_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       request: JSON.parse(JSON.stringify(request)),
       response: JSON.parse(JSON.stringify(response)),
       timestamp: new Date().toISOString(),

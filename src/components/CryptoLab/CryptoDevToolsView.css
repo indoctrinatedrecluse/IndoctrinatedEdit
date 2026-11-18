@@ -1,0 +1,402 @@
+/* Extracted and root-scoped (.crypto-devtools-root) from CryptoDevToolsView.tsx */
+
+.crypto-devtools-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: rgba(10, 14, 24, 0.95);
+  color: var(--text-primary);
+  overflow: hidden;
+  font-family: var(--font-ui);
+}
+
+.crypto-devtools-root .crypto-subnav-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.crypto-devtools-root .crypto-subnav-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.crypto-devtools-root .crypto-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.crypto-devtools-root .crypto-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.crypto-devtools-root .crypto-nav-btn.active {
+  background: rgba(10, 132, 255, 0.25);
+  border-color: rgba(10, 132, 255, 0.45);
+  color: #FFF;
+  box-shadow: 0 0 10px rgba(10, 132, 255, 0.3);
+}
+
+.crypto-devtools-root .crypto-body-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.crypto-devtools-root .crypto-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.crypto-devtools-root .section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crypto-devtools-root .section-label,
+.crypto-devtools-root .field-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.crypto-devtools-root .section-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64D2FF;
+  background: rgba(10, 132, 255, 0.15);
+  border: 1px solid rgba(10, 132, 255, 0.3);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.crypto-devtools-root .crypto-textarea,
+.crypto-devtools-root .crypto-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: #FFF;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.crypto-devtools-root .crypto-textarea:focus,
+.crypto-devtools-root .crypto-input:focus {
+  border-color: rgba(10, 132, 255, 0.5);
+}
+
+.crypto-devtools-root .jwt-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crypto-devtools-root .jwt-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.crypto-devtools-root .jwt-badge.valid {
+  background: rgba(48, 209, 88, 0.2);
+  color: #30D158;
+  border: 1px solid rgba(48, 209, 88, 0.35);
+}
+
+.crypto-devtools-root .jwt-badge.expired,
+.crypto-devtools-root .jwt-badge.error {
+  background: rgba(255, 69, 58, 0.2);
+  color: #FF453A;
+  border: 1px solid rgba(255, 69, 58, 0.35);
+}
+
+.crypto-devtools-root .jwt-info-chip {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.crypto-devtools-root .jwt-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crypto-devtools-root .jwt-card {
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.crypto-devtools-root .jwt-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64D2FF;
+  margin-bottom: 6px;
+}
+
+.crypto-devtools-root .jwt-json-pre,
+.crypto-devtools-root .key-pre {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #E2E8F0;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.crypto-devtools-root .copy-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.crypto-devtools-root .copy-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFF;
+}
+
+.crypto-devtools-root .hashes-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.crypto-devtools-root .hash-row-card {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.crypto-devtools-root .hash-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.crypto-devtools-root .hash-algo-name {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #BF5AF2;
+}
+
+.crypto-devtools-root .hash-latency {
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+.crypto-devtools-root .hash-value-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.crypto-devtools-root .hash-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #FFF;
+  word-break: break-all;
+}
+
+.crypto-devtools-root .copy-hash-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.crypto-devtools-root .copy-hash-btn:hover {
+  color: #FFF;
+}
+
+.crypto-devtools-root .encoder-type-selector {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.crypto-devtools-root .enc-type-pill,
+.crypto-devtools-root .format-pill {
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.crypto-devtools-root .enc-type-pill.active,
+.crypto-devtools-root .format-pill.active {
+  background: rgba(48, 209, 88, 0.2);
+  border-color: rgba(48, 209, 88, 0.4);
+  color: #30D158;
+}
+
+.crypto-devtools-root .encoder-io-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crypto-devtools-root .io-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.crypto-devtools-root .io-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #64D2FF;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.crypto-devtools-root .generator-item-card {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.crypto-devtools-root .gen-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crypto-devtools-root .gen-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFD60A;
+}
+
+.crypto-devtools-root .gen-code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #FFF;
+}
+
+.crypto-devtools-root .epoch-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.crypto-devtools-root .epoch-card {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.crypto-devtools-root .epoch-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.crypto-devtools-root .epoch-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #64D2FF;
+}
+
+.crypto-devtools-root .epoch-relative {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #30D158;
+}
+
+.crypto-devtools-root .format-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.crypto-devtools-root .format-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.crypto-devtools-root .format-arrow {
+  color: var(--text-muted);
+}
+
+.crypto-devtools-root .keypair-display-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crypto-devtools-root .key-box {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}

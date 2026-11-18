@@ -174,7 +174,7 @@ echo "Executing safe script..."`,
   public addCustomSnippet(snippet: Omit<CodeSnippet, 'id' | 'isCustom' | 'createdAt'>): CodeSnippet {
     const newSnippet: CodeSnippet = {
       ...snippet,
-      id: `custom_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       isCustom: true,
       createdAt: new Date().toLocaleDateString(),
     }

@@ -1,0 +1,603 @@
+/* Extracted and root-scoped (.mcp-studio-overlay) from McpStudioModal.tsx */
+
+.mcp-studio-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.mcp-studio-overlay .mcp-modal {
+  width: 960px;
+  max-width: 95vw;
+  height: 680px;
+  max-height: 92vh;
+  background: rgba(18, 14, 28, 0.94);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(139, 92, 246, 0.15);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #e2e8f0;
+}
+
+.mcp-studio-overlay .modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.mcp-studio-overlay .modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mcp-studio-overlay .modal-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mcp-studio-overlay .modal-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mcp-studio-overlay .sdk-bridge-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  color: #7DD3FC;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.mcp-studio-overlay .modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.mcp-studio-overlay .modal-subtitle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.mcp-studio-overlay .close-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.mcp-studio-overlay .close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mcp-studio-overlay .mcp-tab-nav {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mcp-studio-overlay .mcp-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.65);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mcp-studio-overlay .mcp-tab-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mcp-studio-overlay .mcp-tab-btn.active {
+  color: #fff;
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.35);
+  font-weight: 500;
+}
+
+.mcp-studio-overlay .mcp-modal-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+}
+
+.mcp-studio-overlay .mcp-split-view {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.mcp-studio-overlay .mcp-left-pane {
+  width: 300px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+
+.mcp-studio-overlay .pane-header {
+  padding: 10px 14px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mcp-studio-overlay .server-list,
+.mcp-studio-overlay .tool-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcp-studio-overlay .server-item,
+.mcp-studio-overlay .tool-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mcp-studio-overlay .server-item:hover,
+.mcp-studio-overlay .tool-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.mcp-studio-overlay .server-item.selected,
+.mcp-studio-overlay .tool-item.selected {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.45);
+}
+
+.mcp-studio-overlay .server-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mcp-studio-overlay .server-name-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-studio-overlay .server-title {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.mcp-studio-overlay .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.mcp-studio-overlay .status-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.mcp-studio-overlay .status-dot.disabled {
+  background: #64748b;
+}
+
+.mcp-studio-overlay .status-dot.error {
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+}
+
+.mcp-studio-overlay .server-item-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mcp-studio-overlay .transport-badge,
+.mcp-studio-overlay .latency-badge,
+.mcp-studio-overlay .tools-count-badge,
+.mcp-studio-overlay .type-badge,
+.mcp-studio-overlay .mime-badge,
+.mcp-studio-overlay .server-badge {
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.mcp-studio-overlay .mcp-right-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.mcp-studio-overlay .server-config-form,
+.mcp-studio-overlay .tool-tester-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mcp-studio-overlay .form-header-row,
+.mcp-studio-overlay .tool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+}
+
+.mcp-studio-overlay .form-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mcp-studio-overlay .form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mcp-studio-overlay .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mcp-studio-overlay .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mcp-studio-overlay .form-field.full-width {
+  grid-column: span 2;
+}
+
+.mcp-studio-overlay .glass-input,
+.mcp-studio-overlay .glass-select,
+.mcp-studio-overlay .glass-textarea,
+.mcp-studio-overlay .config-raw-textarea {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.mcp-studio-overlay .glass-input:focus,
+.mcp-studio-overlay .glass-select:focus,
+.mcp-studio-overlay .glass-textarea:focus,
+.mcp-studio-overlay .config-raw-textarea:focus {
+  border-color: rgba(139, 92, 246, 0.6);
+}
+
+.mcp-studio-overlay .glass-input.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mcp-studio-overlay .primary-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.mcp-studio-overlay .primary-action-btn:hover {
+  opacity: 0.9;
+}
+
+.mcp-studio-overlay .primary-action-btn-sm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  background: rgba(139, 92, 246, 0.25);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 5px;
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mcp-studio-overlay .secondary-btn-sm {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: #e2e8f0;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mcp-studio-overlay .danger-btn-sm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 5px;
+  color: #f87171;
+  cursor: pointer;
+}
+
+.mcp-studio-overlay .run-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mcp-studio-overlay .tool-title-large {
+  font-size: 15px;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.mcp-studio-overlay .tool-desc {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 2px;
+}
+
+.mcp-studio-overlay .tool-meta-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  margin-top: 6px;
+}
+
+.mcp-studio-overlay .schema-table {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 11px;
+}
+
+.mcp-studio-overlay .schema-row {
+  display: grid;
+  grid-template-columns: 140px 80px 80px 1fr;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: center;
+}
+
+.mcp-studio-overlay .schema-row.header {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.mcp-studio-overlay .output-box {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 11.5px;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  color: #e2e8f0;
+}
+
+.mcp-studio-overlay .status-pill.success {
+  font-size: 10px;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.mcp-studio-overlay .status-pill.error {
+  font-size: 10px;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.mcp-studio-overlay .mcp-resources-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 20px;
+  width: 100%;
+  overflow-y: auto;
+}
+
+.mcp-studio-overlay .resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mcp-studio-overlay .resource-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.mcp-studio-overlay .resource-uri {
+  font-size: 11.5px;
+  color: #a78bfa;
+}
+
+.mcp-studio-overlay .resource-name {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+.mcp-studio-overlay .resource-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mcp-studio-overlay .mcp-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 20px;
+  width: 100%;
+  overflow-y: auto;
+}
+
+.mcp-studio-overlay .catalog-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mcp-studio-overlay .catalog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mcp-studio-overlay .catalog-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mcp-studio-overlay .catalog-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 4px;
+  color: #c4b5fd;
+}
+
+.mcp-studio-overlay .catalog-desc {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+  flex: 1;
+}
+
+.mcp-studio-overlay .catalog-cmd {
+  font-size: 10.5px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: #38bdf8;
+  word-break: break-all;
+}
+
+.mcp-studio-overlay .mcp-config-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  width: 100%;
+  height: 100%;
+}
+
+.mcp-studio-overlay .config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mcp-studio-overlay .config-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mcp-studio-overlay .config-raw-textarea {
+  flex: 1;
+  resize: none;
+  font-size: 12px;
+}
+
+.mcp-studio-overlay .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
