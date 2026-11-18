@@ -78,6 +78,8 @@ import {
   stripToolCallBlocks,
 } from '../../services/aiToolsService'
 import { DiagnosticsService } from '../../services/diagnosticsService'
+import { escapeHtml, sanitizeHtml } from '../../utils/security'
+import { notificationService } from '../../services/notificationService'
 import './AiChatPanel.css'
 
 interface AiChatPanelProps {
@@ -92,6 +94,8 @@ interface AiChatPanelProps {
   onReplaceSelection?: (code: string) => void
   onOpenFile?: (filePath: string, line?: number, column?: number) => void
   onApplyFileEdit?: (filePath: string, newContent: string) => Promise<boolean>
+  pendingPrompt?: { id: number; prompt: string; attachSelection?: boolean; attachFile?: boolean } | null
+  onPendingPromptConsumed?: () => void
 }
 
 const getBaseName = (pathStr?: string): string => {
@@ -276,11 +280,31 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   onReplaceSelection,
   onOpenFile,
   onApplyFileEdit,
+  pendingPrompt,
+  onPendingPromptConsumed,
 }) => {
   // Mode State (Plan Mode vs Act Mode)
   const [chatMode, setChatMode] = useState<AiChatMode>(AiService.getActiveMode())
   const [planModelId, setPlanModelId] = useState<string>(AiService.getPlanModelId())
   const [actModelId, setActModelId] = useState<string>(AiService.getActModelId())
+  const [mcpSummary, setMcpSummary] = useState(() => ({
+    servers: McpService.getServers().filter((s) => s.enabled).length,
+    tools: McpService.listTools().length,
+  }))
+
+  useEffect(() => {
+    const syncMcp = () =>
+      setMcpSummary({
+        servers: McpService.getServers().filter((s) => s.enabled).length,
+        tools: McpService.listTools().length,
+      })
+    const u1 = McpService.onServersChanged(syncMcp)
+    const u2 = McpService.onToolsChanged(syncMcp)
+    return () => {
+      u1()
+      u2()
+    }
+  }, [])
 
   // Settings & Models
   const [settings, setSettings] = useState<AiSettingsMap>(AiService.getSettings())
@@ -1158,12 +1182,39 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   }
 
   const handleRunCodeInTerminal = async (code: string) => {
+    const trimmed = code.trim()
+    const check = AiGuardrailService.validateCommand(trimmed)
+    if (!check.safe) {
+      notificationService.notifyError('AI Safety Guardrail', check.error || 'Blocked unsafe terminal command.')
+      return
+    }
     let active = terminalService.getActiveTab()
     if (!active) {
       active = await terminalService.createTab()
     }
-    terminalService.write(active.id, code.trim() + '\n')
+    terminalService.write(active.id, trimmed + '\n')
   }
+
+  useEffect(() => {
+    if (!pendingPrompt) return
+    if (pendingPrompt.attachSelection && currentSelection?.text) {
+      setAttachedContext({
+        type: 'selection',
+        fileName: activeFileName,
+        code: currentSelection.text,
+        startLine: currentSelection.startLine,
+        endLine: currentSelection.endLine,
+      })
+    } else if (pendingPrompt.attachFile && activeFileContent) {
+      setAttachedContext({
+        type: 'file',
+        fileName: activeFileName,
+        code: activeFileContent,
+      })
+    }
+    setInputText(pendingPrompt.prompt)
+    onPendingPromptConsumed?.()
+  }, [pendingPrompt])
 
   const getProviderColor = (provider: AiProvider) => {
     switch (provider) {
@@ -1498,7 +1549,8 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             className="icon-btn glass-interactive"
             onClick={() => {
               window.dispatchEvent(new CustomEvent('open-mcp-studio'))
-            }}            title={`MCP Host Studio: ${McpService.getServers().filter((s) => s.enabled).length} active servers, ${McpService.listTools().length} tools`}
+            }}
+            title={`MCP Host Studio: ${mcpSummary.servers} active servers, ${mcpSummary.tools} tools`}
           >
             <Server size={13} />
           </button>
@@ -2684,7 +2736,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   onClick={() => {
                     opt.action()
                     setSlashOpen(false)
-                    setInputText('')
                   }}
                 >
                   <Icon size={12} className="item-icon text-violet" />
@@ -2730,6 +2781,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
           <button
             className={`quick-chip ${currentSelection?.text ? 'highlight' : ''}`}
             onClick={handleAttachSelection}
+            disabled={!currentSelection?.text}
             title={
               currentSelection?.text
                 ? `Attach selection (${currentSelection.endLine - currentSelection.startLine + 1} lines)`
@@ -2737,7 +2789,7 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
             }
           >
             <Paperclip size={11} />
-            <span>{currentSelection?.text ? 'Attach Selection' : 'Attach Selection'}</span>
+            <span>{currentSelection?.text ? `Attach Selection (L${currentSelection.startLine}-${currentSelection.endLine})` : 'No Selection'}</span>
           </button>
 
           <button
@@ -2922,7 +2974,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
                   if (selected) {
                     selected.action()
                     setSlashOpen(false)
-                    setInputText('')
                   }
                   return
                 }
@@ -3057,8 +3108,9 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 }
 
 function formatInlineMarkdown(text: string): string {
-  return text
+  const escaped = escapeHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+  return sanitizeHtml(escaped)
 }

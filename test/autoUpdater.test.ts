@@ -167,20 +167,20 @@ describe('Auto-Updater Subsystem Tests', () => {
       unsubscribe()
     })
 
-    it('should handle simulated download and calculate progress accurately', async () => {
+    it('should invoke Electron updater IPC downloadUpdate and track verified state', async () => {
       // Mock updateInfo with an available update and matched asset
-      (service as any).updateInfo = {
+      ;(service as any).updateInfo = {
         updateAvailable: true,
-        currentVersion: '4.4.0',
-        latestVersion: '4.5.0',
-        releaseName: 'IndoctrinatedEdit 4.5.0',
+        currentVersion: '5.3.0',
+        latestVersion: '5.4.0',
+        releaseName: 'IndoctrinatedEdit 5.4.0',
         releaseNotes: 'Awesome new features',
         publishedAt: new Date().toISOString(),
-        releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases/v4.5.0',
+        releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases/v5.4.0',
         matchedAsset: {
           asset: {
-            name: 'IndoctrinatedEdit-4.5.0-Setup.exe',
-            browser_download_url: 'https://github.com/releases/download/v4.5.0/IndoctrinatedEdit-4.5.0-Setup.exe',
+            name: 'IndoctrinatedEdit-5.4.0-Setup.exe',
+            browser_download_url: 'https://github.com/releases/download/v5.4.0/IndoctrinatedEdit-5.4.0-Setup.exe',
             size: 80000000,
             content_type: 'application/x-msdos-program',
           },
@@ -194,14 +194,23 @@ describe('Auto-Updater Subsystem Tests', () => {
       }
       ;(service as any).status = 'available'
 
-      // Trigger download
+      const origWin = (globalThis as any).window
+      ;(globalThis as any).window = {
+        electronAPI: {
+          updater: {
+            downloadUpdate: vi.fn().mockResolvedValue({ filePath: 'C:/tmp/setup.exe', verified: true }),
+          },
+        },
+      }
+
       const downloadPromise = service.downloadUpdate()
       expect(service.getStatus()).toBe('downloading')
 
       await downloadPromise
       expect(service.getStatus()).toBe('downloaded')
-      expect(service.getDownloadProgress()?.percentage).toBe(100)
-      expect(service.getDownloadProgress()?.formattedTotal).toBe('78.0 MB')
+      expect(service.isDownloadVerified()).toBe(true)
+
+      ;(globalThis as any).window = origWin
     })
 
     it('should dismiss update and remember last dismissed version', async () => {

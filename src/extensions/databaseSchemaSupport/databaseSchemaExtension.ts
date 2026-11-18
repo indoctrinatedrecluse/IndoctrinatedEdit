@@ -43,11 +43,9 @@ export const databaseSchemaExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerDatabaseSchemaExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const registerForLang = (lang: string, snippetsList: typeof SQL_SNIPPETS) => {
     try {

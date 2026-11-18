@@ -51,11 +51,9 @@ export const restClientExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerRestClientExtension(monacoInstance?: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   try {
     monacoInstance.languages.registerCompletionItemProvider('http', {

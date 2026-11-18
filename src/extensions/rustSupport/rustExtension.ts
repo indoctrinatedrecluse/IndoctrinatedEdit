@@ -26,11 +26,9 @@ export const rustExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerRustExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Register completion items for Rust
   monacoInstance.languages.registerCompletionItemProvider('rust', {

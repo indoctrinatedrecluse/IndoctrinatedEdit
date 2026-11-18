@@ -26,11 +26,9 @@ export const pythonExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerPythonExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Register completion items for Python
   monacoInstance.languages.registerCompletionItemProvider('python', {

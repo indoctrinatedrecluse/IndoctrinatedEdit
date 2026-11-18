@@ -246,7 +246,6 @@ const SHORTCUT_DATABASE: Omit<ShortcutEntry, 'onExecute'>[] = [
     category: 'Edit',
     keys: ['Alt', 'Click'],
     description: 'Place an extra editing cursor at the mouse cursor position',
-    actionId: 'edit.multiCursorClick',
   },
   {
     id: 'edit.commentLine',
@@ -288,7 +287,7 @@ const SHORTCUT_DATABASE: Omit<ShortcutEntry, 'onExecute'>[] = [
     category: 'View',
     keys: ['Ctrl', '`'],
     description: 'Show, focus, or collapse integrated liquid glass terminal',
-    actionId: 'view.terminal',
+    actionId: 'terminal.toggle',
   },
   {
     id: 'view.problems',

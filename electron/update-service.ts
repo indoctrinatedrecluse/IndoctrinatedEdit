@@ -284,14 +284,13 @@ export class UpdateService {
         channel: activeChannel,
       }
     } catch (err: any) {
-      console.warn('[UpdateService] Update check failed, providing mock fallback info:', err.message)
-      // Return safe graceful response if offline or GitHub API rate-limited
+      console.warn('[UpdateService] Update check failed:', err.message)
       return {
         updateAvailable: false,
         currentVersion,
         latestVersion: currentVersion,
         releaseName: `IndoctrinatedEdit ${currentVersion}`,
-        releaseNotes: 'You are using the latest version of IndoctrinatedEdit.',
+        releaseNotes: '',
         publishedAt: new Date().toISOString(),
         releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',
         matchedAsset: null,
@@ -336,7 +335,7 @@ export class UpdateService {
           currentUrl,
           {
             headers: {
-              'User-Agent': 'IndoctrinatedEdit-AutoUpdater/4.9.1',
+              'User-Agent': `IndoctrinatedEdit-AutoUpdater/${app.getVersion ? app.getVersion() : '5.3.0'}`,
             },
           },
           (res) => {
@@ -390,7 +389,7 @@ export class UpdateService {
               const calculatedSha256 = hash.digest('hex')
               const verified = expectedSha256
                 ? calculatedSha256.toLowerCase() === expectedSha256.toLowerCase()
-                : true
+                : false
 
               this.downloadedFilePath = targetPath
               this.downloadedVersion = version
@@ -480,6 +479,21 @@ export class UpdateService {
     return true
   }
 
+  private installOnExitScheduled = false
+
+  public setInstallOnExit(enabled: boolean): boolean {
+    this.installOnExitScheduled = Boolean(enabled && this.downloadedFilePath)
+    return this.installOnExitScheduled
+  }
+
+  public triggerPendingInstallOnQuit(): void {
+    if (!this.installOnExitScheduled || !this.downloadedFilePath) return
+    this.installOnExitScheduled = false
+    const target = this.downloadedFilePath
+    this.downloadedFilePath = null
+    void this.installUpdate(target)
+  }
+
   public cancelDownload() {
     if (this.downloadAbortController) {
       this.downloadAbortController.abort()
@@ -513,6 +527,10 @@ export class UpdateService {
       return await this.installUpdate(installerPath)
     })
 
+    ipcMain.handle('updater:setInstallOnExit', (_, enabled: boolean) => {
+      return this.setInstallOnExit(enabled)
+    })
+
     ipcMain.handle('updater:getConfig', () => {
       return this.getConfig()
     })
@@ -530,7 +548,7 @@ export class UpdateService {
           url,
           {
             headers: {
-              'User-Agent': 'IndoctrinatedEdit-AutoUpdater/4.9.1',
+              'User-Agent': `IndoctrinatedEdit-AutoUpdater/${app.getVersion ? app.getVersion() : '5.3.0'}`,
               Accept: 'application/vnd.github.v3+json',
             },
           },

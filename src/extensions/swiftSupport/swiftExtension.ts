@@ -32,11 +32,9 @@ export const swiftExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerSwiftExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const registerForLang = (lang: string, snippetsList: typeof SWIFT_SNIPPETS) => {
     try {

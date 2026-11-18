@@ -42,11 +42,9 @@ export const dataScienceExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerDataScienceExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const registerForLang = (lang: string, snippetsList: typeof R_SNIPPETS) => {
     try {

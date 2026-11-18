@@ -248,6 +248,7 @@ export interface ElectronUpdaterAPI {
   downloadUpdate: (downloadUrl: string, version: string, expectedSha256?: string) => Promise<{ filePath: string; verified: boolean }>
   cancelDownload: () => Promise<boolean>
   installUpdate: (installerPath?: string) => Promise<boolean>
+  setInstallOnExit: (enabled: boolean) => Promise<boolean>
   getConfig: () => Promise<any>
   saveConfig: (config: any) => Promise<any>
   onDownloadProgress: (callback: (progress: any) => void) => () => void
@@ -299,6 +300,9 @@ export interface ElectronAPI {
   maximize: () => Promise<boolean>
   close: () => Promise<void>
   isMaximized: () => Promise<boolean>
+  setZoom: (action: 'in' | 'out' | 'reset') => Promise<number>
+  toggleFullscreen: () => Promise<boolean>
+  getAppVersion: () => Promise<string>
   onMaximizedChange: (callback: (isMax: boolean) => void) => () => void
   platform: string
 
@@ -352,6 +356,9 @@ const api: ElectronAPI = {
   maximize: () => ipcRenderer.invoke('window:maximize'),
   close: () => ipcRenderer.invoke('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  setZoom: (action) => ipcRenderer.invoke('window:setZoom', action),
+  toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   onMaximizedChange: (callback: (isMax: boolean) => void) => {
     const handler = (_: unknown, isMax: boolean) => callback(isMax)
     ipcRenderer.on('window-maximized-state', handler)
@@ -518,6 +525,7 @@ const api: ElectronAPI = {
       ipcRenderer.invoke('updater:downloadUpdate', downloadUrl, version, expectedSha256),
     cancelDownload: () => ipcRenderer.invoke('updater:cancelDownload'),
     installUpdate: (installerPath) => ipcRenderer.invoke('updater:installUpdate', installerPath),
+    setInstallOnExit: (enabled) => ipcRenderer.invoke('updater:setInstallOnExit', enabled),
     getConfig: () => ipcRenderer.invoke('updater:getConfig'),
     saveConfig: (config) => ipcRenderer.invoke('updater:saveConfig', config),
     onDownloadProgress: (callback) => {

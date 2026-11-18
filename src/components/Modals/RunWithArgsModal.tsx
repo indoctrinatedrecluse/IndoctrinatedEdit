@@ -25,6 +25,7 @@ export const RunWithArgsModal: React.FC<RunWithArgsModalProps> = ({
   const [selectedProfile, setSelectedProfile] = useState<RunProfile | null>(null)
   const [profiles, setProfiles] = useState<RunProfile[]>([])
   const [args, setArgs] = useState('')
+  const [envText, setEnvText] = useState('')
   const [previewCommand, setPreviewCommand] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -40,6 +41,11 @@ export const RunWithArgsModal: React.FC<RunWithArgsModalProps> = ({
       }
       setSelectedProfile(target || null)
       setArgs(target?.args?.join(' ') || '')
+      setEnvText(
+        target?.env
+          ? Object.entries(target.env).map(([k, v]) => `${k}=${v}`).join('\n')
+          : ''
+      )
 
       setTimeout(() => {
         inputRef.current?.focus()
@@ -79,7 +85,16 @@ export const RunWithArgsModal: React.FC<RunWithArgsModalProps> = ({
 
   const handleRun = () => {
     if (!selectedProfile) return
-    onExecute(selectedProfile, args)
+    const customEnv: Record<string, string> = {}
+    for (const line of envText.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const eq = trimmed.indexOf('=')
+      if (eq > 0) {
+        customEnv[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim()
+      }
+    }
+    onExecute(selectedProfile, args, Object.keys(customEnv).length > 0 ? customEnv : undefined)
     onClose()
   }
 
@@ -135,7 +150,15 @@ export const RunWithArgsModal: React.FC<RunWithArgsModalProps> = ({
                   value={selectedProfile?.id || ''}
                   onChange={(e) => {
                     const found = profiles.find((p) => p.id === e.target.value)
-                    if (found) setSelectedProfile(found)
+                    if (found) {
+                      setSelectedProfile(found)
+                      setArgs(found.args?.join(' ') || '')
+                      setEnvText(
+                        found.env
+                          ? Object.entries(found.env).map(([k, v]) => `${k}=${v}`).join('\n')
+                          : ''
+                      )
+                    }
                   }}
                 >
                   {profiles.map((p) => (
@@ -160,6 +183,20 @@ export const RunWithArgsModal: React.FC<RunWithArgsModalProps> = ({
                     placeholder="e.g. --port 8080 --verbose --debug arg1 arg2"
                   />
                 </div>
+              </div>
+
+              {/* Environment Variables Input */}
+              <div className="form-group">
+                <label className="field-label">Environment Variables (KEY=VALUE, one per line):</label>
+                <textarea
+                  className="args-input"
+                  rows={2}
+                  value={envText}
+                  onChange={(e) => setEnvText(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder="NODE_ENV=development&#10;DEBUG=app:*"
+                  style={{ width: '100%', padding: '6px 10px', fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }}
+                />
               </div>
 
               {/* Command Preview */}

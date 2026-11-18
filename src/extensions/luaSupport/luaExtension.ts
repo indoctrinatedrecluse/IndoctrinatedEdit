@@ -25,11 +25,9 @@ export const luaExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerLuaExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   try {
     monacoInstance.languages.registerCompletionItemProvider('lua', {

@@ -46,11 +46,9 @@ export const jupyterExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerJupyterExtension(monacoInstance?: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   try {
     const registerForLang = (langId: string) => {

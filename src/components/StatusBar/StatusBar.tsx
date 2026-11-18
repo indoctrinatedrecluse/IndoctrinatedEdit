@@ -1,6 +1,10 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { GitBranch, AlertCircle, Check, Palette, Sparkles, Terminal, ArrowUpCircle } from 'lucide-react'
 import { AntigravityIcon } from '../Brand/AntigravityIcon'
+import { antigravityAcpService } from '../../services/antigravityAcpService'
+import { extensionRegistry } from '../../extensions/extensionRegistry'
+import { McpService } from '../../services/mcpService'
+import { formatterService } from '../../services/formatterService'
 
 interface StatusBarProps {
   line: number
@@ -43,6 +47,49 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   onTerminalClick,
   onProblemsClick,
 }) => {
+  const [acpState, setAcpState] = useState(() => antigravityAcpService.getStatus())
+  const [activeExtCount, setActiveExtCount] = useState(
+    () => extensionRegistry.getAll().filter((e) => e.status !== 'Disabled').length
+  )
+  const [mcpConnectedCount, setMcpConnectedCount] = useState(
+    () => McpService.getServers().filter((s) => s.enabled && s.status === 'connected').length
+  )
+  const [liveIndent, setLiveIndent] = useState(() => {
+    const opts = formatterService.getOptions()
+    return opts.useTabs ? `Tabs: ${opts.tabWidth}` : `Spaces: ${opts.tabWidth}`
+  })
+
+  useEffect(() => {
+    const unsubAcp = antigravityAcpService.onStatusChanged((st) => setAcpState(st))
+    const unsubExt = extensionRegistry.subscribe(() => {
+      setActiveExtCount(extensionRegistry.getAll().filter((e) => e.status !== 'Disabled').length)
+    })
+    const unsubMcp = McpService.onServersChanged(() => {
+      setMcpConnectedCount(McpService.getServers().filter((s) => s.enabled && s.status === 'connected').length)
+    })
+    const syncIndent = () => {
+      const opts = formatterService.getOptions()
+      setLiveIndent(opts.useTabs ? `Tabs: ${opts.tabWidth}` : `Spaces: ${opts.tabWidth}`)
+    }
+    window.addEventListener('storage', syncIndent)
+    return () => {
+      unsubAcp()
+      unsubExt()
+      unsubMcp()
+      window.removeEventListener('storage', syncIndent)
+    }
+  }, [])
+
+  const acpLabel = antigravityUser
+    ? `Antigravity: ${antigravityUser}`
+    : acpState.state === 'ready'
+    ? `Antigravity: ${acpState.agentInfo?.name || 'Connected'}`
+    : acpState.state === 'connecting' || acpState.state === 'detecting' || acpState.state === 'authenticating'
+    ? 'Antigravity: Connecting...'
+    : 'Antigravity: Disconnected'
+
+  const effectiveIndent = indentation && indentation !== 'Spaces: 2' ? indentation : liveIndent
+
   return (
     <footer className="status-bar">
       {/* Left segmented glass chips */}
@@ -59,10 +106,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <button
           className="status-chip antigravity-chip glass-interactive"
           onClick={onAntigravityClick}
-          title="Google Antigravity SDK: Connected with Personal Account (Click to open Studio)"
+          title={`Google Antigravity ACP (${acpState.state}) — Click to open Studio`}
         >
           <AntigravityIcon size={12} className="antigravity-status-icon" />
-          <span className="antigravity-status-label">{antigravityUser ? `Antigravity: ${antigravityUser}` : 'Antigravity: Personal'}</span>
+          <span className="antigravity-status-label">{acpLabel}</span>
         </button>
 
         <button
@@ -88,10 +135,13 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span>Terminal</span>
         </button>
 
-        <div className="status-chip microservice-chip" title="Extension Microservices Running">
+        <div
+          className="status-chip microservice-chip"
+          title={`${activeExtCount} active extensions · ${mcpConnectedCount} connected MCP servers`}
+        >
           <span className="pulsing-orb" />
           <Sparkles size={11} className="pulse-icon" />
-          <span>Microservices: Active</span>
+          <span>{activeExtCount} Ext · {mcpConnectedCount} MCP</span>
         </div>
       </div>
 
@@ -113,7 +163,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         </div>
 
         <div className="status-chip encoding-chip" title="Indentation & Encoding">
-          <span>{indentation}</span>
+          <span>{effectiveIndent}</span>
           <span className="separator">•</span>
           <span>{encoding}</span>
         </div>

@@ -64,11 +64,9 @@ export const frontendExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerFrontendMegaPackExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
-  if (isRegistered || !monacoInstance) return []
-  isRegistered = true
+  if (!monacoInstance) return []
 
   const disposables: monaco.IDisposable[] = []
   const langEntries = frontendExtensionManifest.languages || []

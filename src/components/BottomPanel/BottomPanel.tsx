@@ -6,10 +6,12 @@ import {
   X,
   Maximize2,
   Minimize2,
+  Trash2,
 } from 'lucide-react'
 import { TerminalView } from '../Terminal/TerminalView'
 import { ProblemsView } from '../Problems/ProblemsView'
 import { diagnosticsService } from '../../services/diagnosticsService'
+import { outputChannelService, OutputChannelName, OutputLogEntry } from '../../services/outputChannelService'
 
 export type BottomPanelTab = 'terminal' | 'problems' | 'output'
 
@@ -36,6 +38,8 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({
   const [panelHeight, setPanelHeight] = useState<number>(260)
   const [isMaximized, setIsMaximized] = useState<boolean>(false)
   const [problemCount, setProblemCount] = useState<number>(() => diagnosticsService.getCounts().total)
+  const [outputChannel, setOutputChannel] = useState<OutputChannelName | 'All'>('All')
+  const [outputEntries, setOutputEntries] = useState<OutputLogEntry[]>(() => outputChannelService.getEntries('All'))
   const isDraggingRef = useRef<boolean>(false)
   const startYRef = useRef<number>(0)
   const startHeightRef = useRef<number>(260)
@@ -45,6 +49,13 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({
       setProblemCount(diagnosticsService.getCounts().total)
     })
   }, [])
+
+  useEffect(() => {
+    setOutputEntries(outputChannelService.getEntries(outputChannel))
+    return outputChannelService.subscribe(() => {
+      setOutputEntries(outputChannelService.getEntries(outputChannel))
+    })
+  }, [outputChannel])
 
   useEffect(() => {
     setActiveTab(defaultTab)
@@ -156,11 +167,46 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({
 
         {activeTab === 'output' && (
           <div className="output-log-view">
-            <div className="output-header">[IndoctrinatedEdit Core Engine Output]</div>
-            <div className="output-line info">[info] Liquid Glass Specular Render Engine active.</div>
-            <div className="output-line info">[info] Monaco 0.52.2 workspace initialized.</div>
-            <div className="output-line info">[info] Microservice sandboxes and extension hosts online.</div>
-            <div className="output-line success">[ready] All language providers and toolchain detectors operational.</div>
+            <div className="output-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span>[IndoctrinatedEdit Output]</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <select
+                  value={outputChannel}
+                  onChange={(e) => setOutputChannel(e.target.value as OutputChannelName | 'All')}
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    color: '#E2E8F0',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    padding: '2px 6px',
+                  }}
+                >
+                  <option value="All">All Channels</option>
+                  {outputChannelService.getChannels().map((ch) => (
+                    <option key={ch} value={ch}>{ch}</option>
+                  ))}
+                </select>
+                <button
+                  className="control-icon-btn glass-interactive"
+                  onClick={() => outputChannelService.clear(outputChannel)}
+                  title="Clear Output"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+            {outputEntries.length === 0 ? (
+              <div className="output-line info">[empty] No output entries in selected channel.</div>
+            ) : (
+              outputEntries.map((entry) => (
+                <div key={entry.id} className={`output-line ${entry.level}`}>
+                  <span style={{ opacity: 0.55, marginRight: 6 }}>[{entry.timestamp}]</span>
+                  <span style={{ opacity: 0.75, marginRight: 6 }}>[{entry.channel}]</span>
+                  <span>{entry.message}</span>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

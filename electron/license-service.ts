@@ -750,11 +750,24 @@ export class LicenseService {
           return { valid: false, message: data.message || 'License validation failed on server.', info }
         }
       }
+
+      if (response.status === 401 || response.status === 403) {
+        let serverMsg = 'License has been revoked or rejected by server.'
+        try {
+          const errData = await response.json()
+          if (errData?.message) serverMsg = errData.message
+        } catch {}
+        return {
+          valid: false,
+          message: serverMsg,
+          info: { ...info, status: 'revoked', isValid: false },
+        }
+      }
+
+      return { valid: true, message: `Server returned HTTP ${response.status}; using local grace cache.`, info }
     } catch {
       return { valid: true, message: 'License verified locally (offline grace mode).', info }
     }
-
-    return { valid: true, info }
   }
 
   /**

@@ -41,11 +41,9 @@ export const remoteProtocolExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerRemoteProtocolExtension(monacoInstance?: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   try {
     monacoInstance.languages.registerCompletionItemProvider('sshconfig', {

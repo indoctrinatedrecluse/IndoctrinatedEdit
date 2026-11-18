@@ -49,6 +49,7 @@ import {
   AcpToolCallUpdate,
 } from '@sdk/types'
 import { SelectionInfo } from '../Editor/EditorHost'
+import { escapeHtml, sanitizeHtml } from '../../utils/security'
 import './AntigravityStudioView.css'
 
 export interface AntigravityStudioViewProps {
@@ -73,6 +74,26 @@ interface StudioMessage {
   timestamp: number
   isStreaming?: boolean
   stopReason?: string
+}
+
+const persistedAcpUiState: {
+  messages: StudioMessage[]
+  planEntries: AcpPlanEntry[]
+  slashCommands: AcpSlashCommand[]
+  pendingPermissions: AcpPermissionRequest[]
+} = {
+  messages: [],
+  planEntries: [],
+  slashCommands: [],
+  pendingPermissions: [],
+}
+
+function renderSafeInlineMarkdown(line: string): string {
+  const html = escapeHtml(line)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code class="ag-inline-code">$1</code>')
+  return sanitizeHtml(html)
 }
 
 const getBaseName = (p?: string): string => {
@@ -102,15 +123,30 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
   const [workspaceRules, setWorkspaceRules] = useState<{ fileName: string; content: string } | null>(null)
   const rulesInjectedRef = useRef(false)
 
-  // Chat & Agent State
-  const [messages, setMessages] = useState<StudioMessage[]>([])
+  // Chat & Agent State (persisted across dock tab switches via module store)
+  const [messages, setMessages] = useState<StudioMessage[]>(() => persistedAcpUiState.messages)
   const [inputPrompt, setInputPrompt] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [attachMode, setAttachMode] = useState<'none' | 'file' | 'selection'>('none')
-  const [planEntries, setPlanEntries] = useState<AcpPlanEntry[]>([])
+  const [planEntries, setPlanEntries] = useState<AcpPlanEntry[]>(() => persistedAcpUiState.planEntries)
   const [planExpanded, setPlanExpanded] = useState(true)
-  const [slashCommands, setSlashCommands] = useState<AcpSlashCommand[]>([])
-  const [pendingPermissions, setPendingPermissions] = useState<AcpPermissionRequest[]>([])
+  const [slashCommands, setSlashCommands] = useState<AcpSlashCommand[]>(() => persistedAcpUiState.slashCommands)
+  const [slashSelectedIdx, setSlashSelectedIdx] = useState(0)
+  const [pendingPermissions, setPendingPermissions] = useState<AcpPermissionRequest[]>(() => persistedAcpUiState.pendingPermissions)
+  const [expandedDiffKeys, setExpandedDiffKeys] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    persistedAcpUiState.messages = messages
+  }, [messages])
+  useEffect(() => {
+    persistedAcpUiState.planEntries = planEntries
+  }, [planEntries])
+  useEffect(() => {
+    persistedAcpUiState.slashCommands = slashCommands
+  }, [slashCommands])
+  useEffect(() => {
+    persistedAcpUiState.pendingPermissions = pendingPermissions
+  }, [pendingPermissions])
 
   // Checkpoints / Rollback State
   const [checkpoints, setCheckpoints] = useState<AiCheckpoint[]>([])
@@ -518,8 +554,13 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
       <div className="ag-tool-details">
         {blocks.map((block, bIdx) => {
           if (block.type === 'diff' && (block.oldText !== undefined || block.newText !== undefined)) {
-            const oldLines = (block.oldText || '').split('\n').slice(0, 30)
-            const newLines = (block.newText || '').split('\n').slice(0, 30)
+            const diffKey = `${tc.toolCallId}-${bIdx}`
+            const isFull = Boolean(expandedDiffKeys[diffKey])
+            const allOld = (block.oldText || '').split('\n')
+            const allNew = (block.newText || '').split('\n')
+            const oldLines = isFull ? allOld : allOld.slice(0, 30)
+            const newLines = isFull ? allNew : allNew.slice(0, 30)
+            const truncated = !isFull && (allOld.length > 30 || allNew.length > 30)
             return (
               <div key={bIdx} className="ag-inline-diff custom-scrollbar">
                 {block.path && <div className="ag-diff-path">{getBaseName(block.path)}</div>}
@@ -535,6 +576,24 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
                       + {l}
                     </div>
                   ))}
+                {truncated && (
+                  <button
+                    className="ag-diff-expand-btn"
+                    style={{
+                      marginTop: 4,
+                      background: 'rgba(10,132,255,0.14)',
+                      border: '1px solid rgba(10,132,255,0.35)',
+                      color: '#7DD3FC',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      fontSize: 10,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setExpandedDiffKeys((prev) => ({ ...prev, [diffKey]: true }))}
+                  >
+                    Show full diff ({allOld.length + allNew.length} lines)
+                  </button>
+                )}
               </div>
             )
           }
@@ -625,10 +684,10 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
 
           return (
             <div key={idx} className="ag-text-segment">
-              {seg.split('\n').map((line, lIdx) => (
+              {seg.split('\n').map((line, lIdx, arr) => (
                 <React.Fragment key={lIdx}>
-                  {line}
-                  {lIdx < seg.split('\n').length - 1 && <br />}
+                  <span dangerouslySetInnerHTML={{ __html: renderSafeInlineMarkdown(line) }} />
+                  {lIdx < arr.length - 1 && <br />}
                 </React.Fragment>
               ))}
             </div>
@@ -1228,12 +1287,14 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
             {/* ACP Slash Command Autocomplete Popover */}
             {matchingSlashCommands.length > 0 && (
               <div className="ag-slash-popup glass-card">
-                {matchingSlashCommands.map((cmd) => (
+                {matchingSlashCommands.map((cmd, idx) => (
                   <button
                     key={cmd.name}
-                    className="ag-slash-item glass-interactive"
+                    className={`ag-slash-item glass-interactive ${idx === slashSelectedIdx ? 'selected' : ''}`}
+                    style={idx === slashSelectedIdx ? { background: 'rgba(10, 132, 255, 0.22)' } : undefined}
                     onClick={() => {
                       setInputPrompt(`/${cmd.name} `)
+                      setSlashSelectedIdx(0)
                       textareaRef.current?.focus()
                     }}
                   >
@@ -1277,6 +1338,27 @@ export const AntigravityStudioView: React.FC<AntigravityStudioViewProps> = ({
                 value={inputPrompt}
                 onChange={(e) => setInputPrompt(e.target.value)}
                 onKeyDown={(e) => {
+                  if (matchingSlashCommands.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      setSlashSelectedIdx((prev) => (prev + 1) % matchingSlashCommands.length)
+                      return
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setSlashSelectedIdx((prev) => (prev - 1 + matchingSlashCommands.length) % matchingSlashCommands.length)
+                      return
+                    }
+                    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                      e.preventDefault()
+                      const chosen = matchingSlashCommands[slashSelectedIdx] || matchingSlashCommands[0]
+                      if (chosen) {
+                        setInputPrompt(`/${chosen.name} `)
+                        setSlashSelectedIdx(0)
+                      }
+                      return
+                    }
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     void handleSendPrompt()

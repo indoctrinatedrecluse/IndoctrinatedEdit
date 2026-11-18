@@ -208,6 +208,20 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return
       }
 
+      // Shift+Alt+F or Alt+Shift+F -> Format Document (must run BEFORE !ctrlOrCmd guard!)
+      if (key === 'f' && e.shiftKey && e.altKey && !ctrlOrCmd) {
+        e.preventDefault()
+        handlers.onFormatDocument?.()
+        return
+      }
+
+      // F11 -> Toggle Fullscreen
+      if (e.key === 'F11' && !ctrlOrCmd && !e.altKey) {
+        e.preventDefault()
+        window.electronAPI?.toggleFullscreen?.()
+        return
+      }
+
       if (!ctrlOrCmd) return
 
       // Ctrl+Alt+Enter -> Replace All

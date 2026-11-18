@@ -69,11 +69,9 @@ export const logicFormalExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerLogicFormalExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const registerForLang = (lang: string, snippetsList: typeof PROLOG_FOPL_SNIPPETS) => {
     try {

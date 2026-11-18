@@ -57,11 +57,9 @@ export const antigravityExtensionManifest: ExtensionManifest = {
   snippetsCount: antigravitySnippets.length,
 }
 
-let isRegistered = false
 
 export function registerAntigravityExtension(monacoInstance?: typeof monaco): void {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Monaco completion items for Python Antigravity SDK and AGY Agents
   try {

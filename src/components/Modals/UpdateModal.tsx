@@ -35,6 +35,14 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ isOpen, onClose }) => 
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [config, setConfig] = useState(rendererUpdateService.getConfig())
   const [showSettings, setShowSettings] = useState(false)
+  const [appVersion, setAppVersion] = useState('5.3.0')
+  const [downloadVerified, setDownloadVerified] = useState(false)
+
+  useEffect(() => {
+    window.electronAPI?.getAppVersion?.().then((v) => {
+      if (v) setAppVersion(v)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const updateLocalState = () => {
@@ -42,6 +50,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ isOpen, onClose }) => 
       setUpdateInfo(rendererUpdateService.getUpdateInfo())
       setProgress(rendererUpdateService.getDownloadProgress())
       setConfig(rendererUpdateService.getConfig())
+      setDownloadVerified(rendererUpdateService.isDownloadVerified())
     }
 
     updateLocalState()
@@ -196,7 +205,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ isOpen, onClose }) => 
                     <CheckCircle2 size={32} />
                   </div>
                   <h4>IndoctrinatedEdit is up to date</h4>
-                  <div className="version-pill current">Version {updateInfo?.currentVersion || '4.5.0'} ({config.channel})</div>
+                  <div className="version-pill current">Version {updateInfo?.currentVersion || appVersion} ({config.channel})</div>
                   <p className="state-desc">
                     You have the latest release with all the newest developer GUI studios and enhancements.
                   </p>
@@ -233,9 +242,11 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ isOpen, onClose }) => 
                           {((updateInfo.matchedAsset.asset.size || 0) / (1024 * 1024)).toFixed(1)} MB &bull; {updateInfo.matchedAsset.asset.name}
                         </span>
                       </div>
-                      <div className="asset-sha-badge">
-                        <ShieldCheck size={13} /> SHA-256 Verified
-                      </div>
+                      {status === 'downloaded' && downloadVerified && (
+                        <div className="asset-sha-badge">
+                          <ShieldCheck size={13} /> SHA-256 Verified
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -356,7 +367,13 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ isOpen, onClose }) => 
 
                 {status === 'downloaded' && (
                   <>
-                    <button className="update-btn secondary" onClick={onClose}>
+                    <button
+                      className="update-btn secondary"
+                      onClick={async () => {
+                        await rendererUpdateService.scheduleInstallOnExit()
+                        onClose()
+                      }}
+                    >
                       Install on Exit
                     </button>
                     <button className="update-btn primary success" onClick={handleInstall}>

@@ -31,11 +31,9 @@ export const reactExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerReactExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {
     const word = model.getWordUntilPosition(position)

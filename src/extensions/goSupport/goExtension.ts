@@ -26,11 +26,9 @@ export const goExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerGoExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Register completion items for Go
   monacoInstance.languages.registerCompletionItemProvider('go', {

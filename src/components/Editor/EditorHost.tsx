@@ -6,6 +6,7 @@ import { extensionRegistry } from '../../extensions/extensionRegistry'
 import { debugService } from '../../services/debugService'
 import { formatterService } from '../../services/formatterService'
 import { lspService, LspLocation, LspRenameResult } from '../../services/lspService'
+import { editorPreferencesService, EditorPreferences } from '../../services/editorPreferencesService'
 import { FindReplaceWidget, FindOptions } from './FindReplaceWidget'
 import { BreadcrumbsBar } from './BreadcrumbsBar'
 import { RenameModal } from './RenameModal'
@@ -65,6 +66,7 @@ interface EditorHostProps {
   language: string
   theme: ThemeDefinition
   activeFilePath?: string
+  workspacePath?: string
   showBreadcrumbs?: boolean
   onChange?: (value: string | undefined) => void
   onCursorChange?: (line: number, column: number) => void
@@ -80,6 +82,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
   language,
   theme,
   activeFilePath = 'welcome.ts',
+  workspacePath,
   showBreadcrumbs = true,
   onChange,
   onCursorChange,
@@ -97,6 +100,19 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
   // Cursor Line for Breadcrumbs
   const [currentCursorLine, setCurrentCursorLine] = useState(1)
+  const [editorPrefs, setEditorPrefs] = useState<EditorPreferences>(() =>
+    editorPreferencesService.getPreferences()
+  )
+
+  useEffect(() => {
+    return editorPreferencesService.subscribe((next) => {
+      setEditorPrefs(next)
+      editorRef.current?.updateOptions({
+        cursorSmoothCaretAnimation: next.smoothCaretAnimation ? 'on' : 'off',
+        minimap: { enabled: next.minimapEnabled },
+      })
+    })
+  }, [])
 
   // Auto-relayout on container resize / split pane drag
   useEffect(() => {
@@ -418,57 +434,25 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
       const model = editor.getModel()
       if (!model) return []
 
-      const symbols: DocumentSymbol[] = []
-      const lineCount = model.getLineCount()
-
-      for (let i = 1; i <= lineCount; i++) {
-        const line = model.getLineContent(i)
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) continue
-
-        // Markdown headings
-        const mdHeadingMatch = trimmed.match(/^(#{1,6})\s+(.+)/)
-        if (mdHeadingMatch) {
-          symbols.push({
-            name: mdHeadingMatch[2],
-            kind: 'heading',
-            line: i,
-            detail: `Heading (H${mdHeadingMatch[1].length})`,
-          })
-          continue
-        }
-
-        // Classes / Structs / Interfaces / Types
-        const classMatch = trimmed.match(/(?:export\s+)?(?:abstract\s+)?(?:class|struct|interface|trait|enum)\s+([A-Za-z0-9_$]+)/)
-        if (classMatch) {
-          const kind = trimmed.includes('interface')
-            ? 'interface'
-            : trimmed.includes('class')
-            ? 'class'
-            : 'type'
-          symbols.push({
-            name: classMatch[1],
-            kind,
-            line: i,
-            detail: trimmed.slice(0, 50),
-          })
-          continue
-        }
-
-        // Type aliases
-        const typeMatch = trimmed.match(/(?:export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/)
-        if (typeMatch) {
-          symbols.push({
-            name: typeMatch[1],
-            kind: 'type',
-            line: i,
-            detail: 'Type Alias',
-          })
-          continue
-        }
+      const lspSymbols = lspService.extractDocumentSymbols(activeFilePath, model.getValue())
+      const kindMap: Record<string, DocumentSymbol['kind']> = {
+        class: 'class',
+        struct: 'class',
+        interface: 'interface',
+        function: 'function',
+        method: 'method',
+        variable: 'variable',
+        constant: 'variable',
+        heading: 'heading',
+        type: 'type',
+        enum: 'type',
       }
-
-      return symbols
+      return lspSymbols.map((s) => ({
+        name: s.name,
+        kind: kindMap[s.kind] || 'function',
+        line: s.lineNumber,
+        detail: s.containerName || s.kind,
+      }))
     },
     openFind: (initialText?: string) => {
       const editor = editorRef.current
@@ -866,6 +850,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
         filePath={activeFilePath}
         fileContent={content}
         cursorLine={currentCursorLine}
+        workspacePath={workspacePath}
       />
 
       {/* Floating Liquid Glass Find & Replace Suite Overlay */}
@@ -981,7 +966,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
             lineHeight: 22,
             fontLigatures: true,
             cursorBlinking: 'smooth',
-            cursorSmoothCaretAnimation: 'on',
+            cursorSmoothCaretAnimation: editorPrefs.smoothCaretAnimation ? 'on' : 'off',
             smoothScrolling: true,
             glyphMargin: true, // Enable Gutter Glyph Margin for Breakpoints & Execution Arrow
             multiCursorModifier: 'alt', // Alt+Click inserts multiple cursors
@@ -993,7 +978,7 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
             },
             // Polish the code preview (minimap) on the right
             minimap: {
-              enabled: true,
+              enabled: editorPrefs.minimapEnabled,
               renderCharacters: true,
               maxColumn: 90,
               scale: 1,

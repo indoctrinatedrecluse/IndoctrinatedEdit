@@ -98,11 +98,9 @@ export const textSupportManifest: ExtensionManifest = {
 }
 
 // Track if already registered to avoid duplicated Monaco providers
-let isRegistered = false
 
 export function registerTextSupportExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   textSupportManifest.languages?.forEach((lang) => {
     // 1. Register language if not already known to Monaco

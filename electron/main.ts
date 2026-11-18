@@ -176,6 +176,7 @@ function createWindow() {
   // Safety fallback: reveal window after 8s if renderer hangs
   const safetyTimeout = setTimeout(showMainWindow, 8000)
 
+  ipcMain.removeHandler('app:ready')
   ipcMain.handle('app:ready', () => {
     clearTimeout(safetyTimeout)
     showMainWindow()
@@ -225,13 +226,27 @@ ipcMain.handle('window:maximize', (event) => {
   }
 })
 
-ipcMain.handle('window:close', (event) => {
-  const target = BrowserWindow.fromWebContents(event.sender) || win
+function disposeAllSubsystems() {
   try {
     terminalService.killAll()
-  } catch (e) {
-    console.warn('[Main] Error killing terminals on window close:', e)
-  }
+  } catch {}
+  try {
+    mcpClientManager.disposeAll()
+  } catch {}
+  try {
+    infraSocketManager.disposeAll()
+  } catch {}
+  try {
+    void antigravityAcpClient.disconnect()
+  } catch {}
+  try {
+    updateService.triggerPendingInstallOnQuit()
+  } catch {}
+}
+
+ipcMain.handle('window:close', (event) => {
+  const target = BrowserWindow.fromWebContents(event.sender) || win
+  disposeAllSubsystems()
   if (target && !target.isDestroyed()) {
     target.destroy()
   }
@@ -243,6 +258,28 @@ ipcMain.handle('window:close', (event) => {
 ipcMain.handle('window:isMaximized', (event) => {
   const target = BrowserWindow.fromWebContents(event.sender) || win
   return target && !target.isDestroyed() ? target.isMaximized() : false
+})
+
+ipcMain.handle('window:setZoom', (event, action: 'in' | 'out' | 'reset') => {
+  const target = BrowserWindow.fromWebContents(event.sender) || win
+  if (!target || target.isDestroyed()) return 0
+  const wc = target.webContents
+  const cur = wc.getZoomLevel()
+  const next = action === 'reset' ? 0 : action === 'in' ? Math.min(cur + 0.5, 4) : Math.max(cur - 0.5, -4)
+  wc.setZoomLevel(next)
+  return next
+})
+
+ipcMain.handle('window:toggleFullscreen', (event) => {
+  const target = BrowserWindow.fromWebContents(event.sender) || win
+  if (!target || target.isDestroyed()) return false
+  const next = !target.isFullScreen()
+  target.setFullScreen(next)
+  return next
+})
+
+ipcMain.handle('app:getVersion', () => {
+  return app.getVersion()
 })
 
 // IPC Handlers for native file system dialogs and operations
@@ -513,27 +550,15 @@ app.on('second-instance', () => {
 })
 
 app.on('before-quit', () => {
-  try {
-    terminalService.killAll()
-    mcpClientManager.disposeAll()
-    infraSocketManager.disposeAll()
-    void antigravityAcpClient.disconnect()
-  } catch {}
+  disposeAllSubsystems()
 })
 
 app.on('will-quit', () => {
-  try {
-    terminalService.killAll()
-    mcpClientManager.disposeAll()
-    infraSocketManager.disposeAll()
-    void antigravityAcpClient.disconnect()
-  } catch {}
+  disposeAllSubsystems()
 })
 
 app.on('window-all-closed', () => {
-  try {
-    terminalService.killAll()
-  } catch {}
+  disposeAllSubsystems()
   if (process.platform !== 'darwin') {
     app.exit(0)
   }

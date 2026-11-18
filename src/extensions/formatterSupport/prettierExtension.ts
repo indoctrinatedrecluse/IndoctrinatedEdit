@@ -56,11 +56,8 @@ const SUPPORTED_LANGUAGES = [
   'xml',
 ]
 
-let isRegistered = false
 
 export function registerPrettierExtension(monacoInstance: typeof monaco): void {
-  if (isRegistered) return
-  isRegistered = true
 
   for (const lang of SUPPORTED_LANGUAGES) {
     try {

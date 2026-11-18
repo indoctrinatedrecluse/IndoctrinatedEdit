@@ -26,11 +26,9 @@ export const flutterExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerFlutterExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   monacoInstance.languages.registerCompletionItemProvider('dart', {
     provideCompletionItems: (model, position) => {

@@ -105,11 +105,9 @@ export const backendExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerBackendMegaPackExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const safeRegisterCompletion = (
     lang: string,

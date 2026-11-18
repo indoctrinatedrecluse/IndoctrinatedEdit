@@ -26,11 +26,9 @@ export const phpExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerPhpExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   monacoInstance.languages.registerCompletionItemProvider('php', {
     provideCompletionItems: (model, position) => {

@@ -31,11 +31,9 @@ export const angularExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerAngularExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {
     const word = model.getWordUntilPosition(position)

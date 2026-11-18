@@ -55,6 +55,7 @@ import { AntigravityIcon } from '../Brand/AntigravityIcon'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { LockedExtensionView } from '../Common/LockedExtensionView'
 import { licenseService, LicenseInfo } from '../../services/licenseService'
+import { extensionRegistry } from '../../extensions/extensionRegistry'
 
 export type RightDockTab =
   | 'jupyter'
@@ -92,11 +93,15 @@ interface RightAuxiliaryPaneProps {
   onOpenLicense?: () => void
   onCreateNotebook?: (title: string, templateType?: string) => void
   // AI / Preview Panel Props
+  activeFilePath?: string
   activeFileName?: string
   activeFileContent?: string
   currentSelection: SelectionInfo | null
   onInsertAtCursor?: (code: string) => void
   onReplaceSelection?: (code: string) => void
+  onReplaceActiveFileContent?: (newContent: string) => void
+  pendingAiPrompt?: { id: number; prompt: string; attachSelection?: boolean; attachFile?: boolean } | null
+  onPendingAiPromptConsumed?: () => void
   workspaceRoot?: string
   openFiles?: Array<{ path: string; name: string; content?: string }>
   onOpenFile?: (filePath: string, line?: number, column?: number) => void
@@ -110,22 +115,64 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
   onClose,
   onOpenLicense,
   onCreateNotebook,
+  activeFilePath: _activeFilePath,
   activeFileName = 'untitled.ts',
   activeFileContent = '',
   currentSelection,
   onInsertAtCursor,
   onReplaceSelection,
+  onReplaceActiveFileContent,
+  pendingAiPrompt,
+  onPendingAiPromptConsumed,
   workspaceRoot,
   openFiles,
   onOpenFile,
   onApplyFileEdit,
 }) => {
   const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null)
+  const [, setExtTick] = useState(0)
 
   useEffect(() => {
     licenseService.getInfo().then(setLicenseInfo)
-    return licenseService.subscribe(setLicenseInfo)
+    const unsubLic = licenseService.subscribe(setLicenseInfo)
+    const unsubExt = extensionRegistry.subscribe(() => setExtTick((t) => t + 1))
+    return () => {
+      unsubLic()
+      unsubExt()
+    }
   }, [])
+
+  const TAB_EXTENSION_MAP: Partial<Record<RightDockTab, string>> = {
+    jupyter: 'indoctrinated.ext.jupyter-studio',
+    remote: 'indoctrinated.ext.remote-protocol',
+    antigravity: 'indoctrinated.ext.antigravity',
+    database: 'indoctrinated.ext.database-studio',
+    rest: 'indoctrinated.ext.rest-client',
+    crypto: 'indoctrinated.ext.crypto-lab',
+    json: 'indoctrinated.ext.json-studio',
+    preview: 'indoctrinated.ext.live-preview',
+    docker: 'indoctrinated.ext.docker',
+    socket: 'indoctrinated.ext.websocket',
+    regex: 'indoctrinated.ext.regex-lab',
+    packages: 'indoctrinated.ext.package-manager',
+    tasks: 'indoctrinated.ext.task-runner',
+    diff: 'indoctrinated.ext.diff-studio',
+    hex: 'indoctrinated.ext.hex-inspector',
+    snippets: 'indoctrinated.ext.snippet-vault',
+    colors: 'indoctrinated.ext.color-studio',
+    ports: 'indoctrinated.ext.port-sentinel',
+    redis: 'indoctrinated.ext.redis-studio',
+    env: 'indoctrinated.ext.env-vault',
+    mocklab: 'indoctrinated.ext.mocklab',
+    graphql: 'indoctrinated.ext.graphql-studio',
+    diagram: 'indoctrinated.ext.diagram-studio',
+    bundle: 'indoctrinated.ext.bundle-analyzer',
+    svg: 'indoctrinated.ext.svg-studio',
+  }
+
+  const activeExtId = TAB_EXTENSION_MAP[activeTab]
+  const activeExtManifest = activeExtId ? extensionRegistry.get(activeExtId) : undefined
+  const isActiveTabDisabled = Boolean(activeExtId && activeExtManifest && !extensionRegistry.isEnabled(activeExtId))
 
   const isUnlocked = Boolean(licenseInfo && !licenseInfo.isTrial && licenseInfo.isValid)
 
@@ -394,6 +441,31 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
       {/* Pane Content Area */}
       <div className="right-dock-content">
+        {isActiveTabDisabled && activeExtId ? (
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, color: '#94A3B8', textAlign: 'center' }}>
+            <strong style={{ color: '#F8FAFC', fontSize: 14 }}>Extension Disabled</strong>
+            <p style={{ fontSize: 12, maxWidth: 280 }}>
+              {activeExtManifest?.name || activeExtId} is currently disabled in the Extensions Manager.
+            </p>
+            <button
+              className="glass-interactive"
+              onClick={() => extensionRegistry.enable(activeExtId)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                background: 'rgba(10, 132, 255, 0.2)',
+                border: '1px solid rgba(10, 132, 255, 0.45)',
+                color: '#7DD3FC',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Enable Extension
+            </button>
+          </div>
+        ) : (
+        <>
         {activeTab === 'jupyter' && (
           <JupyterStudioView onCreateNotebook={onCreateNotebook} />
         )}
@@ -496,7 +568,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
           <DiffStudioView
             activeFileName={activeFileName}
             activeFileContent={activeFileContent}
-            onApplyToEditor={onReplaceSelection}
+            onApplyToEditor={onReplaceActiveFileContent || onReplaceSelection}
           />
         )}
 
@@ -562,6 +634,8 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
               onApplyFileEdit={onApplyFileEdit}
               onInsertAtCursor={onInsertAtCursor}
               onReplaceSelection={onReplaceSelection}
+              pendingPrompt={pendingAiPrompt}
+              onPendingPromptConsumed={onPendingAiPromptConsumed}
             />
           ) : (
             <LockedExtensionView
@@ -585,6 +659,8 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
             isDocked={true}
             dockPosition="right"
           />
+        )}
+        </>
         )}
       </div>
 

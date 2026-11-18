@@ -1,19 +1,47 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { GitCommit, User, Clock } from 'lucide-react'
-import { gitAdvancedService } from '../../services/gitAdvancedService'
+import { gitAdvancedService, GitBlameLine } from '../../services/gitAdvancedService'
 
 interface InlineBlameLensProps {
   filePath: string
   fileContent: string
   cursorLine: number
+  workspacePath?: string
 }
 
 export const InlineBlameLens: React.FC<InlineBlameLensProps> = ({
   filePath,
   fileContent,
   cursorLine,
+  workspacePath,
 }) => {
-  const blameLines = gitAdvancedService.getBlameForFile(filePath, fileContent)
+  const [blameLines, setBlameLines] = useState<GitBlameLine[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    const hasElectronBlame = typeof window !== 'undefined' && Boolean((window as any).electronAPI?.git?.blame)
+    const isDiskFile = Boolean(filePath && (filePath.includes('/') || filePath.includes('\\')))
+    if (!hasElectronBlame || !isDiskFile) {
+      setBlameLines([])
+      return
+    }
+    gitAdvancedService
+      .getBlameForFileAsync(filePath, fileContent, workspacePath)
+      .then((lines) => {
+        if (!cancelled) {
+          // Only show real git blame entries (hide synthetic placeholder entries for untracked files)
+          const isReal = lines.length > 0 && lines[0].author !== 'Workspace Maintainer'
+          setBlameLines(isReal ? lines : [])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBlameLines([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [filePath, workspacePath])
+
   const currentBlame = blameLines[cursorLine - 1]
 
   if (!currentBlame) return null

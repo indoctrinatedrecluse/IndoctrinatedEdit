@@ -3,6 +3,7 @@ import {
   Columns2,
   Rows2,
   X,
+  Plus,
   FileCode,
 } from 'lucide-react'
 import { EditorHost, EditorHostHandle, SelectionInfo } from './EditorHost'
@@ -37,6 +38,7 @@ interface EditorGridProps {
   fileContents: Record<string, string>
   currentTheme: ThemeDefinition
   activeTabId: string
+  workspacePath?: string
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string, e?: React.MouseEvent) => void
   onNewTab: () => void
@@ -55,9 +57,10 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
   fileContents,
   currentTheme,
   activeTabId,
+  workspacePath,
   onSelectTab,
-  onCloseTab: _onCloseTab,
-  onNewTab: _onNewTab,
+  onCloseTab,
+  onNewTab,
   onEditorChange,
   onCursorChange,
   onSelectionChange,
@@ -88,16 +91,26 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
   const isDraggingSplitH = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Sync pane-1 with activeTabId and tabs when in single mode
+  // Sync panes with tabs & activeTabId (also reconcile stale tab IDs in split modes)
   useEffect(() => {
+    const validIds = new Set(tabs.map((t) => t.id))
+    const fallbackTabId = activeTabId || (tabs[0]?.id ?? '')
     if (layoutMode === 'single') {
       setPanes([
         {
           id: 'pane-1',
-          activeTabId: activeTabId || (tabs[0]?.id ?? ''),
+          activeTabId: fallbackTabId,
           tabIds: tabs.map((t) => t.id),
         },
       ])
+    } else {
+      setPanes((prev) =>
+        prev.map((p) => ({
+          ...p,
+          tabIds: tabs.map((t) => t.id),
+          activeTabId: validIds.has(p.activeTabId) ? p.activeTabId : fallbackTabId,
+        }))
+      )
     }
   }, [tabs, activeTabId, layoutMode])
 
@@ -283,6 +296,18 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
                     <FileCode size={11} className="chip-icon" />
                     <span className="chip-name">{tab.name}</span>
                     {tab.isDirty && <span className="chip-dirty" />}
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      title="Close Tab"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onCloseTab(tab.id, e)
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 4, opacity: 0.65 }}
+                    >
+                      <X size={10} />
+                    </span>
                   </button>
                 )
               })}
@@ -290,6 +315,16 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
 
             {/* Split Pane Control Actions */}
             <div className="pane-controls">
+              <button
+                className="pane-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onNewTab()
+                }}
+                title="New Untitled Tab"
+              >
+                <Plus size={12} />
+              </button>
               <button
                 className="pane-btn"
                 onClick={(e) => {
@@ -344,6 +379,7 @@ export const EditorGrid = forwardRef<EditorGridHandle, EditorGridProps>(({
                 editorHandlesRef.current[pane.id] = instance
               }}
               activeFilePath={currentTabId}
+              workspacePath={workspacePath}
               content={content}
               language={lang}
               theme={currentTheme}

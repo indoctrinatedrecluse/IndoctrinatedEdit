@@ -48,11 +48,9 @@ export const systemsGamingExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerSystemsGamingExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   const registerForLang = (lang: string, snippetsList: typeof ODIN_SNIPPETS) => {
     try {

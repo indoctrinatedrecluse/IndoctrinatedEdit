@@ -36,11 +36,9 @@ export const dotnetExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerDotnetExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Register completion items for C#
   monacoInstance.languages.registerCompletionItemProvider('csharp', {

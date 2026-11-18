@@ -37,11 +37,9 @@ export const nodeExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerNodeExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
-  if (isRegistered || !monacoInstance) return []
-  isRegistered = true
+  if (!monacoInstance) return []
 
   const disposables: monaco.IDisposable[] = []
   const makeProvider = (snippetsList: typeof nodeSnippets) => ({

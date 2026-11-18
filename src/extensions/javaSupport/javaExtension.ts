@@ -26,11 +26,9 @@ export const javaExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerJavaExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Register completion items for Java
   monacoInstance.languages.registerCompletionItemProvider('java', {

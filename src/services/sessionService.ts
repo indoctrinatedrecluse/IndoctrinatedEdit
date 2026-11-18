@@ -232,6 +232,29 @@ export class SessionService {
 
         // External file on disk: check if readable
         if (tab.id.includes('/') || tab.id.includes('\\')) {
+          const ext = tab.name.split('.').pop()?.toLowerCase() || ''
+          const binaryMime: Record<string, string> = {
+            pdf: 'application/pdf',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            doc: 'application/msword',
+          }
+          if (binaryMime[ext] && electron?.readFileBase64) {
+            try {
+              const b64 = await electron.readFileBase64(tab.id)
+              if (b64) {
+                restoredContents[tab.id] = `data:${binaryMime[ext]};base64,${b64}`
+                restoredTabs.push({
+                  id: tab.id,
+                  name: tab.name,
+                  language: tab.language || resolveLanguage(tab.name),
+                })
+                continue
+              }
+            } catch {
+              console.warn(`[SessionService] Silently dropped unreadable binary tab: ${tab.id}`)
+              continue
+            }
+          }
           if (electron?.readFile) {
             try {
               const content = await electron.readFile(tab.id)

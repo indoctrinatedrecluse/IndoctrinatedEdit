@@ -36,6 +36,8 @@ import {
   Lock,
   GitBranch,
   Search,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react'
 import { registeredThemes } from '@/themes/themeRegistry'
 import { extensionRegistry } from '../../extensions/extensionRegistry'
@@ -48,6 +50,7 @@ import { rendererUpdateService, UpdateStatus, UpdateInfo } from '../../services/
 import { GlobalSearchPanel } from './GlobalSearchPanel'
 import { TestExplorerPanel } from './TestExplorerPanel'
 import { formatterService, FormatterOptions } from '../../services/formatterService'
+import { editorPreferencesService, EditorPreferences } from '../../services/editorPreferencesService'
 
 export interface WorkspaceFileItem {
   name: string
@@ -92,8 +95,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(() => rendererUpdateService.getStatus())
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(() => rendererUpdateService.getUpdateInfo())
   const [formatOptions, setFormatOptions] = useState<FormatterOptions>(() => formatterService.getOptions())
+  const [editorPrefs, setEditorPrefs] = useState<EditorPreferences>(() => editorPreferencesService.getPreferences())
   const [extensionsList, setExtensionsList] = useState(() => extensionRegistry.getAll())
   const [extSearch, setExtSearch] = useState('')
+  const [appVersion, setAppVersion] = useState('5.3.0')
+  const [expandedDirs, setExpandedDirs] = useState<Record<string, WorkspaceFileItem[]>>({})
+
+  useEffect(() => {
+    window.electronAPI?.getAppVersion?.().then((v) => {
+      if (v) setAppVersion(v)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    // Reset expanded subdirectories when switching workspace root
+    setExpandedDirs({})
+  }, [workspacePath])
+
+  const handleToggleDirectory = async (dir: WorkspaceFileItem) => {
+    if (expandedDirs[dir.path]) {
+      setExpandedDirs((prev) => {
+        const next = { ...prev }
+        delete next[dir.path]
+        return next
+      })
+      return
+    }
+    if (window.electronAPI?.readFolder) {
+      try {
+        const res = await window.electronAPI.readFolder(dir.path)
+        if (res?.files) {
+          setExpandedDirs((prev) => ({
+            ...prev,
+            [dir.path]: res.files.map((f) => ({
+              name: f.name,
+              path: f.path,
+              isDirectory: f.isDirectory,
+            })),
+          }))
+        }
+      } catch {
+        // Ignore unreadable directories
+      }
+    }
+  }
 
   useEffect(() => {
     const unsubAi = AiService.onAutoApproveChanged((newSettings) => {
@@ -109,11 +154,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const unsubExt = extensionRegistry.subscribe(() => {
       setExtensionsList(extensionRegistry.getAll())
     })
+    const unsubPrefs = editorPreferencesService.subscribe((next) => {
+      setEditorPrefs(next)
+    })
     return () => {
       unsubAi()
       unsubMcp()
       unsubUpdate()
       unsubExt()
+      unsubPrefs()
     }
   }, [])
 
@@ -208,9 +257,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className="sidebar glass-panel">
       {activeView === 'debug' && (
         <DebugView
-          onOpenFileLocation={(filePath) =>
-            onOpenFile({ name: filePath.split(/[/\\]/).pop() || filePath, path: filePath, isDirectory: false })
-          }
+          onOpenFileLocation={(filePath, line) => {
+            if (onOpenFileAndNavigate && line) {
+              onOpenFileAndNavigate(filePath, line)
+            } else {
+              onOpenFile({ name: filePath.split(/[/\\]/).pop() || filePath, path: filePath, isDirectory: false })
+            }
+          }}
         />
       )}
 
@@ -251,27 +304,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           <div className="file-list">
-            {workspaceFiles.map((file) => {
-              const isSelected = activeFilePath === file.path || activeFilePath === file.name
-              const isNotebook = file.name.endsWith('.ipynb') || file.name.endsWith('.jupyter')
-              return (
-                <button
-                  key={file.path || file.name}
-                  className={`file-item glass-interactive ${isSelected ? 'active' : ''}`}
-                  onClick={() => onOpenFile(file)}
-                >
-                  {file.isDirectory ? (
-                    <Folder size={14} className="folder-icon" />
-                  ) : isNotebook ? (
-                    <BookOpen size={14} className="file-icon" color="#FF9F0A" />
-                  ) : (
-                    <FileCode size={14} className="file-icon" />
-                  )}
-                  <span className="file-name">{file.name}</span>
-                  {file.lang && <span className="file-lang">{file.lang}</span>}
-                </button>
-              )
-            })}
+            {(() => {
+              const renderEntries = (entries: WorkspaceFileItem[], depth = 0): React.ReactNode =>
+                entries.map((file) => {
+                  const isSelected = activeFilePath === file.path || activeFilePath === file.name
+                  const isNotebook = file.name.endsWith('.ipynb') || file.name.endsWith('.jupyter')
+                  const children = file.isDirectory ? expandedDirs[file.path] : undefined
+                  const isExpanded = Boolean(children)
+                  return (
+                    <React.Fragment key={file.path || `${depth}-${file.name}`}>
+                      <button
+                        className={`file-item glass-interactive ${isSelected ? 'active' : ''}`}
+                        style={{ paddingLeft: `${10 + depth * 14}px` }}
+                        onClick={() => (file.isDirectory ? void handleToggleDirectory(file) : onOpenFile(file))}
+                      >
+                        {file.isDirectory ? (
+                          <>
+                            {isExpanded ? <ChevronDown size={12} style={{ opacity: 0.7, flexShrink: 0 }} /> : <ChevronRight size={12} style={{ opacity: 0.7, flexShrink: 0 }} />}
+                            <Folder size={14} className="folder-icon" />
+                          </>
+                        ) : isNotebook ? (
+                          <BookOpen size={14} className="file-icon" color="#FF9F0A" />
+                        ) : (
+                          <FileCode size={14} className="file-icon" />
+                        )}
+                        <span className="file-name">{file.name}</span>
+                        {file.lang && <span className="file-lang">{file.lang}</span>}
+                      </button>
+                      {isExpanded && children && children.length > 0 && renderEntries(children, depth + 1)}
+                    </React.Fragment>
+                  )
+                })
+              return renderEntries(workspaceFiles, 0)
+            })()}
           </div>
         </div>
       )}
@@ -414,19 +479,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="settings-list">
             <label className="settings-row">
               <span>Hardware Glass Blur</span>
-              <input type="checkbox" defaultChecked className="glass-checkbox" />
+              <input
+                type="checkbox"
+                checked={editorPrefs.hardwareGlassBlur}
+                onChange={(e) => editorPreferencesService.updatePreferences({ hardwareGlassBlur: e.target.checked })}
+                className="glass-checkbox"
+              />
             </label>
             <label className="settings-row">
               <span>Specular Border Sheen</span>
-              <input type="checkbox" defaultChecked className="glass-checkbox" />
+              <input
+                type="checkbox"
+                checked={editorPrefs.specularBorderSheen}
+                onChange={(e) => editorPreferencesService.updatePreferences({ specularBorderSheen: e.target.checked })}
+                className="glass-checkbox"
+              />
             </label>
             <label className="settings-row">
               <span>Smooth Caret Animation</span>
-              <input type="checkbox" defaultChecked className="glass-checkbox" />
+              <input
+                type="checkbox"
+                checked={editorPrefs.smoothCaretAnimation}
+                onChange={(e) => editorPreferencesService.updatePreferences({ smoothCaretAnimation: e.target.checked })}
+                className="glass-checkbox"
+              />
             </label>
             <label className="settings-row">
               <span>Minimap Code Preview</span>
-              <input type="checkbox" defaultChecked className="glass-checkbox" />
+              <input
+                type="checkbox"
+                checked={editorPrefs.minimapEnabled}
+                onChange={(e) => editorPreferencesService.updatePreferences({ minimapEnabled: e.target.checked })}
+                className="glass-checkbox"
+              />
             </label>
           </div>
 
@@ -510,11 +595,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="settings-list">
             <div className="settings-row">
               <span>Version</span>
-              <span className="font-mono text-violet-400 font-semibold">v5.3.0</span>
+              <span className="font-mono text-violet-400 font-semibold">v{appVersion}</span>
             </div>
             <div className="settings-row">
               <span>Release Channel</span>
-              <span className="channel-badge-sm">Stable (Production)</span>
+              <span className="channel-badge-sm">
+                {(() => {
+                  const ch = rendererUpdateService.getConfig().channel
+                  return ch === 'beta' ? 'Beta (Pre-release)' : ch === 'nightly' ? 'Nightly (Edge)' : 'Stable (Production)'
+                })()}
+              </span>
             </div>
             {updateStatus !== 'idle' && (
               <div className="settings-row">
@@ -546,27 +636,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="sidebar-title">AI & AUTONOMOUS AUTO-APPROVE</span>
           </div>
           <div className="preset-quick-row">
-            <button
-              className="preset-btn-sm"
-              onClick={() => handleApplyPreset('paranoid')}
-              title="Manual approval for everything"
-            >
-              Conservative
-            </button>
-            <button
-              className="preset-btn-sm active"
-              onClick={() => handleApplyPreset('balanced')}
-              title="Auto-approve read and web tools"
-            >
-              Standard
-            </button>
-            <button
-              className="preset-btn-sm autonomous"
-              onClick={() => handleApplyPreset('autonomous')}
-              title="Auto-approve all tools including edit, terminal, and git"
-            >
-              Autonomous
-            </button>
+            {(() => {
+              const isAutonomous =
+                Boolean(autoApprove.autoApproveRead) &&
+                Boolean(autoApprove.autoApproveWrite) &&
+                Boolean(autoApprove.autoApproveRun)
+              const isParanoid =
+                !autoApprove.autoApproveRead &&
+                !autoApprove.autoApproveWrite &&
+                !autoApprove.autoApproveRun
+              const isBalanced = !isAutonomous && !isParanoid
+              return (
+                <>
+                  <button
+                    className={`preset-btn-sm ${isParanoid ? 'active' : ''}`}
+                    onClick={() => handleApplyPreset('paranoid')}
+                    title="Manual approval for everything"
+                  >
+                    Conservative
+                  </button>
+                  <button
+                    className={`preset-btn-sm ${isBalanced ? 'active' : ''}`}
+                    onClick={() => handleApplyPreset('balanced')}
+                    title="Auto-approve read and web tools"
+                  >
+                    Standard
+                  </button>
+                  <button
+                    className={`preset-btn-sm autonomous ${isAutonomous ? 'active' : ''}`}
+                    onClick={() => handleApplyPreset('autonomous')}
+                    title="Auto-approve all tools including edit, terminal, and git"
+                  >
+                    Autonomous
+                  </button>
+                </>
+              )
+            })()}
           </div>
           <div className="settings-list">
             <label className="settings-row" title="Auto-approve file reading and workspace symbol search">

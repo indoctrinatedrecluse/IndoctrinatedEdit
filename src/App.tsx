@@ -347,12 +347,42 @@ export const App: React.FC = () => {
   }, [])
 
   // AI Multi-Model Chat Panel & Editor Integration State
-  const editorHostRef = useRef<EditorHostHandle>(null)
   const editorGridRef = useRef<EditorGridHandle>(null)
   const getActiveEditor = useCallback((): EditorHostHandle | null => {
-    return editorGridRef.current?.getActiveEditorHandle() || editorHostRef.current || null
+    return editorGridRef.current?.getActiveEditorHandle() || null
   }, [])
   const [currentSelection, setCurrentSelection] = useState<SelectionInfo | null>(null)
+  const [pendingAiPrompt, setPendingAiPrompt] = useState<{
+    id: number
+    prompt: string
+    attachSelection?: boolean
+    attachFile?: boolean
+  } | null>(null)
+
+  const openAiWithPrompt = useCallback((prompt: string, options?: { attachSelection?: boolean; attachFile?: boolean }) => {
+    setRightPaneTab('ai')
+    setIsRightPaneOpen(true)
+    setPendingAiPrompt({
+      id: Date.now(),
+      prompt,
+      attachSelection: options?.attachSelection ?? true,
+      attachFile: options?.attachFile ?? true,
+    })
+  }, [])
+
+  const handleToggleJson = useCallback(() => {
+    setIsRightPaneOpen((prev) => {
+      if (!prev) {
+        setRightPaneTab('json')
+        return true
+      }
+      if (rightPaneTab !== 'json') {
+        setRightPaneTab('json')
+        return true
+      }
+      return false
+    })
+  }, [rightPaneTab])
 
   const handleToggleAntigravity = useCallback(() => {
     setIsRightPaneOpen((prev) => {
@@ -801,10 +831,8 @@ export const App: React.FC = () => {
     })
   }, [workspacePath, workspaceName, tabs, activeTabId])
 
-  // Register active file contents with Global Search, Test Explorer, and LSP Intelligence engines
+  // Register active file contents with LSP Intelligence engine (Global Search & Test Explorer registered below with updater)
   useEffect(() => {
-    globalSearchService.registerWorkspace(() => fileContents)
-    testExplorerService.registerWorkspace(() => fileContents)
     lspService.registerWorkspace(() => fileContents)
   }, [fileContents])
 
@@ -860,9 +888,9 @@ export const App: React.FC = () => {
       setActiveTabId(filePath)
     }
     setTimeout(() => {
-      editorHostRef.current?.goToLine(line, col)
+      getActiveEditor()?.goToLine(line, col)
     }, 50)
-  }, [tabs])
+  }, [tabs, getActiveEditor])
 
   // Refresh Git Status for status bar and activity bar badge
   const refreshGitStatus = useCallback(async () => {
@@ -1251,7 +1279,7 @@ export const App: React.FC = () => {
   }, [])
 
   const handleRunActiveFile = useCallback(
-    async (customArgs?: string, _customEnv?: Record<string, string>) => {
+    async (customArgs?: string, customEnv?: Record<string, string>) => {
       const active = tabs.find((t) => t.id === activeTabId)
       if (!active) {
         notificationService.notifyWarning('Run Warning', 'No active file open to execute.')
@@ -1261,18 +1289,35 @@ export const App: React.FC = () => {
       setIsBottomPanelOpen(true)
       setBottomPanelTab('terminal')
 
-      const success = await runService.runActiveFile(
-        active.id,
-        active.language,
-        customArgs,
-        workspacePath,
-        {
-          onOpenTerminal: () => {
-            setIsBottomPanelOpen(true)
-            setBottomPanelTab('terminal')
-          },
-        }
-      )
+      const profile = runService.getProfileForLanguage(active.language)
+      const success = profile
+        ? await runService.execute(
+            profile,
+            {
+              filePath: active.id,
+              workspacePath,
+              customArgs,
+              customEnv,
+            },
+            {
+              onOpenTerminal: () => {
+                setIsBottomPanelOpen(true)
+                setBottomPanelTab('terminal')
+              },
+            }
+          )
+        : await runService.runActiveFile(
+            active.id,
+            active.language,
+            customArgs,
+            workspacePath,
+            {
+              onOpenTerminal: () => {
+                setIsBottomPanelOpen(true)
+                setBottomPanelTab('terminal')
+              },
+            }
+          )
 
       if (success) {
         notificationService.notifyInfo('Run Started', `Executing ${active.name} in Terminal`)
@@ -1654,12 +1699,21 @@ export const App: React.FC = () => {
       // Remote Protocol Studio (SSH, SFTP, FTP & SMTP)
       { id: 'remote.toggle', title: 'Remote Protocol Studio: Toggle SSH, SFTP, FTP & SMTP Suite', category: 'Tools', shortcut: 'Ctrl+Alt+S', description: 'Open MobaXTerm-style remote protocol studio with SSH terminal, SFTP explorer & SMTP mail lab', handler: handleToggleRemote },
 
+      // JSON & Schema Studio
+      { id: 'json.toggle', title: 'JSON Studio: Toggle JSON & JQ Explorer', category: 'Tools', description: 'Open JSON formatter, JQ query runner, and schema validator', handler: handleToggleJson },
+
+      // Window Zoom & Fullscreen
+      { id: 'view.zoomIn', title: 'View: Zoom In', category: 'View', shortcut: 'Ctrl+=', description: 'Increase UI zoom scale', handler: () => { void window.electronAPI?.setZoom?.('in') } },
+      { id: 'view.zoomOut', title: 'View: Zoom Out', category: 'View', shortcut: 'Ctrl+-', description: 'Decrease UI zoom scale', handler: () => { void window.electronAPI?.setZoom?.('out') } },
+      { id: 'view.resetZoom', title: 'View: Reset Zoom', category: 'View', shortcut: 'Ctrl+0', description: 'Reset UI zoom to 100%', handler: () => { void window.electronAPI?.setZoom?.('reset') } },
+      { id: 'view.fullscreen', title: 'View: Toggle Fullscreen', category: 'View', shortcut: 'F11', description: 'Toggle distraction-free fullscreen window', handler: () => { void window.electronAPI?.toggleFullscreen?.() } },
+
       // AI Multi-Model Assistant
       { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', description: 'Open AI chat and refactor dock', handler: handleToggleAi },
-      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: handleToggleAi },
-      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', description: 'Scan active buffer for vulnerabilities', handler: handleToggleAi },
-      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: handleToggleAi },
-      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: handleToggleAi },
+      { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: () => openAiWithPrompt('Explain how this code works, including edge cases and data flow.') },
+      { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', description: 'Scan active buffer for vulnerabilities', handler: () => openAiWithPrompt('Audit this code for bugs, race conditions, and security vulnerabilities, and propose fixes.') },
+      { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: () => openAiWithPrompt('Refactor this code for clarity, maintainability, and performance while preserving behavior.') },
+      { id: 'ai.tests', title: 'AI: Generate Unit Tests', category: 'AI', description: 'Generate comprehensive test cases', handler: () => openAiWithPrompt('Write thorough unit tests covering normal paths and edge cases for this code.') },
 
       // Model Context Protocol (MCP) Studio
       { id: 'mcp.studio', title: 'MCP Studio: Manage Model Context Protocol Servers & Tools', category: 'AI', shortcut: 'Ctrl+Shift+M', description: 'Open MCP Server and Tooling Studio to configure stdio & SSE servers', handler: () => setIsMcpStudioOpen(true) },
@@ -1687,7 +1741,11 @@ export const App: React.FC = () => {
     onGitGraph: () => setActiveView((prev) => (prev === 'git' ? null : 'git')),
     onShowExplorer: () => setActiveView((prev) => (prev === 'files' ? null : 'files')),
     onShowSearch: () => setActiveView((prev) => (prev === 'search' ? null : 'search')),
+    onShowTesting: () => setActiveView((prev) => (prev === 'testing' ? null : 'testing')),
     onShowDebug: () => setActiveView((prev) => (prev === 'debug' ? null : 'debug')),
+    onGoToDefinition: () => getActiveEditor()?.findDefinition(),
+    onFindReferences: () => getActiveEditor()?.findReferences(),
+    onRenameSymbol: () => getActiveEditor()?.openRename(),
     onToggleAi: handleToggleAi,
     onToggleDatabase: handleToggleDatabase,
     onToggleRestClient: handleToggleRestClient,
@@ -1763,8 +1821,11 @@ export const App: React.FC = () => {
         workspaceFiles={workspaceFiles}
         tabs={tabs}
         onOpenFile={(f) => handleOpenFileItem({ name: f.name, path: f.path, isDirectory: false })}
-        symbols={editorHostRef.current?.getOutlineSymbols() || []}
-        onGoToLine={(line, col) => editorHostRef.current?.goToLine(line, col)}
+        symbols={getActiveEditor()?.getOutlineSymbols() || []}
+        onGoToLine={(line, col) => {
+          getActiveEditor()?.goToLine(line, col)
+          setIsPaletteOpen(false)
+        }}
         activeTabName={activeTab?.name}
       />
 
@@ -1920,6 +1981,7 @@ export const App: React.FC = () => {
               fileContents={fileContents}
               currentTheme={currentTheme}
               activeTabId={activeTabId}
+              workspacePath={workspacePath}
               onSelectTab={handleSelectTab}
               onCloseTab={handleCloseTab}
               onNewTab={handleNewFile}
@@ -1989,6 +2051,7 @@ export const App: React.FC = () => {
                 onSelectTab={(tab) => setRightPaneTab(tab)}
                 onClose={() => setIsRightPaneOpen(false)}
                 onOpenLicense={() => setIsLicenseOpen(true)}
+                activeFilePath={activeTabId}
                 activeFileName={activeTab?.name || 'untitled.ts'}
                 activeFileContent={currentContent}
                 currentSelection={currentSelection}
@@ -1998,6 +2061,15 @@ export const App: React.FC = () => {
                 onApplyFileEdit={handleApplyFileEditFromAi}
                 onInsertAtCursor={handleInsertAtCursor}
                 onReplaceSelection={handleReplaceSelection}
+                onReplaceActiveFileContent={(newContent) => {
+                  if (!activeTabId) return
+                  setFileContents((prev) => ({ ...prev, [activeTabId]: newContent }))
+                  setTabs((prevTabs) =>
+                    prevTabs.map((t) => (t.id === activeTabId ? { ...t, isDirty: true } : t))
+                  )
+                }}
+                pendingAiPrompt={pendingAiPrompt}
+                onPendingAiPromptConsumed={() => setPendingAiPrompt(null)}
                 onCreateNotebook={handleCreateNotebook}
               />
             </motion.div>
@@ -2022,31 +2094,6 @@ export const App: React.FC = () => {
         onGitClick={() => setActiveView((prev) => (prev === 'git' ? null : 'git'))}
         onTerminalClick={handleToggleTerminal}
         onProblemsClick={handleOpenProblems}
-      />
-
-      {/* Command Palette Overlay */}
-      <CommandPalette
-        isOpen={isPaletteOpen}
-        initialQuery={paletteInitialQuery}
-        onClose={() => setIsPaletteOpen(false)}
-        workspaceFiles={workspaceFiles}
-        tabs={tabs}
-        onOpenFile={(file) => handleOpenFileItem({ name: file.name, path: file.path, isDirectory: false })}
-        activeTabName={activeTab?.name}
-        onGoToLine={(line, col) => {
-          editorHostRef.current?.goToLine(line, col)
-          setIsPaletteOpen(false)
-        }}
-      />
-
-      {/* Notification Center */}
-      <NotificationCenter
-        isOpen={isNotificationCenterOpen}
-        onClose={() => setIsNotificationCenterOpen(false)}
-        notifications={notifications}
-        onDismiss={(id) => notificationService.removeNotification(id)}
-        onDismissAll={() => notificationService.dismissAll()}
-        onMarkAllAsRead={() => notificationService.markAllAsRead()}
       />
 
       {/* Run & Build Configuration Studio Modal */}
@@ -2100,6 +2147,10 @@ export const App: React.FC = () => {
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+        onExecuteCommand={(id) => {
+          commandRegistry.execute(id)
+          setIsShortcutsOpen(false)
+        }}
       />
 
       {/* Unsaved Changes Prompt Modal on Folder Open */}

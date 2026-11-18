@@ -497,7 +497,14 @@ export class AntigravityAcpClient {
         clientInfo: {
           name: 'IndoctrinatedEdit',
           title: 'IndoctrinatedEdit',
-          version: '5.3.0',
+          version: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              return require('electron')?.app?.getVersion?.() || '5.3.0'
+            } catch {
+              return '5.3.0'
+            }
+          })(),
         },
         clientCapabilities: {
           fs: {

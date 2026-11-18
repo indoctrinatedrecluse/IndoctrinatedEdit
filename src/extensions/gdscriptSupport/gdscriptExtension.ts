@@ -25,11 +25,9 @@ export const gdscriptExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerGDScriptExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   try {
     monacoInstance.languages.registerCompletionItemProvider('gdscript', {

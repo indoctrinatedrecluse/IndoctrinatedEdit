@@ -38,6 +38,7 @@ import { jupyterExtensionManifest, registerJupyterExtension } from './jupyterSup
 import { prettierExtensionManifest, registerPrettierExtension } from './formatterSupport/prettierExtension'
 import { conflictResolutionService } from '../services/conflictResolutionService'
 import { notificationService } from '../services/notificationService'
+import { outputChannelService } from '../services/outputChannelService'
 import { ensureCustomLanguagesRegistered } from './extensionHelpers'
 
 const DISABLED_EXTENSIONS_STORAGE_KEY = 'indoctrinated_disabled_extensions_v1'
@@ -46,6 +47,8 @@ class ExtensionRegistry {
   private extensions: Map<string, ExtensionManifest> = new Map()
   private disabledIds: Set<string> = new Set()
   private disposablesByExtension: Map<string, monaco.IDisposable[]> = new Map()
+  private registrars: Map<string, { name: string; fn: (m: typeof monaco) => monaco.IDisposable[] | void }> = new Map()
+  private monacoInstance: typeof monaco | null = null
   private listeners: Set<() => void> = new Set()
   private isConstructing = true
 
@@ -542,6 +545,7 @@ class ExtensionRegistry {
 
     this.persistDisabledState()
     this.reindexConflicts()
+    outputChannelService.append('Extensions', `Disabled extension: ${ext.name} (${id})`, 'info')
     this.notify()
     return true
   }
@@ -553,6 +557,14 @@ class ExtensionRegistry {
     this.extensions.set(id, { ...ext, status: 'Active' })
     this.persistDisabledState()
     this.reindexConflicts()
+
+    // Re-register Monaco providers live if Monaco is already initialized
+    if (this.monacoInstance && this.registrars.has(id) && !this.disposablesByExtension.has(id)) {
+      const entry = this.registrars.get(id)!
+      this.invokeRegistrar(id, entry.name, entry.fn, this.monacoInstance)
+    }
+
+    outputChannelService.append('Extensions', `Enabled extension: ${ext.name} (${id})`, 'success')
     this.notify()
     return true
   }
@@ -578,61 +590,108 @@ class ExtensionRegistry {
     return res.languageId
   }
 
-  public initializeMonacoExtensions(monacoInstance: typeof monaco) {
-    // Register all custom non-builtin Monaco language IDs + Monarch tokenizers FIRST
-    ensureCustomLanguagesRegistered(monacoInstance)
-
-    const safeInit = (id: string, name: string, fn: () => monaco.IDisposable[] | void) => {
-      if (!this.isEnabled(id)) return
-      try {
-        const result = fn()
-        if (Array.isArray(result) && result.length > 0) {
-          this.disposablesByExtension.set(id, result)
-        }
-      } catch (err) {
-        notificationService.notifyError(
-          'Extension System',
-          `Failed to initialize extension ${name}: ${err instanceof Error ? err.message : String(err)}. Monaco will fall back to default syntax highlighting.`
-        )
+  private invokeRegistrar(
+    id: string,
+    name: string,
+    fn: (m: typeof monaco) => monaco.IDisposable[] | void,
+    monacoInstance: typeof monaco
+  ) {
+    if (!this.isEnabled(id) || this.disposablesByExtension.has(id)) return
+    const captured: monaco.IDisposable[] = []
+    const track = (val: unknown) => {
+      if (val && typeof (val as monaco.IDisposable).dispose === 'function' && !captured.includes(val as monaco.IDisposable)) {
+        captured.push(val as monaco.IDisposable)
       }
     }
 
-    safeInit(textSupportManifest.id, 'Text Support', () => registerTextSupportExtension(monacoInstance))
-    safeInit(goExtensionManifest.id, 'Go Universal', () => registerGoExtension(monacoInstance))
-    safeInit(rustExtensionManifest.id, 'Rust Ecosystem', () => registerRustExtension(monacoInstance))
-    safeInit(cppExtensionManifest.id, 'C/C++ Universal', () => registerCppExtension(monacoInstance))
-    safeInit(pythonExtensionManifest.id, 'Python AI', () => registerPythonExtension(monacoInstance))
-    safeInit(javaExtensionManifest.id, 'Java Universal', () => registerJavaExtension(monacoInstance))
-    safeInit(dotnetExtensionManifest.id, 'Dotnet Suite', () => registerDotnetExtension(monacoInstance))
-    safeInit(phpExtensionManifest.id, 'PHP & Laravel', () => registerPhpExtension(monacoInstance))
-    safeInit(angularExtensionManifest.id, 'Angular Enterprise', () => registerAngularExtension(monacoInstance))
-    safeInit(reactExtensionManifest.id, 'React Ecosystem', () => registerReactExtension(monacoInstance))
-    safeInit(flutterExtensionManifest.id, 'Flutter & Dart', () => registerFlutterExtension(monacoInstance))
-    safeInit(rubyExtensionManifest.id, 'Ruby & Rails', () => registerRubyExtension(monacoInstance))
-    safeInit(nodeExtensionManifest.id, 'Node.js Core', () => registerNodeExtension(monacoInstance))
-    safeInit(frontendExtensionManifest.id, 'Frontend Mega-Pack', () => registerFrontendMegaPackExtension(monacoInstance))
-    safeInit(backendExtensionManifest.id, 'Backend Mega-Pack', () => registerBackendMegaPackExtension(monacoInstance))
-    safeInit(swiftExtensionManifest.id, 'Native Apple & Swift', () => registerSwiftExtension(monacoInstance))
-    safeInit(kotlinExtensionManifest.id, 'Kotlin & Android Multiplatform', () => registerKotlinExtension(monacoInstance))
-    safeInit(devopsExtensionManifest.id, 'DevOps & Cloud IaC', () => registerDevopsExtension(monacoInstance))
-    safeInit(dataScienceExtensionManifest.id, 'Data Science & R Analytics', () => registerDataScienceExtension(monacoInstance))
-    safeInit(beamFunctionalExtensionManifest.id, 'BEAM & Functional Programming', () => registerBeamFunctionalExtension(monacoInstance))
-    safeInit(systemsGamingExtensionManifest.id, 'Systems & Game Scripting', () => registerSystemsGamingExtension(monacoInstance))
-    safeInit(databaseSchemaExtensionManifest.id, 'Database & Schema Pack', () => registerDatabaseSchemaExtension(monacoInstance))
-    safeInit(databaseExtensionManifest.id, 'Database Studio', () => registerDatabaseExtension(monacoInstance))
-    safeInit(restClientExtensionManifest.id, 'REST & GraphQL Client', () => registerRestClientExtension(monacoInstance))
-    safeInit(web3ExtensionManifest.id, 'Web3 & Smart Contracts', () => registerWeb3Extension(monacoInstance))
-    safeInit(logicFormalExtensionManifest.id, 'Logic & Formal Methods', () => registerLogicFormalExtension(monacoInstance))
-    safeInit(luaExtensionManifest.id, 'Lua & Luau Game Engine', () => registerLuaExtension(monacoInstance))
-    safeInit(zigExtensionManifest.id, 'Zig Native Systems', () => registerZigExtension(monacoInstance))
-    safeInit(gdscriptExtensionManifest.id, 'Godot & GDScript', () => registerGDScriptExtension(monacoInstance))
-    safeInit(shellScriptExtensionManifest.id, 'Shell & PowerShell Automation', () => registerShellScriptExtension(monacoInstance))
-    safeInit(juliaExtensionManifest.id, 'Julia High-Performance Scientific', () => registerJuliaExtension(monacoInstance))
-    safeInit(mcpExtensionManifest.id, 'MCP Server & Agent Studio', () => registerMcpExtension(monacoInstance))
-    safeInit(antigravityExtensionManifest.id, 'Google Antigravity', () => registerAntigravityExtension(monacoInstance))
-    safeInit(remoteProtocolExtensionManifest.id, 'Remote Protocol Studio (SSH/SFTP/SMTP)', () => registerRemoteProtocolExtension(monacoInstance))
-    safeInit(jupyterExtensionManifest.id, 'Jupyter Notebooks & Live Kernel Studio', () => registerJupyterExtension(monacoInstance))
-    safeInit(prettierExtensionManifest.id, 'Universal Code Formatter (Prettier)', () => registerPrettierExtension(monacoInstance))
+    const wrappedLanguages = monacoInstance?.languages
+      ? new Proxy(monacoInstance.languages, {
+          get(target, prop, receiver) {
+            const orig = Reflect.get(target, prop, receiver)
+            if (typeof orig === 'function' && typeof prop === 'string' && prop.startsWith('register')) {
+              return (...args: unknown[]) => {
+                const res = orig.apply(target, args)
+                track(res)
+                return res
+              }
+            }
+            return orig
+          },
+        })
+      : monacoInstance?.languages
+
+    const wrappedMonaco = monacoInstance
+      ? new Proxy(monacoInstance, {
+          get(target, prop, receiver) {
+            if (prop === 'languages') return wrappedLanguages
+            return Reflect.get(target, prop, receiver)
+          },
+        })
+      : monacoInstance
+
+    try {
+      const result = fn(wrappedMonaco)
+      if (Array.isArray(result)) {
+        for (const d of result) track(d)
+      }
+      if (captured.length > 0) {
+        this.disposablesByExtension.set(id, captured)
+      }
+    } catch (err) {
+      notificationService.notifyError(
+        'Extension System',
+        `Failed to initialize extension ${name}: ${err instanceof Error ? err.message : String(err)}. Monaco will fall back to default syntax highlighting.`
+      )
+    }
+  }
+
+  public initializeMonacoExtensions(monacoInstance: typeof monaco) {
+    this.monacoInstance = monacoInstance
+    // Register all custom non-builtin Monaco language IDs + Monarch tokenizers FIRST
+    ensureCustomLanguagesRegistered(monacoInstance)
+
+    const registerAndInit = (id: string, name: string, fn: (m: typeof monaco) => monaco.IDisposable[] | void) => {
+      this.registrars.set(id, { name, fn })
+      this.invokeRegistrar(id, name, fn, monacoInstance)
+    }
+
+    registerAndInit(textSupportManifest.id, 'Text Support', registerTextSupportExtension)
+    registerAndInit(goExtensionManifest.id, 'Go Universal', registerGoExtension)
+    registerAndInit(rustExtensionManifest.id, 'Rust Ecosystem', registerRustExtension)
+    registerAndInit(cppExtensionManifest.id, 'C/C++ Universal', registerCppExtension)
+    registerAndInit(pythonExtensionManifest.id, 'Python AI', registerPythonExtension)
+    registerAndInit(javaExtensionManifest.id, 'Java Universal', registerJavaExtension)
+    registerAndInit(dotnetExtensionManifest.id, 'Dotnet Suite', registerDotnetExtension)
+    registerAndInit(phpExtensionManifest.id, 'PHP & Laravel', registerPhpExtension)
+    registerAndInit(angularExtensionManifest.id, 'Angular Enterprise', registerAngularExtension)
+    registerAndInit(reactExtensionManifest.id, 'React Ecosystem', registerReactExtension)
+    registerAndInit(flutterExtensionManifest.id, 'Flutter & Dart', registerFlutterExtension)
+    registerAndInit(rubyExtensionManifest.id, 'Ruby & Rails', registerRubyExtension)
+    registerAndInit(nodeExtensionManifest.id, 'Node.js Core', registerNodeExtension)
+    registerAndInit(frontendExtensionManifest.id, 'Frontend Mega-Pack', registerFrontendMegaPackExtension)
+    registerAndInit(backendExtensionManifest.id, 'Backend Mega-Pack', registerBackendMegaPackExtension)
+    registerAndInit(swiftExtensionManifest.id, 'Native Apple & Swift', registerSwiftExtension)
+    registerAndInit(kotlinExtensionManifest.id, 'Kotlin & Android Multiplatform', registerKotlinExtension)
+    registerAndInit(devopsExtensionManifest.id, 'DevOps & Cloud IaC', registerDevopsExtension)
+    registerAndInit(dataScienceExtensionManifest.id, 'Data Science & R Analytics', registerDataScienceExtension)
+    registerAndInit(beamFunctionalExtensionManifest.id, 'BEAM & Functional Programming', registerBeamFunctionalExtension)
+    registerAndInit(systemsGamingExtensionManifest.id, 'Systems & Game Scripting', registerSystemsGamingExtension)
+    registerAndInit(databaseSchemaExtensionManifest.id, 'Database & Schema Pack', registerDatabaseSchemaExtension)
+    registerAndInit(databaseExtensionManifest.id, 'Database Studio', registerDatabaseExtension)
+    registerAndInit(restClientExtensionManifest.id, 'REST & GraphQL Client', registerRestClientExtension)
+    registerAndInit(web3ExtensionManifest.id, 'Web3 & Smart Contracts', registerWeb3Extension)
+    registerAndInit(logicFormalExtensionManifest.id, 'Logic & Formal Methods', registerLogicFormalExtension)
+    registerAndInit(luaExtensionManifest.id, 'Lua & Luau Game Engine', registerLuaExtension)
+    registerAndInit(zigExtensionManifest.id, 'Zig Native Systems', registerZigExtension)
+    registerAndInit(gdscriptExtensionManifest.id, 'Godot & GDScript', registerGDScriptExtension)
+    registerAndInit(shellScriptExtensionManifest.id, 'Shell & PowerShell Automation', registerShellScriptExtension)
+    registerAndInit(juliaExtensionManifest.id, 'Julia High-Performance Scientific', registerJuliaExtension)
+    registerAndInit(mcpExtensionManifest.id, 'MCP Server & Agent Studio', registerMcpExtension)
+    registerAndInit(antigravityExtensionManifest.id, 'Google Antigravity', registerAntigravityExtension)
+    registerAndInit(remoteProtocolExtensionManifest.id, 'Remote Protocol Studio (SSH/SFTP/SMTP)', registerRemoteProtocolExtension)
+    registerAndInit(jupyterExtensionManifest.id, 'Jupyter Notebooks & Live Kernel Studio', registerJupyterExtension)
+    registerAndInit(prettierExtensionManifest.id, 'Universal Code Formatter (Prettier)', registerPrettierExtension)
+    outputChannelService.append('Extensions', `Initialized ${this.registrars.size} Monaco extension registrars.`, 'success')
   }
 }
 

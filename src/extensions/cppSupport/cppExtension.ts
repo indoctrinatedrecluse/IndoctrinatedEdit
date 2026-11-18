@@ -33,11 +33,9 @@ export const cppExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerCppExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   // Register completion items for C++
   const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {

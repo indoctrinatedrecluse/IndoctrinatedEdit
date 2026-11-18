@@ -67,6 +67,7 @@ export class RendererUpdateService {
   private status: UpdateStatus = 'idle'
   private updateInfo: UpdateInfo | null = null
   private downloadProgress: DownloadProgress | null = null
+  private downloadVerified = false
   private config: ClientUpdateConfig = {
     channel: 'stable',
     interval: 'weekly',
@@ -76,6 +77,17 @@ export class RendererUpdateService {
   private listeners: Set<() => void> = new Set()
   private timer: NodeJS.Timeout | null = null
   private unbindProgress: (() => void) | null = null
+
+  public isDownloadVerified(): boolean {
+    return this.downloadVerified
+  }
+
+  public async scheduleInstallOnExit(): Promise<boolean> {
+    if (typeof window !== 'undefined' && window.electronAPI?.updater?.setInstallOnExit) {
+      return await window.electronAPI.updater.setInstallOnExit(true)
+    }
+    return false
+  }
 
   constructor() {
     this.loadConfig()
@@ -232,7 +244,9 @@ export class RendererUpdateService {
       this.updateInfo = info
       this.saveConfig({ lastCheckedTimestamp: Date.now() })
 
-      if (info.updateAvailable) {
+      if (info.error) {
+        this.status = 'error'
+      } else if (info.updateAvailable) {
         if (!isManual && this.config.lastDismissedVersion === info.latestVersion) {
           // User already dismissed this background notification
           this.status = 'idle'
@@ -296,17 +310,44 @@ export class RendererUpdateService {
     this.notify()
 
     try {
+      this.downloadVerified = false
       if (typeof window !== 'undefined' && window.electronAPI?.updater?.downloadUpdate) {
         const downloadUrl = this.updateInfo.matchedAsset.asset.browser_download_url
-        await window.electronAPI.updater.downloadUpdate(
-          downloadUrl,
-          this.updateInfo.latestVersion
+        let expectedSha256: string | undefined
+        const shaAsset = this.updateInfo.allAssets?.find(
+          (a) => /sha256|checksums/i.test(a.name) && !a.name.endsWith('.exe')
         )
+        if (shaAsset?.browser_download_url) {
+          try {
+            const resp = window.electronAPI.infra?.httpRequest
+              ? await window.electronAPI.infra.httpRequest({ url: shaAsset.browser_download_url, method: 'GET' })
+              : null
+            if (resp?.ok && resp.body) {
+              const targetName = this.updateInfo.matchedAsset.asset.name
+              const line = resp.body.split(/\r?\n/).find((l) => l.includes(targetName))
+              const hashMatch = line?.match(/\b([a-f0-9]{64})\b/i)
+              if (hashMatch) expectedSha256 = hashMatch[1]
+            }
+          } catch {
+            // Checksum asset unavailable; proceed unverified
+          }
+        }
+        const dlRes = await window.electronAPI.updater.downloadUpdate(
+          downloadUrl,
+          this.updateInfo.latestVersion,
+          expectedSha256
+        )
+        if (expectedSha256 && !dlRes.verified) {
+          throw new Error('SHA-256 checksum mismatch for downloaded update package.')
+        }
+        this.downloadVerified = Boolean(dlRes.verified)
         this.status = 'downloaded'
       } else {
-        // Simulated progress for Web preview
-        await this.simulateWebDownload()
-        this.status = 'downloaded'
+        // Non-Electron browser mode: open real release download URL instead of faking a timer
+        if (typeof window !== 'undefined' && this.updateInfo?.releaseUrl && window.open) {
+          window.open(this.updateInfo.releaseUrl, '_blank')
+        }
+        this.status = 'available'
       }
 
       this.notify()
@@ -379,69 +420,34 @@ export class RendererUpdateService {
   }
 
   private async fallbackWebCheck(channel: UpdateChannel): Promise<UpdateInfo> {
-    try {
-      const res = await fetch('https://api.github.com/repos/indoctrinatedrecluse/IndoctrinatedEdit/releases/latest', {
-        headers: { Accept: 'application/vnd.github.v3+json' },
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const release = await res.json()
-      const currentVersion = '5.3.0'
-      const latestVersion = (release.tag_name || 'v5.3.0').replace(/^v/i, '')
-      const isNewer = RendererUpdateService.compareSemVer(latestVersion, currentVersion) > 0
-
-      return {
-        updateAvailable: isNewer,
-        currentVersion,
-        latestVersion,
-        releaseName: release.name || `IndoctrinatedEdit ${release.tag_name}`,
-        releaseNotes: release.body || 'New enhancements and bug fixes available.',
-        publishedAt: release.published_at || new Date().toISOString(),
-        releaseUrl: release.html_url || 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',
-        matchedAsset: null,
-        allAssets: release.assets || [],
-        channel,
-      }
-    } catch {
-      return {
-        updateAvailable: false,
-        currentVersion: '5.3.0',
-        latestVersion: '5.3.0',
-        releaseName: 'IndoctrinatedEdit 5.3.0',
-        releaseNotes: 'You are on the latest release.',
-        publishedAt: new Date().toISOString(),
-        releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',
-        matchedAsset: null,
-        allAssets: [],
-        channel,
-      }
-    }
-  }
-
-  private simulateWebDownload(): Promise<void> {
-    return new Promise((resolve) => {
-      let percent = 0
-      const total = 78 * 1024 * 1024
-      const interval = setInterval(() => {
-        percent += 10
-        const downloaded = Math.round((percent / 100) * total)
-        this.downloadProgress = {
-          percentage: percent,
-          downloadedBytes: downloaded,
-          totalBytes: total,
-          speedBytesPerSec: 5.2 * 1024 * 1024,
-          formattedDownloaded: `${(downloaded / (1024 * 1024)).toFixed(1)} MB`,
-          formattedTotal: `${(total / (1024 * 1024)).toFixed(1)} MB`,
-          formattedSpeed: '5.2 MB/s',
-          etaSeconds: Math.max(0, Math.round((total - downloaded) / (5.2 * 1024 * 1024))),
-        }
-        this.notify()
-
-        if (percent >= 100) {
-          clearInterval(interval)
-          resolve()
-        }
-      }, 250)
+    const endpoint =
+      channel === 'stable'
+        ? 'https://api.github.com/repos/indoctrinatedrecluse/IndoctrinatedEdit/releases/latest'
+        : 'https://api.github.com/repos/indoctrinatedrecluse/IndoctrinatedEdit/releases'
+    const res = await fetch(endpoint, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
     })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const release = Array.isArray(data)
+      ? (data.find((r: any) => (channel === 'beta' ? r.tag_name?.includes('beta') : !r.draft)) || data[0])
+      : data
+    const currentVersion = '5.3.0'
+    const latestVersion = (release?.tag_name || 'v5.3.0').replace(/^v/i, '')
+    const isNewer = RendererUpdateService.compareSemVer(latestVersion, currentVersion) > 0
+
+    return {
+      updateAvailable: isNewer,
+      currentVersion,
+      latestVersion,
+      releaseName: release?.name || `IndoctrinatedEdit ${release?.tag_name || currentVersion}`,
+      releaseNotes: release?.body || 'New enhancements and bug fixes available.',
+      publishedAt: release?.published_at || new Date().toISOString(),
+      releaseUrl: release?.html_url || 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',
+      matchedAsset: null,
+      allAssets: release?.assets || [],
+      channel,
+    }
   }
 }
 

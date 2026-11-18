@@ -26,11 +26,9 @@ export const rubyExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerRubyExtension(monacoInstance: typeof monaco) {
-  if (isRegistered || !monacoInstance) return
-  isRegistered = true
+  if (!monacoInstance) return
 
   monacoInstance.languages.registerCompletionItemProvider('ruby', {
     provideCompletionItems: (model, position) => {

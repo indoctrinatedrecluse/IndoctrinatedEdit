@@ -62,11 +62,9 @@ export const mcpExtensionManifest: ExtensionManifest = {
   ],
 }
 
-let isRegistered = false
 
 export function registerMcpExtension(monacoInstance?: typeof monaco): monaco.IDisposable[] {
-  if (isRegistered || !monacoInstance) return []
-  isRegistered = true
+  if (!monacoInstance) return []
 
   const disposables: monaco.IDisposable[] = []
   for (const langEntry of mcpExtensionManifest.languages || []) {
