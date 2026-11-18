@@ -27,11 +27,15 @@ export const flutterExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerFlutterExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerFlutterExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
-  monacoInstance.languages.registerCompletionItemProvider('dart', {
-    provideCompletionItems: (model, position) => {
+  const disposables: monaco.IDisposable[] = []
+  const dartCodeSnippets = flutterSnippets.filter((s) => s.label !== 'pubspec-yaml')
+  const pubspecSnippets = flutterSnippets.filter((s) => s.label === 'pubspec-yaml')
+
+  const makeProvider = (list: typeof flutterSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
       const word = model.getWordUntilPosition(position)
       const range: monaco.IRange = {
         startLineNumber: position.lineNumber,
@@ -40,7 +44,7 @@ export function registerFlutterExtension(monacoInstance: typeof monaco) {
         endColumn: word.endColumn,
       }
 
-      const suggestions: monaco.languages.CompletionItem[] = flutterSnippets.map((snippet) => ({
+      const suggestions: monaco.languages.CompletionItem[] = list.map((snippet) => ({
         label: snippet.label,
         kind: monacoInstance.languages.CompletionItemKind.Snippet,
         detail: snippet.detail || 'Flutter / Dart Snippet',
@@ -54,7 +58,15 @@ export function registerFlutterExtension(monacoInstance: typeof monaco) {
     },
   })
 
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('dart', makeProvider(dartCodeSnippets))
+  if (d1) disposables.push(d1)
+  if (pubspecSnippets.length > 0) {
+    const d2 = monacoInstance.languages.registerCompletionItemProvider('yaml', makeProvider(pubspecSnippets))
+    if (d2) disposables.push(d2)
+  }
+
   triggerFlutterToolchainCheck()
+  return disposables
 }
 
 export function triggerFlutterToolchainCheck() {

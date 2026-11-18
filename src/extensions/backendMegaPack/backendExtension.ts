@@ -106,15 +106,16 @@ export const backendExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerBackendMegaPackExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerBackendMegaPackExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   const safeRegisterCompletion = (
     lang: string,
     snippetsProvider: (range: monaco.IRange) => monaco.languages.CompletionItem[]
   ) => {
     try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
           try {
             const word = model.getWordUntilPosition(position)
@@ -136,6 +137,7 @@ export function registerBackendMegaPackExtension(monacoInstance: typeof monaco) 
           }
         },
       })
+      if (d) disposables.push(d)
     } catch (err) {
       notificationService.notifyError(
         'Backend Mega-Pack Engine',
@@ -215,24 +217,33 @@ export function registerBackendMegaPackExtension(monacoInstance: typeof monaco) 
     }))
   )
 
-  // 5. Java / Kotlin Backends
-  const javaBackendSnippets = (range: monaco.IRange): monaco.languages.CompletionItem[] =>
+  // 5. Java & Kotlin Backends (strictly separated)
+  safeRegisterCompletion('java', (range) =>
     [
       ...SPRING_BOOT_SNIPPETS,
       ...MICRONAUT_SNIPPETS,
       ...QUARKUS_SNIPPETS,
-      ...KTOR_SNIPPETS,
     ].map((s) => ({
       label: s.label,
       kind: monacoInstance.languages.CompletionItemKind.Snippet,
-      detail: s.detail || 'Java/Kotlin Backend Snippet',
+      detail: s.detail || 'Java Backend Snippet',
       documentation: s.documentation,
       insertText: s.insertText,
       insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
       range,
     }))
-  safeRegisterCompletion('java', javaBackendSnippets)
-  safeRegisterCompletion('kotlin', javaBackendSnippets)
+  )
+  safeRegisterCompletion('kotlin', (range) =>
+    KTOR_SNIPPETS.map((s) => ({
+      label: s.label,
+      kind: monacoInstance.languages.CompletionItemKind.Snippet,
+      detail: s.detail || 'Kotlin Backend Snippet',
+      documentation: s.documentation,
+      insertText: s.insertText,
+      insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+      range,
+    }))
+  )
 
   // 6. Go Backends
   safeRegisterCompletion('go', (range) =>
@@ -279,4 +290,6 @@ export function registerBackendMegaPackExtension(monacoInstance: typeof monaco) 
       range,
     }))
   )
+
+  return disposables
 }

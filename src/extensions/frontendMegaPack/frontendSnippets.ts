@@ -15,7 +15,7 @@ export const SVELTE_SNIPPETS: SnippetDefinition[] = [
     label: 'svelte-runes-component',
     detail: 'Svelte 5: Modern Component with Runes ($state, $derived, $props)',
     documentation: 'Svelte 5 Runes reactivity using $state, $derived, and $props',
-    insertText: '<script lang="ts">\n  interface Props {\n    title?: string;\n    multiplier?: number;\n  }\n\n  let { title = "Liquid Glass Svelte", multiplier = 2 }: Props = $props();\n  let count = $state(0);\n  let multiplied = $derived(count * multiplier);\n\n  function increment() {\n    count += 1;\n  }\n</script>\n\n<div class="glass-svelte-panel">\n  <h3>{title}</h3>\n  <p>Count: {count} | Multiplied: {multiplied}</p>\n  <button onclick={increment}>Add +1</button>\n</div>\n\n<style>\n  .glass-svelte-panel {\n    padding: 18px;\n    border-radius: 14px;\n    background: rgba(255, 255, 255, 0.06);\n    backdrop-filter: blur(16px);\n    border: 1px solid rgba(255, 255, 255, 0.14);\n  }\n</style>\n',
+    insertText: '<script lang="ts">\n  interface Props {\n    title?: string;\n    multiplier?: number;\n  }\n\n  let { title = "Liquid Glass Svelte", multiplier = 2 }: Props = \\$props();\n  let count = \\$state(0);\n  let multiplied = \\$derived(count * multiplier);\n\n  function increment() {\n    count += 1;\n  }\n</script>\n\n<div class="glass-svelte-panel">\n  <h3>{title}</h3>\n  <p>Count: {count} | Multiplied: {multiplied}</p>\n  <button onclick={increment}>Add +1</button>\n</div>\n\n<style>\n  .glass-svelte-panel {\n    padding: 18px;\n    border-radius: 14px;\n    background: rgba(255, 255, 255, 0.06);\n    backdrop-filter: blur(16px);\n    border: 1px solid rgba(255, 255, 255, 0.14);\n  }\n</style>\n',
   },
 ]
 
@@ -89,7 +89,7 @@ export const LIVEWIRE_SNIPPETS: SnippetDefinition[] = [
     label: 'livewire-component',
     detail: 'Livewire 3: Full-Stack Reactive Component',
     documentation: 'Laravel Livewire 3 component with reactive properties, wire:model, and actions',
-    insertText: '<?php\n\nnamespace App\\Livewire;\n\nuse Livewire\\Component;\nuse Livewire\\Attributes\\Validate;\n\nclass ${1:AssetManager} extends Component\n{\n    #[Validate("required|min:3")]\n    public string $name = "";\n\n    public int $count = 0;\n\n    public function increment(): void\n    {\n        $this->count++;\n    }\n\n    public function save(): void\n    {\n        $this->validate();\n        session()->flash("message", "Asset successfully registered!");\n    }\n\n    public function render()\n    {\n        return view("livewire.${2:asset-manager}");\n    }\n}\n$0',
+    insertText: '<?php\n\nnamespace App\\Livewire;\n\nuse Livewire\\Component;\nuse Livewire\\Attributes\\Validate;\n\nclass ${1:AssetManager} extends Component\n{\n    #[Validate("required|min:3")]\n    public string \\$name = "";\n\n    public int \\$count = 0;\n\n    public function increment(): void\n    {\n        \\$this->count++;\n    }\n\n    public function save(): void\n    {\n        \\$this->validate();\n        session()->flash("message", "Asset successfully registered!");\n    }\n\n    public function render()\n    {\n        return view("livewire.${2:asset-manager}");\n    }\n}\n$0',
   },
 ]
 
@@ -107,7 +107,7 @@ export const BLADE_UI_SNIPPETS: SnippetDefinition[] = [
     label: 'blade-ui-kit-component',
     detail: 'Blade UI: Reusable Component with Slots & Attributes',
     documentation: 'Laravel Blade component with props, defaults, attributes, and slots',
-    insertText: '@props([\n    "variant" => "glass",\n    "title" => "Liquid Panel"\n])\n\n<div {{ $attributes->merge(["class" => "panel-base panel-" . $variant]) }}>\n    <div class="panel-header">\n        <h4>{{ $title }}</h4>\n    </div>\n    <div class="panel-body">\n        {{ $slot }}\n    </div>\n</div>\n$0',
+    insertText: '@props([\n    "variant" => "glass",\n    "title" => "Liquid Panel"\n])\n\n<div {{ \\$attributes->merge(["class" => "panel-base panel-" . \\$variant]) }}>\n    <div class="panel-header">\n        <h4>{{ \\$title }}</h4>\n    </div>\n    <div class="panel-body">\n        {{ \\$slot }}\n    </div>\n</div>\n$0',
   },
 ]
 
@@ -116,7 +116,7 @@ export const SYMFONY_UX_SNIPPETS: SnippetDefinition[] = [
     label: 'symfony-ux-stimulus-controller',
     detail: 'Symfony UX: Stimulus Frontend Controller',
     documentation: 'Symfony UX Stimulus controller for interactive HTML behaviors',
-    insertText: 'import { Controller } from "@hotwired/stimulus";\n\nexport default class extends Controller {\n    static targets = ["output", "input"];\n    static values = { refreshInterval: Number };\n\n    connect() {\n        console.log("Symfony UX Stimulus connected.");\n    }\n\n    greet() {\n        this.outputTarget.textContent = `Hello, ${this.inputTarget.value}!`;\n    }\n}\n$0',
+    insertText: 'import { Controller } from "@hotwired/stimulus";\n\nexport default class extends Controller {\n    static targets = ["output", "input"];\n    static values = { refreshInterval: Number };\n\n    connect() {\n        console.log("Symfony UX Stimulus connected.");\n    }\n\n    greet() {\n        this.outputTarget.textContent = `Hello, \\${this.inputTarget.value}!`;\n    }\n}\n$0',
   },
 ]
 

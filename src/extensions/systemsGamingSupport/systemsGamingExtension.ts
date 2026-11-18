@@ -4,6 +4,7 @@ import {
   ODIN_SNIPPETS,
   NIM_SNIPPETS,
   ASSEMBLY_SNIPPETS,
+  WAT_SNIPPETS,
   systemsGamingSnippets,
 } from './systemsGamingSnippets'
 import { toolchainService } from '../../services/toolchainService'
@@ -36,25 +37,26 @@ export const systemsGamingExtensionManifest: ExtensionManifest = {
     {
       id: 'assembly',
       extensions: ['.asm', '.s', '.nasm'],
-      aliases: ['Assembly', 'asm', 'NASM', 'x86_64'],
+      aliases: ['Assembly', 'asm', 'NASM', 'x86_64', 'ARM64'],
       snippets: ASSEMBLY_SNIPPETS,
     },
     {
       id: 'wat',
       extensions: ['.wat', '.wast'],
       aliases: ['WebAssembly', 'wat', 'WAT'],
-      snippets: ASSEMBLY_SNIPPETS,
+      snippets: WAT_SNIPPETS,
     },
   ],
 }
 
 
-export function registerSystemsGamingExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerSystemsGamingExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   const registerForLang = (lang: string, snippetsList: typeof ODIN_SNIPPETS) => {
     try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
           try {
             const word = model.getWordUntilPosition(position)
@@ -84,6 +86,7 @@ export function registerSystemsGamingExtension(monacoInstance: typeof monaco) {
           }
         },
       })
+      if (d) disposables.push(d)
     } catch (err) {
       console.error(`Could not register systems provider for ${lang}:`, err)
     }
@@ -92,7 +95,7 @@ export function registerSystemsGamingExtension(monacoInstance: typeof monaco) {
   registerForLang('odin', ODIN_SNIPPETS)
   registerForLang('nim', NIM_SNIPPETS)
   registerForLang('assembly', ASSEMBLY_SNIPPETS)
-  registerForLang('wat', ASSEMBLY_SNIPPETS)
+  registerForLang('wat', WAT_SNIPPETS)
 
   // Register toolchain for Odin
   toolchainService.registerToolchain({
@@ -117,4 +120,6 @@ export function registerSystemsGamingExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://nim-lang.org',
     description: 'Expressive, efficient, systems-oriented compiled language',
   })
+
+  return disposables
 }

@@ -12,7 +12,7 @@ export const ELIXIR_SNIPPETS: SnippetDefinition[] = [
     label: 'elixir-liveview',
     detail: 'Elixir / Phoenix: LiveView Component with HEEx Template',
     documentation: 'Phoenix LiveView interactive stateful component with handle_event',
-    insertText: 'defmodule ${1:AppWeb.GlassComponentLive} do\n  use ${1:AppWeb}, :live_view\n\n  @impl true\n  def mount(_params, _session, socket) do\n    {:ok, assign(socket, count: 0, title: "Liquid Glass BEAM Engine")}\n  end\n\n  @impl true\n  def handle_event("increment", _params, socket) do\n    {:noreply, update(socket, :count, &(&1 + 1))}\n  end\n\n  @impl true\n  def render(assigns) do\n    ~H"""\n    <div class="glass-beam-panel p-6 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10">\n      <h2 class="text-xl font-bold text-white"><%= @title %></h2>\n      <p class="text-emerald-400 mt-2">Active Concurrency Count: <%= @count %></p>\n      <button phx-click="increment" class="mt-4 px-4 py-2 rounded-xl bg-blue-600/30 border border-blue-400/40 text-white font-medium hover:bg-blue-600/50">\n        Increment OTP Actor\n      </button>\n    </div>\n    """\n  end\nend\n$0',
+    insertText: 'defmodule ${1:AppWeb}.${2:GlassComponentLive} do\n  use ${1:AppWeb}, :live_view\n\n  @impl true\n  def mount(_params, _session, socket) do\n    {:ok, assign(socket, count: 0, title: "Liquid Glass BEAM Engine")}\n  end\n\n  @impl true\n  def handle_event("increment", _params, socket) do\n    {:noreply, update(socket, :count, &(&1 + 1))}\n  end\n\n  @impl true\n  def render(assigns) do\n    ~H"""\n    <div class="glass-beam-panel p-6 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10">\n      <h2 class="text-xl font-bold text-white"><%= @title %></h2>\n      <p class="text-emerald-400 mt-2">Active Concurrency Count: <%= @count %></p>\n      <button phx-click="increment" class="mt-4 px-4 py-2 rounded-xl bg-blue-600/30 border border-blue-400/40 text-white font-medium hover:bg-blue-600/50">\n        Increment OTP Actor\n      </button>\n    </div>\n    """\n  end\nend\n$0',
   },
   {
     label: 'elixir-pattern-match',
@@ -58,13 +58,19 @@ export const CLOJURE_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 5. OCaml Snippets
+// 5. OCaml & ReasonML Snippets
 export const OCAML_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'ocaml-dune-module',
     detail: 'OCaml: Signature & Functor Implementation with Pattern Matching',
     documentation: 'Type-safe OCaml module signature, types, and pattern match dispatcher',
     insertText: 'module type ${1:SERIALIZER} = sig\n  type t\n  val to_json : t -> string\n  val of_json : string -> (t, string) result\nend\n\ntype telemetry_item =\n  | Metric of { name : string; value : float }\n  | Event of { name : string; timestamp : int }\n\nlet format_item (item : telemetry_item) : string =\n  match item with\n  | Metric { name; value } -> Printf.sprintf "Metric[%s]=%.2f" name value\n  | Event { name; timestamp } -> Printf.sprintf "Event[%s]@%d" name timestamp\n$0',
+  },
+  {
+    label: 'reasonml-component',
+    detail: 'ReasonML: Variant Types & Pattern-Matched Reducer',
+    documentation: 'ReasonML algebraic variant state machine with switch pattern matching',
+    insertText: 'type state = {\n  count: int,\n  status: string,\n};\n\ntype action =\n  | Increment\n  | Reset;\n\nlet reduce = (state: state, action: action): state =>\n  switch (action) {\n  | Increment => {count: state.count + 1, status: "active"}\n  | Reset => {count: 0, status: "idle"}\n  };\n$0',
   },
 ]
 

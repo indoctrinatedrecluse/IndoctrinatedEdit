@@ -16,13 +16,29 @@ export const SOLIDITY_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
+// 1b. Hardhat (TypeScript / Ethers v6) Snippets
+export const HARDHAT_SNIPPETS: SnippetDefinition[] = [
+  {
+    label: 'hardhat-test',
+    detail: 'Hardhat (TypeScript): Contract Fixture & Chai Test Suite',
+    documentation: 'Hardhat Toolbox TypeScript unit test using loadFixture, ethers.getSigners, and Chai matchers',
+    insertText: 'import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";\nimport { expect } from "chai";\nimport hre from "hardhat";\n\ndescribe("${1:LiquidGlassToken}", function () {\n  async function deployFixture() {\n    const [owner, user] = await hre.ethers.getSigners();\n    const Factory = await hre.ethers.getContractFactory("${1:LiquidGlassToken}");\n    const contract = await Factory.deploy(owner.address);\n    return { contract, owner, user };\n  }\n\n  it("mints initial supply to owner", async function () {\n    const { contract, owner } = await loadFixture(deployFixture);\n    expect(await contract.balanceOf(owner.address)).to.be.gt(0n);\n  });\n});\n$0',
+  },
+]
+
 // 2. Move Snippets (Aptos / Sui)
 export const MOVE_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'move-module-resource',
-    detail: 'Move (Sui / Aptos): Resource Module with Capabilities',
-    documentation: 'Move module with struct key/store abilities, entry functions, and transfer',
+    detail: 'Move (Sui): Resource Module with Capabilities',
+    documentation: 'Sui Move module with struct key/store abilities, entry functions, and transfer',
     insertText: 'module ${1:indoctrinated}::${2:glass_asset} {\n    use sui::object::{Self, UID};\n    use sui::transfer;\n    use sui::tx_context::{Self, TxContext};\n\n    public struct ${3:GlassBadge} has key, store {\n        id: UID,\n        sheen_factor: u64,\n        creator: address,\n    }\n\n    public entry fun mint_badge(sheen: u64, ctx: &mut TxContext) {\n        let badge = ${3:GlassBadge} {\n            id: object::new(ctx),\n            sheen_factor: sheen,\n            creator: tx_context::sender(ctx),\n        };\n        transfer::public_transfer(badge, tx_context::sender(ctx));\n    }\n}\n$0',
+  },
+  {
+    label: 'aptos-move-coin',
+    detail: 'Move (Aptos): Resource Storage Module with Signer & Acquires',
+    documentation: 'Aptos Move module demonstrating signer authorization, move_to, and borrow_global_mut',
+    insertText: 'module ${1:indoctrinated}::${2:glass_vault} {\n    use std::signer;\n\n    struct VaultBalance has key {\n        amount: u64,\n    }\n\n    public entry fun init_vault(account: &signer, initial: u64) {\n        move_to(account, VaultBalance { amount: initial });\n    }\n\n    public entry fun deposit(account: &signer, delta: u64) acquires VaultBalance {\n        let addr = signer::address_of(account);\n        let vault = borrow_global_mut<VaultBalance>(addr);\n        vault.amount = vault.amount + delta;\n    }\n}\n$0',
   },
 ]
 
@@ -30,9 +46,9 @@ export const MOVE_SNIPPETS: SnippetDefinition[] = [
 export const CAIRO_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'cairo-starknet-contract',
-    detail: 'Cairo (Starknet): #[starknet::contract] with Storage & Events',
-    documentation: 'Cairo 2.x Starknet smart contract with component traits and storage mapping',
-    insertText: '#[starknet::interface]\npub trait I${1:GlassRegistry}<TContractState> {\n    fn get_sheen_score(self: @TContractState, account: starknet::ContractAddress) -> u256;\n    fn set_sheen_score(ref self: TContractState, score: u256);\n}\n\n#[starknet::contract]\npub mod ${1:GlassRegistry} {\n    use starknet::ContractAddress;\n    use starknet::get_caller_address;\n\n    #[storage]\n    struct Storage {\n        scores: LegacyMap<ContractAddress, u256>,\n    }\n\n    #[abi(embed_v0)]\n    impl ${1:GlassRegistry}Impl of super::I${1:GlassRegistry}<ContractState> {\n        fn get_sheen_score(self: @ContractState, account: ContractAddress) -> u256 {\n            self.scores.read(account)\n        }\n\n        fn set_sheen_score(ref self: ContractState, score: u256) {\n            let caller = get_caller_address();\n            self.scores.write(caller, score);\n        }\n    }\n}\n$0',
+    detail: 'Cairo (Starknet): #[starknet::contract] with Map Storage & Interface',
+    documentation: 'Cairo 2.8+ Starknet smart contract using modern starknet::storage::Map',
+    insertText: '#[starknet::interface]\npub trait I${1:GlassRegistry}<TContractState> {\n    fn get_sheen_score(self: @TContractState, account: starknet::ContractAddress) -> u256;\n    fn set_sheen_score(ref self: TContractState, score: u256);\n}\n\n#[starknet::contract]\npub mod ${1:GlassRegistry} {\n    use starknet::ContractAddress;\n    use starknet::get_caller_address;\n    use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess};\n\n    #[storage]\n    struct Storage {\n        scores: Map<ContractAddress, u256>,\n    }\n\n    #[abi(embed_v0)]\n    impl ${1:GlassRegistry}Impl of super::I${1:GlassRegistry}<ContractState> {\n        fn get_sheen_score(self: @ContractState, account: ContractAddress) -> u256 {\n            self.scores.read(account)\n        }\n\n        fn set_sheen_score(ref self: ContractState, score: u256) {\n            let caller = get_caller_address();\n            self.scores.write(caller, score);\n        }\n    }\n}\n$0',
   },
 ]
 
@@ -48,6 +64,7 @@ export const VYPER_SNIPPETS: SnippetDefinition[] = [
 
 export const WEB3_SNIPPETS: SnippetDefinition[] = [
   ...SOLIDITY_SNIPPETS,
+  ...HARDHAT_SNIPPETS,
   ...MOVE_SNIPPETS,
   ...CAIRO_SNIPPETS,
   ...VYPER_SNIPPETS,

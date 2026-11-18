@@ -18,19 +18,26 @@ export const gdscriptExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'gdscript',
-      extensions: ['.gd', '.tscn', '.tres', '.godot'],
+      extensions: ['.gd'],
       aliases: ['GDScript', 'gdscript', 'Godot', 'Godot4'],
       snippets: gdscriptSnippets,
+    },
+    {
+      id: 'ini',
+      extensions: ['.tscn', '.tres', '.godot'],
+      aliases: ['Godot Scene/Resource'],
+      snippets: [],
     },
   ],
 }
 
 
-export function registerGDScriptExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerGDScriptExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   try {
-    monacoInstance.languages.registerCompletionItemProvider('gdscript', {
+    const d = monacoInstance.languages.registerCompletionItemProvider('gdscript', {
       provideCompletionItems: (model, position) => {
         try {
           const word = model.getWordUntilPosition(position)
@@ -60,6 +67,7 @@ export function registerGDScriptExtension(monacoInstance: typeof monaco) {
         }
       },
     })
+    if (d) disposables.push(d)
   } catch (err) {
     console.error('Could not register GDScript extension provider:', err)
   }
@@ -75,4 +83,6 @@ export function registerGDScriptExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://godotengine.org',
     description: 'Free, open-source 2D and 3D game engine and editor runtime',
   })
+
+  return disposables
 }

@@ -18,54 +18,58 @@ export const angularExtensionManifest: ExtensionManifest = {
   languages: [
     {
       id: 'typescript',
-      extensions: ['.ts', '.component.ts', '.service.ts', '.directive.ts', '.pipe.ts', '.guard.ts'],
+      extensions: ['.ts', '.component.ts', '.service.ts', '.directive.ts', '.pipe.ts', '.guard.ts', '.module.ts', '.spec.ts'],
       aliases: ['Angular TypeScript', 'ng-ts'],
-      snippets: angularSnippets,
+      snippets: angularSnippets.filter((s) => s.label !== 'ng-control-flow'),
     },
     {
       id: 'html',
       extensions: ['.html', '.component.html'],
       aliases: ['Angular Template', 'ng-html'],
-      snippets: angularSnippets,
+      snippets: angularSnippets.filter((s) => s.label === 'ng-control-flow'),
     },
   ],
 }
 
 
-export function registerAngularExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerAngularExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
-  const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {
-    const word = model.getWordUntilPosition(position)
-    const range: monaco.IRange = {
-      startLineNumber: position.lineNumber,
-      endLineNumber: position.lineNumber,
-      startColumn: word.startColumn,
-      endColumn: word.endColumn,
-    }
+  const disposables: monaco.IDisposable[] = []
+  const tsSnippets = angularSnippets.filter((s) => s.label !== 'ng-control-flow')
+  const htmlSnippets = angularSnippets.filter((s) => s.label === 'ng-control-flow')
 
-    const suggestions: monaco.languages.CompletionItem[] = angularSnippets.map((snippet) => ({
-      label: snippet.label,
-      kind: monacoInstance.languages.CompletionItemKind.Snippet,
-      detail: snippet.detail || 'Angular Snippet',
-      documentation: snippet.documentation,
-      insertText: snippet.insertText,
-      insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-      range,
-    }))
+  const makeProvider = (list: typeof angularSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
+      const word = model.getWordUntilPosition(position)
+      const range: monaco.IRange = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn,
+      }
 
-    return { suggestions }
-  }
+      const suggestions: monaco.languages.CompletionItem[] = list.map((snippet) => ({
+        label: snippet.label,
+        kind: monacoInstance.languages.CompletionItemKind.Snippet,
+        detail: snippet.detail || 'Angular Snippet',
+        documentation: snippet.documentation,
+        insertText: snippet.insertText,
+        insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        range,
+      }))
 
-  monacoInstance.languages.registerCompletionItemProvider('typescript', {
-    provideCompletionItems: provideSnippets,
+      return { suggestions }
+    },
   })
 
-  monacoInstance.languages.registerCompletionItemProvider('html', {
-    provideCompletionItems: provideSnippets,
-  })
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('typescript', makeProvider(tsSnippets))
+  const d2 = monacoInstance.languages.registerCompletionItemProvider('html', makeProvider(htmlSnippets))
+  if (d1) disposables.push(d1)
+  if (d2) disposables.push(d2)
 
   triggerAngularToolchainCheck()
+  return disposables
 }
 
 export function triggerAngularToolchainCheck() {

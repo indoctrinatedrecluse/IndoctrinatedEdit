@@ -2,6 +2,7 @@ import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import {
   SOLIDITY_SNIPPETS,
+  HARDHAT_SNIPPETS,
   MOVE_SNIPPETS,
   CAIRO_SNIPPETS,
   VYPER_SNIPPETS,
@@ -51,12 +52,13 @@ export const web3ExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerWeb3Extension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerWeb3Extension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   const registerForLang = (lang: string, snippetsList: typeof SOLIDITY_SNIPPETS) => {
     try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
           try {
             const word = model.getWordUntilPosition(position)
@@ -86,6 +88,7 @@ export function registerWeb3Extension(monacoInstance: typeof monaco) {
           }
         },
       })
+      if (d) disposables.push(d)
     } catch (err) {
       notificationService.notifyError(
         'Web3 & Smart Contract Engine',
@@ -95,11 +98,14 @@ export function registerWeb3Extension(monacoInstance: typeof monaco) {
   }
 
   registerForLang('solidity', SOLIDITY_SNIPPETS)
+  registerForLang('typescript', HARDHAT_SNIPPETS)
+  registerForLang('javascript', HARDHAT_SNIPPETS)
   registerForLang('move', MOVE_SNIPPETS)
   registerForLang('cairo', CAIRO_SNIPPETS)
   registerForLang('vyper', VYPER_SNIPPETS)
 
   triggerWeb3ToolchainCheck()
+  return disposables
 }
 
 export function triggerWeb3ToolchainCheck() {

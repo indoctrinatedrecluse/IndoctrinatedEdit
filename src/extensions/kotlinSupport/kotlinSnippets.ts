@@ -12,7 +12,7 @@ export const KOTLIN_SNIPPETS: SnippetDefinition[] = [
     label: 'kmp-expect-actual',
     detail: 'Kotlin Multiplatform: expect/actual Platform Declaration',
     documentation: 'KMP expect declaration pattern for platform-specific hardware/system implementations',
-    insertText: 'package com.indoctrinated.editor.platform\n\nexpect class ${1:PlatformDriver}() {\n    val platformName: String\n    fun getHardwareAcceleration(): Boolean\n}\n\nfun getEnvironmentGreeting(): String {\n    val driver = ${1:PlatformDriver}()\n    return "Running on ${driver.platformName} with HW-Accel=${driver.getHardwareAcceleration()}"\n}\n$0',
+    insertText: 'package com.indoctrinated.editor.platform\n\nexpect class ${1:PlatformDriver}() {\n    val platformName: String\n    fun getHardwareAcceleration(): Boolean\n}\n\nfun getEnvironmentGreeting(): String {\n    val driver = ${1:PlatformDriver}()\n    return "Running on \\${driver.platformName} with HW-Accel=\\${driver.getHardwareAcceleration()}"\n}\n$0',
   },
   {
     label: 'kotlin-sealed-class',
@@ -46,7 +46,7 @@ export const COMPOSE_SNIPPETS: SnippetDefinition[] = [
     label: 'compose-screen',
     detail: 'Jetpack Compose: Scaffold Screen with TopAppBar & FloatingActionButton',
     documentation: 'Full Compose screen architecture with Scaffold, TopBar, and ViewModel binding',
-    insertText: 'package com.indoctrinated.editor.ui\n\nimport androidx.compose.foundation.layout.*\nimport androidx.compose.material3.*\nimport androidx.compose.runtime.*\nimport androidx.compose.ui.Modifier\n\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nfun ${1:EditorScreen}(\n    title: String,\n    onActionClick: () => Unit\n) {\n    Scaffold(\n        topBar = {\n            TopAppBar(\n                title = { Text(title) },\n                colors = TopAppBarDefaults.topAppBarColors(\n                    containerColor = MaterialTheme.colorScheme.surfaceVariant\n                )\n            )\n        }\n    ) { innerPadding ->\n        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {\n            Text("IndoctrinatedEdit Compose Canvas")\n        }\n    }\n}\n$0',
+    insertText: 'package com.indoctrinated.editor.ui\n\nimport androidx.compose.foundation.layout.*\nimport androidx.compose.material3.*\nimport androidx.compose.runtime.*\nimport androidx.compose.ui.Modifier\n\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nfun ${1:EditorScreen}(\n    title: String,\n    onActionClick: () -> Unit\n) {\n    Scaffold(\n        topBar = {\n            TopAppBar(\n                title = { Text(title) },\n                colors = TopAppBarDefaults.topAppBarColors(\n                    containerColor = MaterialTheme.colorScheme.surfaceVariant\n                )\n            )\n        }\n    ) { innerPadding ->\n        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {\n            Text("IndoctrinatedEdit Compose Canvas")\n        }\n    }\n}\n$0',
   },
   {
     label: 'compose-remember-state',

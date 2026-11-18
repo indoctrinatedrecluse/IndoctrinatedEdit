@@ -2,7 +2,8 @@ import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
 import {
   TERRAFORM_SNIPPETS,
-  DOCKER_SNIPPETS,
+  DOCKERFILE_SNIPPETS,
+  DOCKER_COMPOSE_SNIPPETS,
   KUBERNETES_SNIPPETS,
   devopsSnippets,
 } from './devopsSnippets'
@@ -13,7 +14,7 @@ export const devopsExtensionManifest: ExtensionManifest = {
   name: 'DevOps, Cloud IaC & Container Suite',
   version: '1.0.0',
   description:
-    'Complete DevOps, Cloud Infrastructure as Code, and Containerization suite for Terraform HCL, OpenTofu, Docker, and Kubernetes.',
+    'Complete DevOps, Cloud Infrastructure as Code, and Containerization suite for Terraform HCL, OpenTofu, Docker, Kubernetes, and Helm.',
   author: 'indoctrinatedrecluse',
   category: 'Tools',
   iconName: 'Server',
@@ -29,26 +30,27 @@ export const devopsExtensionManifest: ExtensionManifest = {
     },
     {
       id: 'dockerfile',
-      extensions: ['Dockerfile', 'Containerfile', '.dockerignore'],
+      extensions: ['Dockerfile', 'Containerfile', '.dockerfile', '.dockerignore'],
       aliases: ['Dockerfile', 'Containerfile'],
-      snippets: DOCKER_SNIPPETS,
+      snippets: DOCKERFILE_SNIPPETS,
     },
     {
       id: 'yaml',
       extensions: ['.yml', '.yaml'],
       aliases: ['Kubernetes Manifests', 'Docker Compose', 'Helm'],
-      snippets: [...DOCKER_SNIPPETS, ...KUBERNETES_SNIPPETS],
+      snippets: [...DOCKER_COMPOSE_SNIPPETS, ...KUBERNETES_SNIPPETS],
     },
   ],
 }
 
 
-export function registerDevopsExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerDevopsExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   const registerForLang = (lang: string, snippetsList: typeof TERRAFORM_SNIPPETS, prefix: string) => {
     try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
           try {
             const word = model.getWordUntilPosition(position)
@@ -78,14 +80,15 @@ export function registerDevopsExtension(monacoInstance: typeof monaco) {
           }
         },
       })
+      if (d) disposables.push(d)
     } catch (err) {
       console.error(`Could not register completion provider for ${lang}:`, err)
     }
   }
 
   registerForLang('hcl', TERRAFORM_SNIPPETS, '☁️')
-  registerForLang('dockerfile', DOCKER_SNIPPETS, '🐳')
-  registerForLang('yaml', [...DOCKER_SNIPPETS, ...KUBERNETES_SNIPPETS], '☸️')
+  registerForLang('dockerfile', DOCKERFILE_SNIPPETS, '🐳')
+  registerForLang('yaml', [...DOCKER_COMPOSE_SNIPPETS, ...KUBERNETES_SNIPPETS], '☸️')
 
   // Register toolchains for Terraform & Docker
   toolchainService.registerToolchain({
@@ -109,4 +112,6 @@ export function registerDevopsExtension(monacoInstance: typeof monaco) {
     downloadUrl: 'https://www.docker.com',
     description: 'Container application development and virtualization engine',
   })
+
+  return disposables
 }

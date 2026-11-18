@@ -75,6 +75,14 @@ export const rustSnippets: SnippetDefinition[] = [
     insertText: 'use actix_web::{get, web, App, HttpServer, HttpResponse, Responder};\n\n#[get("/health")]\nasync fn health() -> impl Responder {\n\tHttpResponse::Ok().json(serde_json::json!({ "status": "healthy" }))\n}\n\n#[actix_web::main]\nasync fn main() -> std::io::Result<()> {\n\tHttpServer::new(|| {\n\t\tApp::new().service(health)\n\t})\n\t.bind(("127.0.0.1", ${1:8080}))?\n\t.run()\n\t.await\n}\n$0',
   },
 
+  // --- Serde Serialization ---
+  {
+    label: 'rust-serde-json',
+    detail: 'Serde: Typed JSON Serialize / Deserialize Model',
+    documentation: 'Strongly-typed Serde struct with rename_all, defaults, and serde_json round-trip helpers',
+    insertText: 'use serde::{Deserialize, Serialize};\n\n#[derive(Debug, Clone, Serialize, Deserialize)]\n#[serde(rename_all = "camelCase")]\npub struct ${1:ConfigPayload} {\n\tpub id: String,\n\t#[serde(default)]\n\tpub enabled: bool,\n\t#[serde(skip_serializing_if = "Option::is_none")]\n\tpub metadata: Option<serde_json::Value>,\n}\n\npub fn parse_${2:config}(raw: &str) -> Result<${1:ConfigPayload}, serde_json::Error> {\n\tserde_json::from_str(raw)\n}\n$0',
+  },
+
   // --- Clap CLI Framework ---
   {
     label: 'clap-cli',

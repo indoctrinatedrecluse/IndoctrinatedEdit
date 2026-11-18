@@ -6,7 +6,7 @@ export const EXPRESS_SNIPPETS: SnippetDefinition[] = [
     label: 'express-server',
     detail: 'Express 5: Application Bootstrap with Middleware & Routing',
     documentation: 'Modern Express application with json parser, cors, error handler, and graceful shutdown',
-    insertText: 'import express, { Request, Response, NextFunction } from "express";\nimport cors from "cors";\n\nconst app = express();\n\napp.use(cors());\napp.use(express.json());\n\napp.get("/health", (req: Request, res: Response) => {\n  res.json({ status: "healthy", engine: "IndoctrinatedEdit Express" });\n});\n\napp.post("/api/v1/data", (req: Request, res: Response) => {\n  res.status(201).json({ success: true, payload: req.body });\n});\n\nconst PORT = process.env.PORT || 4000;\napp.listen(PORT, () => {\n  console.log(`✨ Express server running on port ${PORT}`);\n});\n$0',
+    insertText: 'import express, { Request, Response, NextFunction } from "express";\nimport cors from "cors";\n\nconst app = express();\n\napp.use(cors());\napp.use(express.json());\n\napp.get("/health", (req: Request, res: Response) => {\n  res.json({ status: "healthy", engine: "IndoctrinatedEdit Express" });\n});\n\napp.post("/api/v1/data", (req: Request, res: Response) => {\n  res.status(201).json({ success: true, payload: req.body });\n});\n\nconst PORT = process.env.PORT || 4000;\napp.listen(PORT, () => {\n  console.log(`✨ Express server running on port \\${PORT}`);\n});\n$0',
   },
 ]
 
@@ -89,7 +89,7 @@ export const SYMFONY_BACKEND_SNIPPETS: SnippetDefinition[] = [
     label: 'symfony-api-controller',
     detail: 'Symfony 7: API Platform & MapRequestPayload Controller',
     documentation: 'Symfony 7 controller with #[Route], #[MapRequestPayload], and JsonResponse',
-    insertText: '<?php\n\nnamespace App\\Controller;\n\nuse Symfony\\Bundle\\FrameworkBundle\\Controller\\AbstractController;\nuse Symfony\\Component\\HttpFoundation\\JsonResponse;\nuse Symfony\\Component\\HttpFoundation\\Response;\nuse Symfony\\Component\\Routing\\Attribute\\Route;\nuse Symfony\\Component\\HttpKernel\\Attribute\\MapRequestPayload;\n\n#[Route("/api/v1/assets", name: "api_assets_")]\nclass ${1:AssetController} extends AbstractController\n{\n    #[Route("", methods: ["GET"])]\n    public function index(): JsonResponse\n    {\n        return $this->json([\n            "items" => [],\n            "engine" => "Symfony 7 Liquid Glass"\n        ]);\n    }\n}\n$0',
+    insertText: '<?php\n\nnamespace App\\Controller;\n\nuse Symfony\\Bundle\\FrameworkBundle\\Controller\\AbstractController;\nuse Symfony\\Component\\HttpFoundation\\JsonResponse;\nuse Symfony\\Component\\HttpFoundation\\Response;\nuse Symfony\\Component\\Routing\\Attribute\\Route;\nuse Symfony\\Component\\HttpKernel\\Attribute\\MapRequestPayload;\n\n#[Route("/api/v1/assets", name: "api_assets_")]\nclass ${1:AssetController} extends AbstractController\n{\n    #[Route("", methods: ["GET"])]\n    public function index(): JsonResponse\n    {\n        return \\$this->json([\n            "items" => [],\n            "engine" => "Symfony 7 Liquid Glass"\n        ]);\n    }\n}\n$0',
   },
 ]
 
@@ -98,7 +98,7 @@ export const CODEIGNITER_SNIPPETS: SnippetDefinition[] = [
     label: 'codeigniter-resource-controller',
     detail: 'CodeIgniter 4: RESTful Resource Controller',
     documentation: 'CodeIgniter 4 ResourceController with failNotFound and respondCreated',
-    insertText: '<?php\n\nnamespace App\\Controllers;\n\nuse CodeIgniter\\RESTful\\ResourceController;\n\nclass ${1:Products} extends ResourceController\n{\n    protected $modelName = "App\\Models\\${1:Product}Model";\n    protected $format    = "json";\n\n    public function index()\n    {\n        return $this->respond($this->model->findAll());\n    }\n\n    public function show($id = null)\n    {\n        $data = $this->model->find($id);\n        if (!$data) return $this->failNotFound("Item not found");\n        return $this->respond($data);\n    }\n}\n$0',
+    insertText: '<?php\n\nnamespace App\\Controllers;\n\nuse CodeIgniter\\RESTful\\ResourceController;\n\nclass ${1:Products} extends ResourceController\n{\n    protected \\$modelName = "App\\Models\\\\${2:Product}Model";\n    protected \\$format    = "json";\n\n    public function index()\n    {\n        return \\$this->respond(\\$this->model->findAll());\n    }\n\n    public function show(\\$id = null)\n    {\n        \\$data = \\$this->model->find(\\$id);\n        if (!\\$data) return \\$this->failNotFound("Item not found");\n        return \\$this->respond(\\$data);\n    }\n}\n$0',
   },
 ]
 
@@ -107,7 +107,7 @@ export const SLIM_SNIPPETS: SnippetDefinition[] = [
     label: 'slim-microservice',
     detail: 'Slim 4: PSR-7 Microservice with Routing & Middleware',
     documentation: 'Slim 4 PHP microframework setup with JSON response helper and CORS middleware',
-    insertText: '<?php\n\nuse Psr\\Http\\Message\\ResponseInterface as Response;\nuse Psr\\Http\\Message\\ServerRequestInterface as Request;\nuse Slim\\Factory\\AppFactory;\n\nrequire __DIR__ . "/../vendor/autoload.php";\n\n$app = AppFactory::create();\n$app->addBodyParsingMiddleware();\n$app->addErrorMiddleware(true, true, true);\n\n$app->get("/health", function (Request $request, Response $response) {\n    $payload = json_encode(["status" => "healthy", "runtime" => "Slim 4"]);\n    $response->getBody()->write($payload);\n    return $response->withHeader("Content-Type", "application/json");\n});\n\n$app->run();\n$0',
+    insertText: '<?php\n\nuse Psr\\Http\\Message\\ResponseInterface as Response;\nuse Psr\\Http\\Message\\ServerRequestInterface as Request;\nuse Slim\\Factory\\AppFactory;\n\nrequire __DIR__ . "/../vendor/autoload.php";\n\n\\$app = AppFactory::create();\n\\$app->addBodyParsingMiddleware();\n\\$app->addErrorMiddleware(true, true, true);\n\n\\$app->get("/health", function (Request \\$request, Response \\$response) {\n    \\$payload = json_encode(["status" => "healthy", "runtime" => "Slim 4"]);\n    \\$response->getBody()->write(\\$payload);\n    return \\$response->withHeader("Content-Type", "application/json");\n});\n\n\\$app->run();\n$0',
   },
 ]
 
@@ -202,6 +202,12 @@ export const DOTNET_BACKEND_SNIPPETS: SnippetDefinition[] = [
     detail: 'ASP.NET Core: Real-Time SignalR Typed Hub',
     documentation: 'ASP.NET Core strongly-typed SignalR hub with client proxy interface',
     insertText: 'using Microsoft.AspNetCore.SignalR;\n\nnamespace Indoctrinated.Editor.Hubs;\n\npublic interface ITelemetryClient\n{\n    Task ReceiveUpdate(string topic, object payload);\n}\n\npublic class ${1:TelemetryHub} : Hub<ITelemetryClient>\n{\n    public async Task BroadcastStatus(string topic, string message)\n    {\n        await Clients.All.ReceiveUpdate(topic, new { Message = message, Timestamp = DateTime.UtcNow });\n    }\n}\n$0',
+  },
+  {
+    label: 'dotnet-minimal-api',
+    detail: 'ASP.NET Core 8/9: Minimal API Endpoint Group & TypedResults',
+    documentation: 'Modern ASP.NET Core Minimal API host with route group, TypedResults, and OpenAPI metadata',
+    insertText: 'using Microsoft.AspNetCore.Http.HttpResults;\n\nvar builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddEndpointsApiExplorer();\n\nvar app = builder.Build();\n\nvar group = app.MapGroup("/api/v1/${1:items}");\n\ngroup.MapGet("/health", () => TypedResults.Ok(new { Status = "healthy", Engine = "ASP.NET Core Minimal API" }));\n\ngroup.MapPost("/", (${2:ItemDto} dto) =>\n{\n    return TypedResults.Created($"/api/v1/${1:items}/{dto.Id}", dto);\n});\n\napp.Run();\n\npublic record ${2:ItemDto}(int Id, string Name);\n$0',
   },
 ]
 

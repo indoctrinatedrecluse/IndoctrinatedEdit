@@ -27,11 +27,15 @@ export const phpExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerPhpExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerPhpExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
-  monacoInstance.languages.registerCompletionItemProvider('php', {
-    provideCompletionItems: (model, position) => {
+  const disposables: monaco.IDisposable[] = []
+  const phpCodeSnippets = phpSnippets.filter((s) => s.label !== 'composer-json')
+  const composerSnippets = phpSnippets.filter((s) => s.label === 'composer-json')
+
+  const makeProvider = (list: typeof phpSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
       const word = model.getWordUntilPosition(position)
       const range: monaco.IRange = {
         startLineNumber: position.lineNumber,
@@ -40,7 +44,7 @@ export function registerPhpExtension(monacoInstance: typeof monaco) {
         endColumn: word.endColumn,
       }
 
-      const suggestions: monaco.languages.CompletionItem[] = phpSnippets.map((snippet) => ({
+      const suggestions: monaco.languages.CompletionItem[] = list.map((snippet) => ({
         label: snippet.label,
         kind: monacoInstance.languages.CompletionItemKind.Snippet,
         detail: snippet.detail || 'PHP / Laravel Snippet',
@@ -54,7 +58,15 @@ export function registerPhpExtension(monacoInstance: typeof monaco) {
     },
   })
 
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('php', makeProvider(phpCodeSnippets))
+  if (d1) disposables.push(d1)
+  if (composerSnippets.length > 0) {
+    const d2 = monacoInstance.languages.registerCompletionItemProvider('json', makeProvider(composerSnippets))
+    if (d2) disposables.push(d2)
+  }
+
   triggerPhpToolchainCheck()
+  return disposables
 }
 
 export function triggerPhpToolchainCheck() {

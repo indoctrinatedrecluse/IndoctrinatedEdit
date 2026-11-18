@@ -28,23 +28,33 @@ export const NIM_SNIPPETS: SnippetDefinition[] = [
     label: 'nim-async-http',
     detail: 'Nim: Async HTTP Server with Macro Decorators',
     documentation: 'Nim async/await HTTP server using std/asynchttpserver and JSON responses',
-    insertText: 'import std/[asynchttpserver, asyncdispatch, json]\n\nproc main() {.async.} =\n  var server = newAsyncHttpServer()\n  \n  proc cb(req: Request) {.async.} =\n    let headers = {"Content-Type": "application/json"}\n    let payload = %* {"status": "ok", "runtime": "Nim Compiled Engine"}\n    await req.respond(Http200, $payload, headers.newHttpHeaders())\n\n  echo "✨ Nim server running on http://127.0.0.1:8080"\n  await server.serve(Port(8080), cb)\n\nwaitFor main()\n$0',
+    insertText: 'import std/[asynchttpserver, asyncdispatch, json]\n\nproc main() {.async.} =\n  var server = newAsyncHttpServer()\n  \n  proc cb(req: Request) {.async.} =\n    let headers = {"Content-Type": "application/json"}\n    let payload = %* {"status": "ok", "runtime": "Nim Compiled Engine"}\n    await req.respond(Http200, \\$payload, headers.newHttpHeaders())\n\n  echo "✨ Nim server running on http://127.0.0.1:8080"\n  await server.serve(Port(8080), cb)\n\nwaitFor main()\n$0',
   },
 ]
 
-// 3. Assembly & WAT Snippets
+// 3. Assembly (x86_64 & ARM64) Snippets
 export const ASSEMBLY_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'asm-x86-64-entry',
     detail: 'Assembly (x86_64 NASM): Linux Syscall 64-bit Entry',
     documentation: 'NASM x86_64 assembly writing to stdout and clean exit syscall',
-    insertText: 'section .data\n    msg db "✨ Liquid Glass Native Assembly", 0xA\n    len equ $ - msg\n\nsection .text\n    global _start\n\n_start:\n    ; sys_write (rax=1, rdi=1, rsi=msg, rdx=len)\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len\n    syscall\n\n    ; sys_exit (rax=60, rdi=0)\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n$0',
+    insertText: 'section .data\n    msg db "✨ Liquid Glass Native Assembly", 0xA\n    len equ \\$ - msg\n\nsection .text\n    global _start\n\n_start:\n    ; sys_write (rax=1, rdi=1, rsi=msg, rdx=len)\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len\n    syscall\n\n    ; sys_exit (rax=60, rdi=0)\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n$0',
   },
+  {
+    label: 'asm-arm64-entry',
+    detail: 'Assembly (ARM64 / AArch64): Linux Syscall Entry',
+    documentation: 'AArch64 GAS assembly writing to stdout and exiting cleanly via svc #0',
+    insertText: '.section .data\nmsg:\n    .ascii "${1:Liquid Glass ARM64 Native}\\n"\nlen = . - msg\n\n.section .text\n.global _start\n\n_start:\n    // sys_write (x8=64, x0=1, x1=msg, x2=len)\n    mov x8, #64\n    mov x0, #1\n    adr x1, msg\n    mov x2, #len\n    svc #0\n\n    // sys_exit (x8=93, x0=0)\n    mov x8, #93\n    mov x0, #0\n    svc #0\n$0',
+  },
+]
+
+// 4. WebAssembly (WAT) Snippets
+export const WAT_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'wat-module-export',
     detail: 'WebAssembly (WAT): S-Expression Function Module',
     documentation: 'WebAssembly Text Format module with memory and exported arithmetic function',
-    insertText: '(module\n  (memory (export "memory") 1)\n  (func $specularAdd (param $a f32) (param $b f32) (result f32)\n    local.get $a\n    local.get $b\n    f32.add\n  )\n  (export "specularAdd" (func $specularAdd))\n)\n$0',
+    insertText: '(module\n  (memory (export "memory") 1)\n  (func \\$specularAdd (param \\$a f32) (param \\$b f32) (result f32)\n    local.get \\$a\n    local.get \\$b\n    f32.add\n  )\n  (export "specularAdd" (func \\$specularAdd))\n)\n$0',
   },
 ]
 
@@ -52,6 +62,7 @@ export const SYSTEMS_GAMING_SNIPPETS: SnippetDefinition[] = [
   ...ODIN_SNIPPETS,
   ...NIM_SNIPPETS,
   ...ASSEMBLY_SNIPPETS,
+  ...WAT_SNIPPETS,
 ]
 
 export const systemsGamingSnippets = SYSTEMS_GAMING_SNIPPETS

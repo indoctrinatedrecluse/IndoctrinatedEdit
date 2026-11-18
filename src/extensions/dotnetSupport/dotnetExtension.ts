@@ -37,12 +37,15 @@ export const dotnetExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerDotnetExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerDotnetExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
-  // Register completion items for C#
-  monacoInstance.languages.registerCompletionItemProvider('csharp', {
-    provideCompletionItems: (model, position) => {
+  const disposables: monaco.IDisposable[] = []
+  const csharpCodeSnippets = dotnetSnippets.filter((s) => s.label !== 'csproj-modern')
+  const csprojSnippets = dotnetSnippets.filter((s) => s.label === 'csproj-modern')
+
+  const makeProvider = (list: typeof dotnetSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
       const word = model.getWordUntilPosition(position)
       const range: monaco.IRange = {
         startLineNumber: position.lineNumber,
@@ -51,7 +54,7 @@ export function registerDotnetExtension(monacoInstance: typeof monaco) {
         endColumn: word.endColumn,
       }
 
-      const suggestions: monaco.languages.CompletionItem[] = dotnetSnippets.map((snippet) => ({
+      const suggestions: monaco.languages.CompletionItem[] = list.map((snippet) => ({
         label: snippet.label,
         kind: monacoInstance.languages.CompletionItemKind.Snippet,
         detail: snippet.detail || 'C# / .NET Snippet',
@@ -65,8 +68,16 @@ export function registerDotnetExtension(monacoInstance: typeof monaco) {
     },
   })
 
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('csharp', makeProvider(csharpCodeSnippets))
+  if (d1) disposables.push(d1)
+  if (csprojSnippets.length > 0) {
+    const d2 = monacoInstance.languages.registerCompletionItemProvider('xml', makeProvider(csprojSnippets))
+    if (d2) disposables.push(d2)
+  }
+
   // Trigger background compiler detection and notify if missing
   triggerDotnetToolchainCheck()
+  return disposables
 }
 
 export function triggerDotnetToolchainCheck() {

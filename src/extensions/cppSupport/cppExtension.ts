@@ -21,55 +21,68 @@ export const cppExtensionManifest: ExtensionManifest = {
       extensions: ['.cpp', '.cxx', '.cc', '.c++', '.hpp', '.hxx', '.hh', '.h++', '.ixx', '.cppm'],
       aliases: ['C++', 'cpp', 'cplusplus'],
       mimetypes: ['text/x-c++src', 'text/x-c++hdr'],
-      snippets: cppSnippets,
+      snippets: cppSnippets.filter((s) => s.label !== 'cmake-project'),
     },
     {
       id: 'c',
       extensions: ['.c', '.h'],
       aliases: ['C', 'c'],
       mimetypes: ['text/x-csrc', 'text/x-chdr'],
-      snippets: cppSnippets,
+      snippets: cppSnippets.filter((s) => s.label !== 'cmake-project'),
+    },
+    {
+      id: 'cmake',
+      extensions: ['.cmake'],
+      aliases: ['CMake', 'cmake'],
+      snippets: cppSnippets.filter((s) => s.label === 'cmake-project'),
     },
   ],
 }
 
 
-export function registerCppExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerCppExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
-  // Register completion items for C++
-  const provideSnippets = (model: monaco.editor.ITextModel, position: monaco.Position) => {
-    const word = model.getWordUntilPosition(position)
-    const range: monaco.IRange = {
-      startLineNumber: position.lineNumber,
-      endLineNumber: position.lineNumber,
-      startColumn: word.startColumn,
-      endColumn: word.endColumn,
-    }
+  const disposables: monaco.IDisposable[] = []
+  const cppCodeSnippets = cppSnippets.filter((s) => s.label !== 'cmake-project')
+  const cmakeSnippets = cppSnippets.filter((s) => s.label === 'cmake-project')
 
-    const suggestions: monaco.languages.CompletionItem[] = cppSnippets.map((snippet) => ({
-      label: snippet.label,
-      kind: monacoInstance.languages.CompletionItemKind.Snippet,
-      detail: snippet.detail || 'C/C++ Snippet',
-      documentation: snippet.documentation,
-      insertText: snippet.insertText,
-      insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-      range,
-    }))
+  const makeProvider = (list: typeof cppSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
+      const word = model.getWordUntilPosition(position)
+      const range: monaco.IRange = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn,
+      }
 
-    return { suggestions }
+      const suggestions: monaco.languages.CompletionItem[] = list.map((snippet) => ({
+        label: snippet.label,
+        kind: monacoInstance.languages.CompletionItemKind.Snippet,
+        detail: snippet.detail || 'C/C++ Snippet',
+        documentation: snippet.documentation,
+        insertText: snippet.insertText,
+        insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        range,
+      }))
+
+      return { suggestions }
+    },
+  })
+
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('cpp', makeProvider(cppCodeSnippets))
+  const d2 = monacoInstance.languages.registerCompletionItemProvider('c', makeProvider(cppCodeSnippets))
+  if (d1) disposables.push(d1)
+  if (d2) disposables.push(d2)
+  if (cmakeSnippets.length > 0) {
+    const d3 = monacoInstance.languages.registerCompletionItemProvider('cmake', makeProvider(cmakeSnippets))
+    if (d3) disposables.push(d3)
   }
-
-  monacoInstance.languages.registerCompletionItemProvider('cpp', {
-    provideCompletionItems: provideSnippets,
-  })
-
-  monacoInstance.languages.registerCompletionItemProvider('c', {
-    provideCompletionItems: provideSnippets,
-  })
 
   // Trigger background compiler detection and notify if missing
   triggerCppToolchainCheck()
+  return disposables
 }
 
 export function triggerCppToolchainCheck() {

@@ -25,6 +25,12 @@ export const JULIA_CORE_SNIPPETS: SnippetDefinition[] = [
     documentation: 'High-performance tabular data processing with DataFrames and Queryverse in Julia',
     insertText: 'using DataFrames, Statistics\n\ndf = DataFrame(\n    department = ["Engineering", "Design", "Engineering", "Design", "Research"],\n    salary = [120000, 95000, 135000, 105000, 140000],\n    experience = [4, 3, 7, 5, 8]\n)\n\nsummary_df = combine(groupby(df, :department),\n    :salary => mean => :avg_salary,\n    :experience => mean => :avg_experience,\n    nrow => :headcount\n)\n\nprintln(summary_df)\n$0',
   },
+  {
+    label: 'julia-makie-plot',
+    detail: 'Julia / Makie.jl: GPU-Accelerated Scientific Visualization',
+    documentation: 'CairoMakie / GLMakie Figure, Axis, scatter/lines layers, and PNG export',
+    insertText: 'using CairoMakie\n\nxs = range(0, 4pi, length=200)\nys = sin.(xs) .* exp.(-xs ./ 8)\n\nfig = Figure(size = (900, 500), backgroundcolor = :gray10)\nax = Axis(fig[1, 1],\n    title = "${1:Damped Specular Harmonic}",\n    xlabel = "Phase (rad)",\n    ylabel = "Amplitude"\n)\nlines!(ax, xs, ys, color = :deepskyblue, linewidth = 3, label = "Envelope")\nscatter!(ax, xs[1:10:end], ys[1:10:end], color = :springgreen, markersize = 9)\naxislegend(ax)\nsave("${2:output_plot.png}", fig)\n$0',
+  },
 ]
 
 export const juliaSnippets: SnippetDefinition[] = [...JULIA_CORE_SNIPPETS]

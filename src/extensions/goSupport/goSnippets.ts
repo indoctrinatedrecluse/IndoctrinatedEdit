@@ -85,6 +85,14 @@ export const goSnippets: SnippetDefinition[] = [
     insertText: 'package main\n\nimport (\n\t"log"\n\t"github.com/gofiber/fiber/v2"\n\t"github.com/gofiber/fiber/v2/middleware/logger"\n\t"github.com/gofiber/fiber/v2/middleware/recover"\n)\n\nfunc main() {\n\tapp := fiber.New()\n\tapp.Use(logger.New())\n\tapp.Use(recover.New())\n\n\tapp.Get("/api/v1/health", func(c *fiber.Ctx) error {\n\t\treturn c.JSON(fiber.Map{"status": "healthy"})\n\t})\n\n\tlog.Fatal(app.Listen(":${1:3000}"))\n}\n$0',
   },
 
+  // --- Echo Framework Snippets ---
+  {
+    label: 'go-echo-server',
+    detail: 'Echo: Minimalist High-Performance HTTP Server',
+    documentation: 'Bootstrap a Go Echo v4 web server with Logger, Recover middleware, and JSON routes',
+    insertText: 'package main\n\nimport (\n\t"net/http"\n\t"github.com/labstack/echo/v4"\n\t"github.com/labstack/echo/v4/middleware"\n)\n\nfunc main() {\n\te := echo.New()\n\te.Use(middleware.Logger())\n\te.Use(middleware.Recover())\n\n\te.GET("/api/v1/health", func(c echo.Context) error {\n\t\treturn c.JSON(http.StatusOK, map[string]string{"status": "healthy", "framework": "Echo v4"})\n\t})\n\n\te.Logger.Fatal(e.Start(":${1:1323}"))\n}\n$0',
+  },
+
   // --- GORM ORM Snippets ---
   {
     label: 'gorm-model',

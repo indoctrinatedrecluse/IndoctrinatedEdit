@@ -8,6 +8,12 @@ export const GDSCRIPT_CORE_SNIPPETS: SnippetDefinition[] = [
     insertText: 'extends CharacterBody2D\n\n@export var speed: float = 300.0\n@export var jump_velocity: float = -400.0\n\n# Get the gravity from the project settings to be in sync with RigidBody nodes.\nvar gravity = ProjectSettings.get_setting("physics/2d/default_gravity")\n\nfunc _physics_process(delta: float) -> void:\n\t# Add gravity\n\tif not is_on_floor():\n\t\tvelocity.y += gravity * delta\n\n\t# Handle Jump\n\tif Input.is_action_just_pressed("ui_accept") and is_on_floor():\n\t\tvelocity.y = jump_velocity\n\n\t# Get input direction\n\tvar direction := Input.get_axis("ui_left", "ui_right")\n\tif direction:\n\t\tvelocity.x = direction * speed\n\telse:\n\t\tvelocity.x = move_toward(velocity.x, 0, speed)\n\n\tmove_and_slide()\n$0',
   },
   {
+    label: 'gd-character-body-3d',
+    detail: 'GDScript 4: 3D Character Body with Gravity, Camera Basis & Jump',
+    documentation: 'Godot 4.x CharacterBody3D controller with 3D directional velocity, gravity, and move_and_slide()',
+    insertText: 'extends CharacterBody3D\n\n@export var speed: float = 5.0\n@export var jump_velocity: float = 4.5\n\nvar gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")\n\nfunc _physics_process(delta: float) -> void:\n\tif not is_on_floor():\n\t\tvelocity.y -= gravity * delta\n\n\tif Input.is_action_just_pressed("ui_accept") and is_on_floor():\n\t\tvelocity.y = jump_velocity\n\n\tvar input_dir := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")\n\tvar direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()\n\tif direction:\n\t\tvelocity.x = direction.x * speed\n\t\tvelocity.z = direction.z * speed\n\telse:\n\t\tvelocity.x = move_toward(velocity.x, 0, speed)\n\t\tvelocity.z = move_toward(velocity.z, 0, speed)\n\n\tmove_and_slide()\n$0',
+  },
+  {
     label: 'gd-signals-eventbus',
     detail: 'GDScript 4: Custom Signals & Global Event Bus',
     documentation: 'Godot 4 typed signal declarations and emission with payload arguments',

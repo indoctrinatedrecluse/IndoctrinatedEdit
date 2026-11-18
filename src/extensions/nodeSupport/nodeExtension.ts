@@ -30,9 +30,15 @@ export const nodeExtensionManifest: ExtensionManifest = {
     },
     {
       id: 'json',
-      extensions: ['package.json', 'package-lock.json', '.npmrc'],
+      extensions: ['package.json', 'package-lock.json'],
       aliases: ['JSON', 'package.json'],
       snippets: nodeSnippets.filter((s) => s.label === 'node-package-json'),
+    },
+    {
+      id: 'ini',
+      extensions: ['.npmrc'],
+      aliases: ['NPM Config', 'npmrc'],
+      snippets: [],
     },
   ],
 }

@@ -1,6 +1,25 @@
 import * as monaco from 'monaco-editor'
 import { ExtensionManifest } from '../extensionTypes'
-import { frontendSnippets } from './frontendSnippets'
+import {
+  frontendSnippets,
+  VUE_SNIPPETS,
+  SVELTE_SNIPPETS,
+  SOLID_SNIPPETS,
+  PREACT_SNIPPETS,
+  STREAMLIT_SNIPPETS,
+  DASH_SNIPPETS,
+  REFLEX_SNIPPETS,
+  FLET_SNIPPETS,
+  ANVIL_SNIPPETS,
+  LIVEWIRE_SNIPPETS,
+  INERTIA_SNIPPETS,
+  BLADE_UI_SNIPPETS,
+  SYMFONY_UX_SNIPPETS,
+  HOTWIRE_SNIPPETS,
+  VIEWCOMPONENT_SNIPPETS,
+  BLAZOR_SNIPPETS,
+  ALPINE_SNIPPETS,
+} from './frontendSnippets'
 import { notificationService } from '../../services/notificationService'
 
 export const frontendExtensionManifest: ExtensionManifest = {
@@ -16,50 +35,64 @@ export const frontendExtensionManifest: ExtensionManifest = {
   snippetsCount: frontendSnippets.length,
   languages: [
     {
+      id: 'vue',
+      extensions: ['.vue'],
+      aliases: ['Vue', 'vue'],
+      snippets: [...VUE_SNIPPETS, ...INERTIA_SNIPPETS],
+    },
+    {
+      id: 'svelte',
+      extensions: ['.svelte'],
+      aliases: ['Svelte', 'svelte'],
+      snippets: SVELTE_SNIPPETS,
+    },
+    {
+      id: 'razor',
+      extensions: ['.razor', '.cshtml'],
+      aliases: ['Razor', 'Blazor'],
+      snippets: BLAZOR_SNIPPETS,
+    },
+    {
       id: 'html',
-      extensions: ['.vue', '.svelte', '.blade.php', '.erb', '.razor', '.html', '.htm'],
-      aliases: ['HTML Frontend', 'Vue', 'Svelte', 'Blade', 'Razor', 'Alpine'],
-      snippets: frontendSnippets,
+      extensions: ['.blade.php', '.erb', '.html', '.htm'],
+      aliases: ['HTML Frontend', 'Blade', 'Alpine'],
+      snippets: [...ALPINE_SNIPPETS, ...BLADE_UI_SNIPPETS, ...HOTWIRE_SNIPPETS],
     },
     {
       id: 'javascript',
-      extensions: ['.vue', '.svelte', '.js', '.jsx'],
+      extensions: ['.js', '.jsx'],
       aliases: ['Frontend JS'],
-      snippets: frontendSnippets,
+      snippets: [...SOLID_SNIPPETS, ...PREACT_SNIPPETS, ...SYMFONY_UX_SNIPPETS],
     },
     {
       id: 'typescript',
-      extensions: ['.vue', '.svelte', '.ts', '.tsx'],
+      extensions: ['.ts', '.tsx'],
       aliases: ['Frontend TS'],
-      snippets: frontendSnippets,
+      snippets: [...SOLID_SNIPPETS, ...PREACT_SNIPPETS, ...SYMFONY_UX_SNIPPETS],
     },
     {
       id: 'python',
       extensions: ['.py'],
-      aliases: ['Python UI (Streamlit, Reflex, Dash, Flet)'],
-      snippets: frontendSnippets.filter((s) =>
-        ['streamlit-app', 'dash-app', 'reflex-app', 'flet-app'].includes(s.label)
-      ),
+      aliases: ['Python UI (Streamlit, Reflex, Dash, Flet, Anvil)'],
+      snippets: [...STREAMLIT_SNIPPETS, ...DASH_SNIPPETS, ...REFLEX_SNIPPETS, ...FLET_SNIPPETS, ...ANVIL_SNIPPETS],
     },
     {
       id: 'php',
       extensions: ['.php', '.blade.php'],
       aliases: ['PHP UI (Livewire, Blade)'],
-      snippets: frontendSnippets.filter((s) => s.label === 'livewire-component'),
+      snippets: [...LIVEWIRE_SNIPPETS, ...BLADE_UI_SNIPPETS],
     },
     {
       id: 'csharp',
-      extensions: ['.razor', '.cs'],
+      extensions: ['.cs'],
       aliases: ['Blazor UI'],
-      snippets: frontendSnippets.filter((s) => s.label === 'blazor-component'),
+      snippets: BLAZOR_SNIPPETS,
     },
     {
       id: 'ruby',
       extensions: ['.erb', '.rb'],
       aliases: ['Ruby UI (Hotwire, ViewComponent)'],
-      snippets: frontendSnippets.filter((s) =>
-        ['hotwire-turbo-frame', 'view-component'].includes(s.label)
-      ),
+      snippets: [...HOTWIRE_SNIPPETS, ...VIEWCOMPONENT_SNIPPETS],
     },
   ],
 }

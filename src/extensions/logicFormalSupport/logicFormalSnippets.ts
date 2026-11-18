@@ -48,6 +48,12 @@ export const COMMON_LISP_SNIPPETS: SnippetDefinition[] = [
     documentation: 'Full-featured LOOP macro with destructuring, conditionals, and multiple accumulators',
     insertText: '(defun analyze-telemetry-records (records)\n  "Analyzes telemetry records using idiomatically composed LOOP macro."\n  (loop for (id value valid-p) in records\n        when valid-p\n          collect id into valid-ids\n          and sum value into total-sheen\n          and count value into valid-count\n          and maximize value into peak-sheen\n        finally (return (values valid-ids total-sheen (float (/ total-sheen (max 1 valid-count))) peak-sheen))))\n$0',
   },
+  {
+    label: 'elisp-interactive-command',
+    detail: 'Emacs Lisp: Interactive Buffer Command with Keybinding',
+    documentation: 'Emacs Lisp interactive defun with lexical-binding header and buffer manipulation',
+    insertText: ';;; -*- lexical-binding: t; -*-\n\n(defun ${1:indoctrinated-insert-timestamp} ()\n  "Insert an ISO-8601 UTC timestamp at point."\n  (interactive)\n  (insert (format-time-string "%Y-%m-%dT%H:%M:%SZ" nil t))\n  (message "Inserted UTC timestamp"))\n$0',
+  },
 ]
 
 // 3. Scheme & Racket Snippets
@@ -100,26 +106,44 @@ export const LAMBDA_CALCULUS_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 5. Formal Methods, Proof Assistants & Dependent Type Theory Snippets (Lean 4, Coq, TLA+)
-export const FORMAL_METHODS_SNIPPETS: SnippetDefinition[] = [
+// 5. Formal Methods, Proof Assistants & Dependent Type Theory Snippets (Lean 4, Coq, TLA+, Alloy)
+export const LEAN_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'lean4-theorem-proof',
     detail: 'Lean 4: Theorem with Interactive Tactic Proof Block',
     documentation: 'Formally verified mathematical proposition and tactic proof in Lean 4',
     insertText: '-- IndoctrinatedEdit Formal Verification: Lean 4\nimport Mathlib.Data.Nat.Basic\n\ntheorem add_comm_custom (n m : Nat) : n + m = m + n := by\n  induction m with\n  | zero =>\n    rw [Nat.add_zero, Nat.zero_add]\n  | succ m ih =>\n    rw [Nat.add_succ, Nat.succ_add, ih]\n\n-- Dependently Typed Vector / Matrix Structure\ndef LiquidGlassBounds (intensity : Float) (h : intensity >= 0.0 ∧ intensity <= 1.0) : Float :=\n  intensity * 0.85\n$0',
   },
+]
+
+export const COQ_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'coq-gallina-lemma',
     detail: 'Coq / Rocq: Inductive Type, Fixpoint & Tactic Proof (Qed.)',
     documentation: 'Gallina inductive proposition, recursive structural induction, and Ltac tactics',
     insertText: '(* IndoctrinatedEdit Formal Logic: Coq / Gallina *)\nRequire Import Coq.Arith.Arith.\n\nInductive nat_tree : Type :=\n  | Leaf : nat_tree\n  | Node : nat -> nat_tree -> nat_tree -> nat_tree.\n\nFixpoint tree_size (t : nat_tree) : nat :=\n  match t with\n  | Leaf => 0\n  | Node _ l r => 1 + (tree_size l) + (tree_size r)\n  end.\n\nLemma tree_size_nonnegative : forall t : nat_tree, tree_size t >= 0.\nProof.\n  intro t.\n  induction t as [| n l IHl r IHr].\n  - simpl. auto.\n  - simpl. apply Nat.le_0_l.\nQed.\n$0',
   },
+]
+
+export const TLA_ALLOY_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'tla-plus-specification',
     detail: 'TLA+: Temporal Logic of Actions State Machine Specification',
     documentation: 'Leslie Lamport\'s TLA+ specification with Init, Next, Invariant, and Temporal Spec',
     insertText: '---------------- MODULE IndoctrinatedGlassLock ----------------\nEXTENDS Naturals, Sequences\n\nVARIABLES state, lock_holder\n\nTypeOK ==\n    /\\ state \\in {"IDLE", "ACQUIRING", "LOCKED"}\n    /\\ lock_holder \\in 0..10\n\nInit ==\n    /\\ state = "IDLE"\n    /\\ lock_holder = 0\n\nAcquire(p) ==\n    /\\ state = "IDLE"\n    /\\ state\' = "LOCKED"\n    /\\ lock_holder\' = p\n\nRelease(p) ==\n    /\\ state = "LOCKED"\n    /\\ lock_holder = p\n    /\\ state\' = "IDLE"\n    /\\ lock_holder\' = 0\n\nNext == \\E p \\in 1..10 : Acquire(p) \\/ Release(p)\n\nSpec == Init /\\ [][Next]_<<state, lock_holder>>\n\nMutualExclusion ==\n    state = "LOCKED" => lock_holder > 0\n=============================================================\n$0',
   },
+  {
+    label: 'alloy-model-spec',
+    detail: 'Alloy: Relational Signature, Fact & Safety Assertion',
+    documentation: 'Alloy relational specification with sig declarations, invariants, and bounded check',
+    insertText: 'module ${1:WorkspaceLock}\n\nsig Node {}\nsig Lock { holder: lone Node }\n\nfact UniqueHolder {\n  all n: Node | lone l: Lock | l.holder = n\n}\n\nassert NoDoubleLock {\n  all l: Lock | lone l.holder\n}\n\ncheck NoDoubleLock for 5\n$0',
+  },
+]
+
+export const FORMAL_METHODS_SNIPPETS: SnippetDefinition[] = [
+  ...LEAN_SNIPPETS,
+  ...COQ_SNIPPETS,
+  ...TLA_ALLOY_SNIPPETS,
 ]
 
 export const LOGIC_FORMAL_SNIPPETS: SnippetDefinition[] = [

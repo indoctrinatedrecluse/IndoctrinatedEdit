@@ -6,7 +6,7 @@ export const NODE_SNIPPETS: SnippetDefinition[] = [
     label: 'node-httpserver',
     detail: 'Node.js: Native node:http Server with Async Routing',
     documentation: 'Modern ESM native HTTP server using node:http with graceful shutdown',
-    insertText: 'import http from "node:http";\n\nconst server = http.createServer((req, res) => {\n  const url = new URL(req.url ?? "/", `http://${req.headers.host}`);\n\n  if (req.method === "GET" && url.pathname === "/health") {\n    res.writeHead(200, { "Content-Type": "application/json" });\n    res.end(JSON.stringify({ status: "healthy", runtime: "Node.js Native Server" }));\n    return;\n  }\n\n  res.writeHead(404, { "Content-Type": "application/json" });\n  res.end(JSON.stringify({ error: "Route not found" }));\n});\n\nconst PORT = process.env.PORT || 3000;\nserver.listen(PORT, () => {\n  console.log(`✨ Server running on http://localhost:${PORT}`);\n});\n$0',
+    insertText: 'import http from "node:http";\n\nconst server = http.createServer((req, res) => {\n  const url = new URL(req.url ?? "/", `http://\\${req.headers.host}`);\n\n  if (req.method === "GET" && url.pathname === "/health") {\n    res.writeHead(200, { "Content-Type": "application/json" });\n    res.end(JSON.stringify({ status: "healthy", runtime: "Node.js Native Server" }));\n    return;\n  }\n\n  res.writeHead(404, { "Content-Type": "application/json" });\n  res.end(JSON.stringify({ error: "Route not found" }));\n});\n\nconst PORT = process.env.PORT || 3000;\nserver.listen(PORT, () => {\n  console.log(`Server running on http://localhost:\\${PORT}`);\n});\n$0',
   },
   {
     label: 'node-fs-promises',
@@ -24,7 +24,7 @@ export const NODE_SNIPPETS: SnippetDefinition[] = [
     label: 'node-worker-thread',
     detail: 'Node.js: node:worker_threads Multi-Threading',
     documentation: 'CPU-intensive parallel worker execution using Worker threads and postMessage',
-    insertText: 'import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";\nimport { fileURLToPath } from "node:url";\n\nif (isMainThread) {\n  export function runWorkerTask(data: unknown): Promise<unknown> {\n    return new Promise((resolve, reject) => {\n      const worker = new Worker(fileURLToPath(import.meta.url), { workerData: data });\n      worker.on("message", resolve);\n      worker.on("error", reject);\n      worker.on("exit", (code) => {\n        if (code !== 0) reject(new Error(`Worker stopped with code ${code}`));\n      });\n    });\n  }\n} else {\n  // Worker task execution\n  const result = { processed: true, input: workerData };\n  parentPort?.postMessage(result);\n}\n$0',
+    insertText: 'import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";\nimport { fileURLToPath } from "node:url";\n\nexport function runWorkerTask(data: unknown): Promise<unknown> {\n  return new Promise((resolve, reject) => {\n    const worker = new Worker(fileURLToPath(import.meta.url), { workerData: data });\n    worker.on("message", resolve);\n    worker.on("error", reject);\n    worker.on("exit", (code) => {\n      if (code !== 0) reject(new Error(`Worker stopped with code \\${code}`));\n    });\n  });\n}\n\nif (!isMainThread) {\n  // Worker task execution\n  const result = { processed: true, input: workerData };\n  parentPort?.postMessage(result);\n}\n$0',
   },
   {
     label: 'node-eventemitter',
@@ -36,7 +36,7 @@ export const NODE_SNIPPETS: SnippetDefinition[] = [
     label: 'node-childprocess-spawn',
     detail: 'Node.js: node:child_process Async Spawn with Buffering',
     documentation: 'Execute system binary and collect stdout/stderr asynchronously',
-    insertText: 'import { spawn } from "node:child_process";\n\nexport function executeCommand(cmd: string, args: string[] = []): Promise<string> {\n  return new Promise((resolve, reject) => {\n    const proc = spawn(cmd, args);\n    let stdout = "";\n    let stderr = "";\n\n    proc.stdout.on("data", (data) => { stdout += data.toString(); });\n    proc.stderr.on("data", (data) => { stderr += data.toString(); });\n\n    proc.on("close", (code) => {\n      if (code === 0) resolve(stdout.trim());\n      else reject(new Error(`Command failed with code ${code}: ${stderr}`));\n    });\n  });\n}\n$0',
+    insertText: 'import { spawn } from "node:child_process";\n\nexport function executeCommand(cmd: string, args: string[] = []): Promise<string> {\n  return new Promise((resolve, reject) => {\n    const proc = spawn(cmd, args);\n    let stdout = "";\n    let stderr = "";\n\n    proc.stdout.on("data", (data) => { stdout += data.toString(); });\n    proc.stderr.on("data", (data) => { stderr += data.toString(); });\n\n    proc.on("close", (code) => {\n      if (code === 0) resolve(stdout.trim());\n      else reject(new Error(`Command failed with code \\${code}: \\${stderr}`));\n    });\n  });\n}\n$0',
   },
   {
     label: 'node-crypto-hash',

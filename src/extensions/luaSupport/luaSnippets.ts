@@ -6,7 +6,7 @@ export const CORE_LUA_SNIPPETS: SnippetDefinition[] = [
     label: 'lua-class',
     detail: 'Lua: OOP Class Template with Metatable and __index',
     documentation: 'Object-oriented class pattern in Lua with constructor (:new), methods, and prototype inheritance',
-    insertText: 'local ${1:Player} = {}\n${1:Player}.__index = ${1:Player}\n\nfunction ${1:Player}:new(${2:name, health})\n    local self = setmetatable({}, ${1:Player})\n    self.name = ${2:name} or "Anonymous"\n    self.health = ${3:health} or 100\n    return self\nend\n\nfunction ${1:Player}:takeDamage(amount)\n    self.health = math.max(0, self.health - amount)\n    return self.health\nend\n\nreturn ${1:Player}\n$0',
+    insertText: 'local ${1:Player} = {}\n${1:Player}.__index = ${1:Player}\n\nfunction ${1:Player}:new(${2:name}, ${3:health})\n    local self = setmetatable({}, ${1:Player})\n    self.name = ${2:name} or "Anonymous"\n    self.health = ${3:health} or 100\n    return self\nend\n\nfunction ${1:Player}:takeDamage(amount)\n    self.health = math.max(0, self.health - amount)\n    return self.health\nend\n\nreturn ${1:Player}\n$0',
   },
   {
     label: 'lua-coroutine',

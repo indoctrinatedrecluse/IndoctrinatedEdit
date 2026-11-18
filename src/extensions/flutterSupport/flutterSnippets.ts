@@ -6,13 +6,13 @@ export const flutterSnippets: SnippetDefinition[] = [
     label: 'dart-sealed-class',
     detail: 'Dart 3: Sealed Class Hierarchy & Pattern Matching',
     documentation: 'Exhaustive domain model with sealed class hierarchy and switch expression',
-    insertText: 'sealed class ${1:AppState} {\n  const ${1:AppState}();\n}\n\nfinal class ${1:AppState}Initial extends ${1:AppState} {}\nfinal class ${1:AppState}Loading extends ${1:AppState} {}\nfinal class ${1:AppState}Success extends ${1:AppState} {\n  final String payload;\n  const ${1:AppState}Success(this.payload);\n}\nfinal class ${1:AppState}Error extends ${1:AppState} {\n  final String message;\n  const ${1:AppState}Error(this.message);\n}\n\nString resolveStateMessage(${1:AppState} state) => switch (state) {\n  ${1:AppState}Initial() => "Initialized and awaiting task",\n  ${1:AppState}Loading() => "Loading liquid asset stream...",\n  ${1:AppState}Success(:final payload) => "Payload: $payload",\n  ${1:AppState}Error(:final message) => "Error encountered: $message",\n};\n$0',
+    insertText: 'sealed class ${1:AppState} {\n  const ${1:AppState}();\n}\n\nfinal class ${1:AppState}Initial extends ${1:AppState} {}\nfinal class ${1:AppState}Loading extends ${1:AppState} {}\nfinal class ${1:AppState}Success extends ${1:AppState} {\n  final String payload;\n  const ${1:AppState}Success(this.payload);\n}\nfinal class ${1:AppState}Error extends ${1:AppState} {\n  final String message;\n  const ${1:AppState}Error(this.message);\n}\n\nString resolveStateMessage(${1:AppState} state) => switch (state) {\n  ${1:AppState}Initial() => "Initialized and awaiting task",\n  ${1:AppState}Loading() => "Loading liquid asset stream...",\n  ${1:AppState}Success(:final payload) => "Payload: \\$payload",\n  ${1:AppState}Error(:final message) => "Error encountered: \\$message",\n};\n$0',
   },
   {
     label: 'dart-record',
     detail: 'Dart 3: Typed Records & Destructuring',
     documentation: 'Strongly typed Dart 3 record with named and positional fields',
-    insertText: '({String id, String name, int score}) getUserScore() {\n  return (id: "usr_101", name: "Indoctrinated Recluse", score: 999);\n}\n\nvoid consume() {\n  final (:id, :name, :score) = getUserScore();\n  print("User $name ($id) holds score $score");\n}\n$0',
+    insertText: '({String id, String name, int score}) getUserScore() {\n  return (id: "usr_101", name: "Indoctrinated Recluse", score: 999);\n}\n\nvoid consume() {\n  final (:id, :name, :score) = getUserScore();\n  print("User \\$name (\\$id) holds score \\$score");\n}\n$0',
   },
 
   // --- Flutter Widgets & Liquid Glass UI ---
@@ -38,7 +38,7 @@ export const flutterSnippets: SnippetDefinition[] = [
     label: 'flutter-go-router',
     detail: 'GoRouter: Declarative Routing Configuration',
     documentation: 'Declarative routing with GoRouter, subroutes, and error builder',
-    insertText: 'import "package:flutter/material.dart";\nimport "package:go_router/go_router.dart";\n\nfinal GoRouter appRouter = GoRouter(\n  initialLocation: "/",\n  routes: <RouteBase>[\n    GoRoute(\n      path: "/",\n      builder: (BuildContext context, GoRouterState state) {\n        return const Scaffold(body: Center(child: Text("Home Dashboard")));\n      },\n    ),\n    GoRoute(\n      path: "/details/:id",\n      builder: (BuildContext context, GoRouterState state) {\n        final id = state.pathParameters["id"] ?? "";\n        return Scaffold(body: Center(child: Text("Item details: \$id")));\n      },\n    ),\n  ],\n);\n$0',
+    insertText: 'import "package:flutter/material.dart";\nimport "package:go_router/go_router.dart";\n\nfinal GoRouter appRouter = GoRouter(\n  initialLocation: "/",\n  routes: <RouteBase>[\n    GoRoute(\n      path: "/",\n      builder: (BuildContext context, GoRouterState state) {\n        return const Scaffold(body: Center(child: Text("Home Dashboard")));\n      },\n    ),\n    GoRoute(\n      path: "/details/:id",\n      builder: (BuildContext context, GoRouterState state) {\n        final id = state.pathParameters["id"] ?? "";\n        return Scaffold(body: Center(child: Text("Item details: \\$id")));\n      },\n    ),\n  ],\n);\n$0',
   },
   {
     label: 'flutter-widget-test',

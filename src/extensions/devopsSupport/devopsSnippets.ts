@@ -6,24 +6,27 @@ export const TERRAFORM_SNIPPETS: SnippetDefinition[] = [
     label: 'terraform-module-aws',
     detail: 'Terraform (HCL): Modern AWS VPC & Container Cluster Module',
     documentation: 'Terraform configuration with terraform block, required_providers, locals, and resources',
-    insertText: 'terraform {\n  required_version = ">= 1.9.0"\n  required_providers {\n    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.60"\n    }\n  }\n}\n\nprovider "aws" {\n  region = var.aws_region\n}\n\nvariable "aws_region" {\n  type    = string\n  default = "us-east-1"\n}\n\nvariable "environment" {\n  type    = string\n  default = "production"\n}\n\nlocals {\n  name_prefix = "indoctrinated-\${var.environment}"\n}\n\nresource "aws_vpc" "main" {\n  cidr_block           = "10.0.0.0/16"\n  enable_dns_hostnames = true\n  enable_dns_support   = true\n\n  tags = {\n    Name        = "\${local.name_prefix}-vpc"\n    Environment = var.environment\n  }\n}\n\noutput "vpc_id" {\n  description = "ID of the provisioned VPC"\n  value       = aws_vpc.main.id\n}\n$0',
+    insertText: 'terraform {\n  required_version = ">= 1.9.0"\n  required_providers {\n    aws = {\n      source  = "hashicorp/aws"\n      version = "~> 5.60"\n    }\n  }\n}\n\nprovider "aws" {\n  region = var.aws_region\n}\n\nvariable "aws_region" {\n  type    = string\n  default = "us-east-1"\n}\n\nvariable "environment" {\n  type    = string\n  default = "production"\n}\n\nlocals {\n  name_prefix = "indoctrinated-\\${var.environment}"\n}\n\nresource "aws_vpc" "main" {\n  cidr_block           = "10.0.0.0/16"\n  enable_dns_hostnames = true\n  enable_dns_support   = true\n\n  tags = {\n    Name        = "\\${local.name_prefix}-vpc"\n    Environment = var.environment\n  }\n}\n\noutput "vpc_id" {\n  description = "ID of the provisioned VPC"\n  value       = aws_vpc.main.id\n}\n$0',
   },
   {
     label: 'terraform-s3-bucket-secure',
     detail: 'Terraform: Secure S3 Bucket with SSE, Versioning & Public Block',
     documentation: 'Hardened cloud storage bucket with encryption and public access block',
-    insertText: 'resource "aws_s3_bucket" "artifacts" {\n  bucket        = "\${local.name_prefix}-build-artifacts"\n  force_destroy = false\n}\n\nresource "aws_s3_bucket_versioning" "artifacts" {\n  bucket = aws_s3_bucket.artifacts.id\n  versioning_configuration {\n    status = "Enabled"\n  }\n}\n\nresource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {\n  bucket = aws_s3_bucket.artifacts.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = "AES256"\n    }\n  }\n}\n\nresource "aws_s3_bucket_public_access_block" "artifacts" {\n  bucket = aws_s3_bucket.artifacts.id\n  block_public_acls       = true\n  block_public_policy     = true\n  ignore_public_acls      = true\n  restrict_public_buckets = true\n}\n$0',
+    insertText: 'resource "aws_s3_bucket" "artifacts" {\n  bucket        = "\\${local.name_prefix}-build-artifacts"\n  force_destroy = false\n}\n\nresource "aws_s3_bucket_versioning" "artifacts" {\n  bucket = aws_s3_bucket.artifacts.id\n  versioning_configuration {\n    status = "Enabled"\n  }\n}\n\nresource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {\n  bucket = aws_s3_bucket.artifacts.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = "AES256"\n    }\n  }\n}\n\nresource "aws_s3_bucket_public_access_block" "artifacts" {\n  bucket = aws_s3_bucket.artifacts.id\n  block_public_acls       = true\n  block_public_policy     = true\n  ignore_public_acls      = true\n  restrict_public_buckets = true\n}\n$0',
   },
 ]
 
 // 2. Docker / Containerfile Snippets
-export const DOCKER_SNIPPETS: SnippetDefinition[] = [
+export const DOCKERFILE_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'dockerfile-multistage-node',
     detail: 'Dockerfile: Multi-Stage Production Build with Non-Root User',
     documentation: 'Optimized production Dockerfile with alpine base, build stage, non-root user, and dumb-init',
     insertText: '# --- Build Stage ---\nFROM node:22-alpine AS builder\nWORKDIR /app\nRUN apk add --no-cache libc6-compat\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\n# --- Production Runner Stage ---\nFROM node:22-alpine AS runner\nWORKDIR /app\nENV NODE_ENV=production\nRUN addgroup --system --gid 1001 nodejs && \\\n    adduser --system --uid 1001 appuser\n\nCOPY --from=builder /app/dist ./dist\nCOPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/package.json ./package.json\n\nUSER appuser\nEXPOSE 3000\nENV PORT=3000\n\nCMD ["node", "dist/main.js"]\n$0',
   },
+]
+
+export const DOCKER_COMPOSE_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'docker-compose-app',
     detail: 'Docker Compose: Full-Stack App with Database & Redis',
@@ -32,7 +35,12 @@ export const DOCKER_SNIPPETS: SnippetDefinition[] = [
   },
 ]
 
-// 3. Kubernetes Manifests
+export const DOCKER_SNIPPETS: SnippetDefinition[] = [
+  ...DOCKERFILE_SNIPPETS,
+  ...DOCKER_COMPOSE_SNIPPETS,
+]
+
+// 3. Kubernetes & Helm Manifests
 export const KUBERNETES_SNIPPETS: SnippetDefinition[] = [
   {
     label: 'k8s-deployment-service',
@@ -44,7 +52,13 @@ export const KUBERNETES_SNIPPETS: SnippetDefinition[] = [
     label: 'k8s-ingress-tls',
     detail: 'Kubernetes: Ingress with TLS Cert-Manager Annotation',
     documentation: 'Ingress routing rules with automatic Let\'s Encrypt SSL certificate provisioning',
-    insertText: 'apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: ${1:indoctrinated-ingress}\n  annotations:\n    cert-manager.io/cluster-issuer: "letsencrypt-prod"\n    nginx.ingress.kubernetes.io/ssl-redirect: "true"\nspec:\n  ingressClassName: nginx\n  tls:\n    - hosts:\n        - ${2:api.example.com}\n      secretName: ${2:api.example.com}-tls\n  rules:\n    - host: ${2:api.example.com}\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: ${1:indoctrinated-service}\n                port:\n                  number: 80\n$0',
+    insertText: 'apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: ${1:indoctrinated-ingress}\n  annotations:\n    cert-manager.io/cluster-issuer: "letsencrypt-prod"\n    nginx.ingress.kubernetes.io/ssl-redirect: "true"\nspec:\n  ingressClassName: nginx\n  tls:\n    - hosts:\n        - ${2:api.example.com}\n      secretName: ${2:api.example.com}-tls\n  rules:\n    - host: ${2:api.example.com}\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: ${3:indoctrinated-service}\n                port:\n                  number: 80\n$0',
+  },
+  {
+    label: 'helm-deployment-tpl',
+    detail: 'Helm Chart: Parameterized Deployment Template',
+    documentation: 'Helm v3 Deployment template using .Values, .Release, and named chart helpers',
+    insertText: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: {{ include "${1:app}.fullname" . }}\n  labels:\n    app.kubernetes.io/name: {{ include "${1:app}.name" . }}\n    app.kubernetes.io/instance: {{ .Release.Name }}\nspec:\n  replicas: {{ .Values.replicaCount | default 2 }}\n  selector:\n    matchLabels:\n      app.kubernetes.io/name: {{ include "${1:app}.name" . }}\n  template:\n    metadata:\n      labels:\n        app.kubernetes.io/name: {{ include "${1:app}.name" . }}\n    spec:\n      containers:\n        - name: {{ .Chart.Name }}\n          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"\n          ports:\n            - containerPort: {{ .Values.service.targetPort | default 8080 }}\n$0',
   },
 ]
 

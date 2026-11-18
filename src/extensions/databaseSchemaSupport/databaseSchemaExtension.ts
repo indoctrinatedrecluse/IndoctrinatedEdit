@@ -25,7 +25,7 @@ export const databaseSchemaExtensionManifest: ExtensionManifest = {
     {
       id: 'sql',
       extensions: ['.sql', '.psql', '.dsql'],
-      aliases: ['SQL', 'PostgreSQL', 'MySQL', 'SQLite'],
+      aliases: ['SQL', 'PostgreSQL', 'SQLite', 'T-SQL'],
       snippets: SQL_SNIPPETS,
     },
     {
@@ -44,12 +44,13 @@ export const databaseSchemaExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerDatabaseSchemaExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerDatabaseSchemaExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   const registerForLang = (lang: string, snippetsList: typeof SQL_SNIPPETS) => {
     try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
           try {
             const word = model.getWordUntilPosition(position)
@@ -79,6 +80,7 @@ export function registerDatabaseSchemaExtension(monacoInstance: typeof monaco) {
           }
         },
       })
+      if (d) disposables.push(d)
     } catch (err) {
       notificationService.notifyError(
         'Database & Schema Engine',
@@ -92,6 +94,7 @@ export function registerDatabaseSchemaExtension(monacoInstance: typeof monaco) {
   registerForLang('prisma', PRISMA_SNIPPETS)
 
   triggerDatabaseToolchainCheck()
+  return disposables
 }
 
 export function triggerDatabaseToolchainCheck() {

@@ -14,6 +14,24 @@ export const SQL_SNIPPETS: SnippetDefinition[] = [
     documentation: 'Production table creation with foreign keys, JSONB metadata, check constraints, and GIN indexing',
     insertText: 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";\n\nCREATE TABLE IF NOT EXISTS ${1:workspace_assets} (\n    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    name VARCHAR(255) NOT NULL,\n    metadata JSONB NOT NULL DEFAULT \'{}\'::jsonb,\n    sheen_factor NUMERIC(5, 4) DEFAULT 0.8500 CHECK (sheen_factor >= 0 AND sheen_factor <= 1),\n    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Performance Indexes\nCREATE INDEX IF NOT EXISTS idx_${1:workspace_assets}_ws_id ON ${1:workspace_assets}(workspace_id);\nCREATE INDEX IF NOT EXISTS idx_${1:workspace_assets}_meta_gin ON ${1:workspace_assets} USING GIN (metadata);\n$0',
   },
+  {
+    label: 'sql-mysql-upsert',
+    detail: 'SQL (MySQL 8): InnoDB Table & ON DUPLICATE KEY UPDATE Upsert',
+    documentation: 'MySQL 8 UTF8MB4 table definition and atomic upsert using VALUES/alias syntax',
+    insertText: 'CREATE TABLE IF NOT EXISTS `${1:telemetry_events}` (\n    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n    `event_key` VARCHAR(128) NOT NULL,\n    `payload` JSON NOT NULL,\n    `hit_count` INT UNSIGNED NOT NULL DEFAULT 1,\n    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n    PRIMARY KEY (`id`),\n    UNIQUE KEY `uq_event_key` (`event_key`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;\n\nINSERT INTO `${1:telemetry_events}` (`event_key`, `payload`, `hit_count`)\nVALUES (\'${2:editor.launch}\', JSON_OBJECT(\'version\', \'6.0.0\'), 1) AS new_row\nON DUPLICATE KEY UPDATE\n    `payload` = new_row.`payload`,\n    `hit_count` = `${1:telemetry_events}`.`hit_count` + 1;\n$0',
+  },
+  {
+    label: 'sql-sqlite-fts5',
+    detail: 'SQL (SQLite): WAL Mode, STRICT Table & FTS5 Full-Text Search',
+    documentation: 'SQLite 3.37+ STRICT schema with WAL journaling and FTS5 virtual search index',
+    insertText: 'PRAGMA journal_mode = WAL;\nPRAGMA foreign_keys = ON;\n\nCREATE TABLE IF NOT EXISTS ${1:documents} (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    title TEXT NOT NULL,\n    body TEXT NOT NULL,\n    created_at TEXT NOT NULL DEFAULT (datetime(\'now\'))\n) STRICT;\n\nCREATE VIRTUAL TABLE IF NOT EXISTS ${1:documents}_fts\nUSING fts5(title, body, content=\'${1:documents}\', content_rowid=\'id\');\n$0',
+  },
+  {
+    label: 'sql-tsql-merge',
+    detail: 'SQL (T-SQL / SQL Server): Transactional MERGE Upsert Statement',
+    documentation: 'SQL Server T-SQL atomic MERGE with HOLDLOCK and OUTPUT clause',
+    insertText: 'BEGIN TRANSACTION;\n\nMERGE INTO dbo.${1:WorkspaceMetrics} WITH (HOLDLOCK) AS target\nUSING (VALUES (@MetricKey, @MetricValue)) AS source (MetricKey, MetricValue)\n    ON target.MetricKey = source.MetricKey\nWHEN MATCHED THEN\n    UPDATE SET target.MetricValue = source.MetricValue, target.UpdatedAt = SYSUTCDATETIME()\nWHEN NOT MATCHED THEN\n    INSERT (MetricKey, MetricValue, UpdatedAt)\n    VALUES (source.MetricKey, source.MetricValue, SYSUTCDATETIME())\nOUTPUT \\$action, inserted.MetricKey, inserted.MetricValue;\n\nCOMMIT TRANSACTION;\n$0',
+  },
 ]
 
 // 2. GraphQL Schema & Operations Snippets

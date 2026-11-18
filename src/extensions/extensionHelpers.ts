@@ -423,6 +423,18 @@ export function ensureCustomLanguagesRegistered(monacoInstance: typeof monaco): 
       if (typeof monacoInstance.languages.setMonarchTokensProvider === 'function') {
         monacoInstance.languages.setMonarchTokensProvider(spec.id, buildMonarchTokenizer(spec))
       }
+      // Register automatic hover documentation for language keywords & built-in types
+      const docsMap: Record<string, string> = {}
+      const label = spec.aliases[0] || spec.id
+      for (const kw of spec.keywords) {
+        docsMap[kw] = `Keyword in **${label}** language.`
+      }
+      for (const tk of spec.typeKeywords || []) {
+        docsMap[tk] = `Built-in type in **${label}**.`
+      }
+      if (Object.keys(docsMap).length > 0) {
+        registerHoverDocsProvider(monacoInstance, spec.id, docsMap)
+      }
     } catch {
       // Safe fallback in mocked or restricted Monaco environments
     }

@@ -27,12 +27,16 @@ export const javaExtensionManifest: ExtensionManifest = {
 }
 
 
-export function registerJavaExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerJavaExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
-  // Register completion items for Java
-  monacoInstance.languages.registerCompletionItemProvider('java', {
-    provideCompletionItems: (model, position) => {
+  const disposables: monaco.IDisposable[] = []
+  const javaCodeSnippets = javaSnippets.filter((s) => s.label !== 'maven-pom' && s.label !== 'gradle-build')
+  const mavenSnippets = javaSnippets.filter((s) => s.label === 'maven-pom')
+  const gradleSnippets = javaSnippets.filter((s) => s.label === 'gradle-build')
+
+  const makeProvider = (list: typeof javaSnippets) => ({
+    provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
       const word = model.getWordUntilPosition(position)
       const range: monaco.IRange = {
         startLineNumber: position.lineNumber,
@@ -41,7 +45,7 @@ export function registerJavaExtension(monacoInstance: typeof monaco) {
         endColumn: word.endColumn,
       }
 
-      const suggestions: monaco.languages.CompletionItem[] = javaSnippets.map((snippet) => ({
+      const suggestions: monaco.languages.CompletionItem[] = list.map((snippet) => ({
         label: snippet.label,
         kind: monacoInstance.languages.CompletionItemKind.Snippet,
         detail: snippet.detail || 'Java Snippet',
@@ -55,8 +59,20 @@ export function registerJavaExtension(monacoInstance: typeof monaco) {
     },
   })
 
+  const d1 = monacoInstance.languages.registerCompletionItemProvider('java', makeProvider(javaCodeSnippets))
+  if (d1) disposables.push(d1)
+  if (mavenSnippets.length > 0) {
+    const d2 = monacoInstance.languages.registerCompletionItemProvider('xml', makeProvider(mavenSnippets))
+    if (d2) disposables.push(d2)
+  }
+  if (gradleSnippets.length > 0) {
+    const d3 = monacoInstance.languages.registerCompletionItemProvider('gradle-kotlin', makeProvider(gradleSnippets))
+    if (d3) disposables.push(d3)
+  }
+
   // Trigger background compiler detection and notify if missing
   triggerJavaToolchainCheck()
+  return disposables
 }
 
 export function triggerJavaToolchainCheck() {

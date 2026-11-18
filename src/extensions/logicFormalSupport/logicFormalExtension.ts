@@ -5,7 +5,9 @@ import {
   COMMON_LISP_SNIPPETS,
   SCHEME_RACKET_SNIPPETS,
   LAMBDA_CALCULUS_SNIPPETS,
-  FORMAL_METHODS_SNIPPETS,
+  LEAN_SNIPPETS,
+  COQ_SNIPPETS,
+  TLA_ALLOY_SNIPPETS,
   logicFormalSnippets,
 } from './logicFormalSnippets'
 import { toolchainService } from '../../services/toolchainService'
@@ -16,7 +18,7 @@ export const logicFormalExtensionManifest: ExtensionManifest = {
   name: 'Logic Programming, Lambda Calculus & Formal Methods Suite',
   version: '1.0.0',
   description:
-    'Comprehensive mathematical foundations suite for First-Order Predicate Logic (Prolog, Datalog, ASP), Classic LISP (Common Lisp, Scheme, Racket), Pure Lambda Calculus & Combinators (SKI, Church Encodings, Y-Combinator), and Formal Proof Assistants (Lean 4, Coq, TLA+).',
+    'Comprehensive mathematical foundations suite for First-Order Predicate Logic (Prolog, Datalog, ASP), Classic LISP (Common Lisp, Emacs Lisp, Scheme, Racket), Pure Lambda Calculus & Combinators (SKI, Church Encodings, Y-Combinator), and Formal Proof Assistants (Lean 4, Coq, TLA+, Alloy).',
   author: 'indoctrinatedrecluse',
   category: 'Languages',
   iconName: 'Sparkles',
@@ -52,30 +54,31 @@ export const logicFormalExtensionManifest: ExtensionManifest = {
       id: 'lean',
       extensions: ['.lean'],
       aliases: ['Lean 4', 'Lean', 'Theorem Prover'],
-      snippets: FORMAL_METHODS_SNIPPETS,
+      snippets: LEAN_SNIPPETS,
     },
     {
       id: 'coq',
       extensions: ['.v'],
       aliases: ['Coq', 'Rocq', 'Gallina'],
-      snippets: FORMAL_METHODS_SNIPPETS,
+      snippets: COQ_SNIPPETS,
     },
     {
       id: 'tla',
       extensions: ['.tla', '.als'],
       aliases: ['TLA+', 'Alloy'],
-      snippets: FORMAL_METHODS_SNIPPETS,
+      snippets: TLA_ALLOY_SNIPPETS,
     },
   ],
 }
 
 
-export function registerLogicFormalExtension(monacoInstance: typeof monaco) {
-  if (!monacoInstance) return
+export function registerLogicFormalExtension(monacoInstance: typeof monaco): monaco.IDisposable[] {
+  if (!monacoInstance) return []
 
+  const disposables: monaco.IDisposable[] = []
   const registerForLang = (lang: string, snippetsList: typeof PROLOG_FOPL_SNIPPETS) => {
     try {
-      monacoInstance.languages.registerCompletionItemProvider(lang, {
+      const d = monacoInstance.languages.registerCompletionItemProvider(lang, {
         provideCompletionItems: (model, position) => {
           try {
             const word = model.getWordUntilPosition(position)
@@ -105,6 +108,7 @@ export function registerLogicFormalExtension(monacoInstance: typeof monaco) {
           }
         },
       })
+      if (d) disposables.push(d)
     } catch (err) {
       notificationService.notifyError(
         'Logic & Formal Methods Engine',
@@ -117,11 +121,12 @@ export function registerLogicFormalExtension(monacoInstance: typeof monaco) {
   registerForLang('lisp', COMMON_LISP_SNIPPETS)
   registerForLang('scheme', SCHEME_RACKET_SNIPPETS)
   registerForLang('lambda-calculus', LAMBDA_CALCULUS_SNIPPETS)
-  registerForLang('lean', FORMAL_METHODS_SNIPPETS)
-  registerForLang('coq', FORMAL_METHODS_SNIPPETS)
-  registerForLang('tla', FORMAL_METHODS_SNIPPETS)
+  registerForLang('lean', LEAN_SNIPPETS)
+  registerForLang('coq', COQ_SNIPPETS)
+  registerForLang('tla', TLA_ALLOY_SNIPPETS)
 
   triggerLogicFormalToolchainCheck()
+  return disposables
 }
 
 export function triggerLogicFormalToolchainCheck() {
