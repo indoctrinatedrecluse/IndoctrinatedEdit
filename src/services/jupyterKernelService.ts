@@ -197,7 +197,7 @@ class JupyterKernelService {
       })
 
       return {
-        cells: cells.length > 0 ? cells : this.createSampleDataScienceNotebook().cells,
+        cells,
         metadata: parsed.metadata || {
           kernelspec: { display_name: 'Python 3.12 (Indoctrinated)', language: 'python', name: 'python3' },
           language_info: { name: 'python', version: '3.12' },
@@ -398,7 +398,60 @@ class JupyterKernelService {
   }
 
   /**
-   * Execute a single cell live
+   * Safe recursive-descent arithmetic evaluator (replaces unsafe eval()).
+   */
+  private safeEvaluateArithmetic(expr: string): number {
+    const tokens = expr.match(/\d+(?:\.\d+)?|[+\-*/()]/g) || []
+    let pos = 0
+    const peek = () => tokens[pos]
+    const consume = () => tokens[pos++]
+
+    const parseExpr = (): number => {
+      let left = parseTerm()
+      while (peek() === '+' || peek() === '-') {
+        const op = consume()
+        const right = parseTerm()
+        left = op === '+' ? left + right : left - right
+      }
+      return left
+    }
+    const parseTerm = (): number => {
+      let left = parseFactor()
+      while (peek() === '*' || peek() === '/') {
+        const op = consume()
+        const right = parseFactor()
+        if (op === '/' && right === 0) throw new Error('ZeroDivisionError: division by zero')
+        left = op === '*' ? left * right : left / right
+      }
+      return left
+    }
+    const parseFactor = (): number => {
+      if (peek() === '-') {
+        consume()
+        return -parseFactor()
+      }
+      if (peek() === '+') {
+        consume()
+        return parseFactor()
+      }
+      if (peek() === '(') {
+        consume()
+        const val = parseExpr()
+        if (peek() === ')') consume()
+        return val
+      }
+      const num = parseFloat(consume() || 'NaN')
+      if (Number.isNaN(num)) throw new Error('Invalid expression')
+      return num
+    }
+
+    const res = parseExpr()
+    if (pos !== tokens.length) throw new Error('Unexpected trailing token')
+    return res
+  }
+
+  /**
+   * Execute a single cell live (uses real local Python via Electron IPC when available).
    */
   public async executeCell(cell: JupyterCell): Promise<JupyterOutput[]> {
     if (cell.cell_type !== 'code') return []
@@ -411,12 +464,51 @@ class JupyterKernelService {
     const code = cell.source.trim()
 
     try {
-      // Simulate execution latency
-      await new Promise((r) => setTimeout(r, 180 + Math.random() * 220))
-
-      const outputs: JupyterOutput[] = []
       const count = this.executionCounter++
       cell.execution_count = count
+
+      // Real local Python execution in Electron desktop mode
+      if (
+        code &&
+        typeof window !== 'undefined' &&
+        window.electronAPI?.workspace?.execCommand &&
+        this.activeKernelId.includes('python')
+      ) {
+        const pyBin = window.electronAPI.platform === 'win32' ? 'python' : 'python3'
+        const b64Code = btoa(
+          Array.from(new TextEncoder().encode(code), (b) => String.fromCharCode(b)).join('')
+        )
+        const execRes = await window.electronAPI.workspace.execCommand({
+          command: `${pyBin} -c "import base64; exec(compile(base64.b64decode('${b64Code}').decode('utf-8'), '<cell-${count}>', 'exec'))"`,
+          timeoutMs: 30000,
+        })
+        const outputs: JupyterOutput[] = []
+        if (execRes.stdout) {
+          outputs.push({ output_type: 'stream', name: 'stdout', text: execRes.stdout })
+        }
+        if (execRes.exitCode !== 0 && execRes.stderr) {
+          const errLines = execRes.stderr.trim().split(/\r?\n/)
+          const lastLine = errLines[errLines.length - 1] || 'ExecutionError'
+          const [ename, ...rest] = lastLine.split(':')
+          outputs.push({
+            output_type: 'error',
+            ename: ename?.trim() || 'PythonError',
+            evalue: rest.join(':').trim() || lastLine,
+            traceback: errLines,
+          })
+        } else if (execRes.stderr) {
+          outputs.push({ output_type: 'stream', name: 'stderr', text: execRes.stderr })
+        }
+        this.updateVariablesFromCode(code)
+        cell.outputs = outputs
+        cell.executionDurationMs = execRes.durationMs
+        return outputs
+      }
+
+      // Browser / unit-test sandbox execution
+      await new Promise((r) => setTimeout(r, 40))
+
+      const outputs: JupyterOutput[] = []
 
       // Evaluate Code Patterns & generate realistic outputs
       if (code.includes('import matplotlib') || code.includes('plt.show()') || code.includes('plt.plot') || code.includes('plt.scatter')) {
@@ -480,10 +572,9 @@ class JupyterKernelService {
         // General Expression evaluation
         let evalResult = `Out [${count}]: Success`
         try {
-          // If JavaScript / math expression
+          // Safe arithmetic evaluation without eval()
           if (/^[\d+\-*/().\s]+$/.test(code)) {
-            // eslint-disable-next-line no-eval
-            evalResult = String(eval(code))
+            evalResult = String(this.safeEvaluateArithmetic(code))
           } else {
             evalResult = `Result: [eval ${code}] -> OK`
           }

@@ -201,13 +201,22 @@ class RegexService {
       let count = 0
       const substituted = text.replace(re, (...args) => {
         count++
-        let rep = replacement
-        // Handle $1, $2, etc.
-        for (let i = 1; i < args.length - 2; i++) {
-          rep = rep.replace(new RegExp(`\\$${i}`, 'g'), args[i] ?? '')
-        }
-        rep = rep.replace(/\$&/g, args[0] ?? '')
-        return rep
+        const fullMatch = args[0] ?? ''
+        // Trailing args are (offset, string, [groups]); capture groups sit in args[1 .. groupCount]
+        const hasNamedGroups = typeof args[args.length - 1] === 'object' && args[args.length - 1] !== null
+        const groupsObj: Record<string, string> | undefined = hasNamedGroups ? args[args.length - 1] : undefined
+        const numCaptures = args.length - (hasNamedGroups ? 3 : 2)
+        // Single-pass token replacement prevents $1 from corrupting $10 and supports $$ / $<name>
+        return replacement.replace(/\$(?:\$|&|<([^>]+)>|(\d+))/g, (tok, named, numStr) => {
+          if (tok === '$$') return '$'
+          if (tok === '$&') return fullMatch
+          if (named && groupsObj) return groupsObj[named] ?? ''
+          if (numStr) {
+            const idx = parseInt(numStr, 10)
+            if (idx >= 1 && idx <= numCaptures) return args[idx] ?? ''
+          }
+          return tok
+        })
       })
       return { result: substituted, count }
     } catch (err: any) {
@@ -225,7 +234,9 @@ class RegexService {
       return { durationUs: 0, iterations, riskLevel: 'safe', message: 'Empty pattern' }
     }
     try {
-      const re = new RegExp(pattern, flags)
+      // Strip stateful g/y flags so lastIndex never skews alternating .test() iterations
+      const benchFlags = flags.replace(/[gy]/g, '')
+      const re = new RegExp(pattern, benchFlags)
       const t0 = performance.now()
       for (let i = 0; i < iterations; i++) {
         re.test(text)
@@ -269,20 +280,20 @@ class RegexService {
         sample: 'https://github.com:443/indoctrinated/edit?tab=readme',
       }
     }
-    if (q.includes('ip') || q.includes('ipv4')) {
-      return {
-        pattern: '\\b(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?:\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}\\b',
-        flags: 'g',
-        explanation: 'Validates strict IPv4 addresses from 0.0.0.0 to 255.255.255.255.',
-        sample: 'Server IP: 192.168.1.1 and 10.0.0.254',
-      }
-    }
     if (q.includes('ipv6')) {
       return {
         pattern: '(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:',
         flags: 'gi',
         explanation: 'Matches 8-hextet or compressed IPv6 hexadecimal addresses.',
         sample: '2001:0db8:85a3:0000:0000:8a2e:0370:7334 or fe80::1',
+      }
+    }
+    if (q.includes('ip') || q.includes('ipv4')) {
+      return {
+        pattern: '\\b(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?:\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}\\b',
+        flags: 'g',
+        explanation: 'Validates strict IPv4 addresses from 0.0.0.0 to 255.255.255.255.',
+        sample: 'Server IP: 192.168.1.1 and 10.0.0.254',
       }
     }
     if (q.includes('hex') || q.includes('color')) {

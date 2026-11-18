@@ -171,9 +171,13 @@ class ArchitectureGraphService {
   }
 
   private resolveImportPath(currentFile: string, importPath: string, allFiles: string[]): string | null {
+    const normCurrent = currentFile.replace(/\\/g, '/')
+    const normFiles = allFiles.map((f) => ({ raw: f, norm: f.replace(/\\/g, '/') }))
+
     // Relative imports
     if (importPath.startsWith('.')) {
-      const currentDir = currentFile.substring(0, currentFile.lastIndexOf('/'))
+      const lastSlash = normCurrent.lastIndexOf('/')
+      const currentDir = lastSlash >= 0 ? normCurrent.substring(0, lastSlash) : ''
       const parts = `${currentDir}/${importPath}`.split('/')
       const normalizedParts: string[] = []
 
@@ -184,17 +188,21 @@ class ArchitectureGraphService {
       }
 
       const normalized = normalizedParts.join('/')
-      const candidate = allFiles.find((f) => {
-        const withoutExt = f.replace(/\.[^/.]+$/, '')
-        return f === normalized || withoutExt === normalized || f.endsWith(normalized)
+      const candidate = normFiles.find(({ norm }) => {
+        const withoutExt = norm.replace(/\.[^/.]+$/, '')
+        return norm === normalized || withoutExt === normalized || withoutExt === `${normalized}/index`
       })
 
-      return candidate || null
+      return candidate?.raw || null
     }
 
-    // Absolute / alias imports
-    const candidate = allFiles.find((f) => f.includes(importPath))
-    return candidate || null
+    // Alias / module imports: match full path segment boundary instead of loose substring
+    const normImport = importPath.replace(/^@\//, 'src/').replace(/\\/g, '/')
+    const candidate = normFiles.find(({ norm }) => {
+      const withoutExt = norm.replace(/\.[^/.]+$/, '')
+      return withoutExt === normImport || withoutExt.endsWith(`/${normImport}`)
+    })
+    return candidate?.raw || null
   }
 
   private detectCircularDependencies(nodes: string[], edges: DependencyEdge[]): string[][] {

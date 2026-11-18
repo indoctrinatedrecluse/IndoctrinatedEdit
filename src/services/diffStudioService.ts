@@ -220,42 +220,49 @@ class DiffStudioService {
    * Parse git merge conflicts from text
    */
   public parseMergeConflicts(text: string): MergeConflictBlock[] {
+    // Parse git merge conflicts (including optional diff3 base markers: |||||||)
     const lines = text.split(/\r?\n/)
     const conflicts: MergeConflictBlock[] = []
     let inConflict = false
     let currentBlock: Partial<MergeConflictBlock> | null = null
     let currentLines: string[] = []
+    let baseLines: string[] = []
     let incomingLines: string[] = []
-    let stage: 'current' | 'incoming' = 'current'
+    let hasBase = false
+    let stage: 'current' | 'base' | 'incoming' = 'current'
 
     lines.forEach((line, idx) => {
       if (line.startsWith('<<<<<<<')) {
         inConflict = true
         stage = 'current'
         currentLines = []
+        baseLines = []
         incomingLines = []
+        hasBase = false
         currentBlock = {
           id: `conflict-${idx + 1}`,
           startLine: idx + 1,
           currentLabel: line.replace('<<<<<<<', '').trim() || 'Current Change (HEAD)',
           status: 'unresolved',
         }
+      } else if (line.startsWith('|||||||') && inConflict) {
+        stage = 'base'
+        hasBase = true
       } else if (line.startsWith('=======') && inConflict) {
         stage = 'incoming'
       } else if (line.startsWith('>>>>>>>') && inConflict && currentBlock) {
         inConflict = false
         currentBlock.endLine = idx + 1
-        currentBlock.incomingLabel = line.replace('>>>>>>>', '').trim() || 'Incoming Change',
+        currentBlock.incomingLabel = line.replace('>>>>>>>', '').trim() || 'Incoming Change'
         currentBlock.currentText = currentLines.join('\n')
+        if (hasBase) currentBlock.baseText = baseLines.join('\n')
         currentBlock.incomingText = incomingLines.join('\n')
         conflicts.push(currentBlock as MergeConflictBlock)
         currentBlock = null
       } else if (inConflict) {
-        if (stage === 'current') {
-          currentLines.push(line)
-        } else {
-          incomingLines.push(line)
-        }
+        if (stage === 'current') currentLines.push(line)
+        else if (stage === 'base') baseLines.push(line)
+        else incomingLines.push(line)
       }
     })
 

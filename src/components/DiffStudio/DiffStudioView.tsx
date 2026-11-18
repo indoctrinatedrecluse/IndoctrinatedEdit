@@ -45,6 +45,7 @@ const sampleConflictText = `function authenticateUser(token: string) {
 export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
   activeFileName = 'welcome.ts',
   activeFileContent = '',
+  onApplyToEditor,
 }) => {
   const [activeTab, setActiveTab] = useState<'diff' | 'merge' | 'patch'>('diff')
   const [diffViewMode, setDiffViewMode] = useState<'split' | 'unified'>('split')
@@ -65,6 +66,9 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
   useEffect(() => {
     if (activeFileContent) {
       setOrigText(activeFileContent)
+      if (activeFileContent.includes('<<<<<<<') && activeFileContent.includes('>>>>>>>')) {
+        setConflictInput(activeFileContent)
+      }
     }
   }, [activeFileContent])
 
@@ -81,6 +85,7 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
   const handleResolve = (conflictId: string, resolution: 'accept-current' | 'accept-incoming' | 'accept-both') => {
     const resolved = diffStudioService.resolveConflict(conflictInput, conflictId, resolution)
     setConflictInput(resolved)
+    onApplyToEditor?.(resolved)
   }
 
   const copyToClipboard = (text: string) => {

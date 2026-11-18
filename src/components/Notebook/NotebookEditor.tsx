@@ -595,7 +595,9 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
     }
 
     const hasHtml = cell.outputs.some((o) => o.data && o.data['text/html'])
-    const hasSvg = cell.outputs.some((o) => (o.data && o.data['image/svg+xml']) || (o.data && o.data['text/plain']?.includes('<Figure')))
+    const hasRasterImage = cell.outputs.some((o) => o.data && (o.data['image/png'] || o.data['image/jpeg']))
+    const hasInlineSvg = cell.outputs.some((o) => o.data && o.data['image/svg+xml'])
+    const hasSvg = hasRasterImage || hasInlineSvg || cell.outputs.some((o) => o.data && o.data['text/plain']?.includes('<Figure'))
     const hasStream = cell.outputs.some((o) => o.output_type === 'stream' || o.output_type === 'error' || o.data?.['text/plain'])
     const activeTab = outputTabMode[cell.id] || (hasHtml ? 'table' : hasSvg ? 'chart' : 'logs')
     const activeChart = chartStyles[cell.id] || 'scatter'
@@ -759,10 +761,56 @@ export const NotebookEditor: React.FC<NotebookEditorProps> = ({
               </button>
             </div>
 
-            <div
-              className="output-svg-container"
-              dangerouslySetInnerHTML={{ __html: sanitizeSvg(jupyterKernelService.generateChartSvg(activeChart)) }}
-            />
+            {hasRasterImage ? (
+              <div className="output-raster-images">
+                {cell.outputs.map((out, idx) => {
+                  const png = out.data?.['image/png']
+                  const jpeg = out.data?.['image/jpeg']
+                  if (png) {
+                    const b64 = (Array.isArray(png) ? png.join('') : String(png)).replace(/\s+/g, '')
+                    return (
+                      <img
+                        key={`png-${idx}`}
+                        src={`data:image/png;base64,${b64}`}
+                        alt="Notebook cell PNG output"
+                        style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, background: '#fff' }}
+                      />
+                    )
+                  }
+                  if (jpeg) {
+                    const b64 = (Array.isArray(jpeg) ? jpeg.join('') : String(jpeg)).replace(/\s+/g, '')
+                    return (
+                      <img
+                        key={`jpeg-${idx}`}
+                        src={`data:image/jpeg;base64,${b64}`}
+                        alt="Notebook cell JPEG output"
+                        style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, background: '#fff' }}
+                      />
+                    )
+                  }
+                  return null
+                })}
+              </div>
+            ) : hasInlineSvg ? (
+              <div className="output-svg-container">
+                {cell.outputs.map((out, idx) => {
+                  const rawSvg = out.data?.['image/svg+xml']
+                  if (!rawSvg) return null
+                  const svgText = Array.isArray(rawSvg) ? rawSvg.join('') : String(rawSvg)
+                  return (
+                    <div
+                      key={`svg-${idx}`}
+                      dangerouslySetInnerHTML={{ __html: sanitizeSvg(svgText) }}
+                    />
+                  )
+                })}
+              </div>
+            ) : (
+              <div
+                className="output-svg-container"
+                dangerouslySetInnerHTML={{ __html: sanitizeSvg(jupyterKernelService.generateChartSvg(activeChart)) }}
+              />
+            )}
           </div>
         )}
 

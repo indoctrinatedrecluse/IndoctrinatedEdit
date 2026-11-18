@@ -48,7 +48,56 @@ export interface GlassShaderParams {
 
 class ColorStudioService {
   /**
-   * Parse hex, rgb, or hsl string into complete ColorDetails
+   * Accurate sRGB (0-255) -> Linear sRGB -> Oklab -> OKLCH conversion (Björn Ottosson).
+   */
+  private rgbToOklch(r: number, g: number, b: number): { l: number; c: number; h: number } {
+    const toLinear = (v: number) => {
+      const s = v / 255
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+    }
+    const lr = toLinear(r)
+    const lg = toLinear(g)
+    const lb = toLinear(b)
+
+    const l_ = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+    const m_ = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+    const s_ = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+
+    const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_
+    const a = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_
+    const bLab = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_
+
+    const C = Math.sqrt(a * a + bLab * bLab)
+    let H = (Math.atan2(bLab, a) * 180) / Math.PI
+    if (H < 0) H += 360
+    if (C < 1e-5) H = 0
+
+    return { l: L, c: C, h: H }
+  }
+
+  private hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+    const hNorm = ((h % 360) + 360) % 360
+    const sNorm = Math.min(100, Math.max(0, s)) / 100
+    const lNorm = Math.min(100, Math.max(0, l)) / 100
+    const c = (1 - Math.abs(2 * lNorm - 1)) * sNorm
+    const x = c * (1 - Math.abs(((hNorm / 60) % 2) - 1))
+    const m = lNorm - c / 2
+    let r1 = 0, g1 = 0, b1 = 0
+    if (hNorm < 60) { r1 = c; g1 = x }
+    else if (hNorm < 120) { r1 = x; g1 = c }
+    else if (hNorm < 180) { g1 = c; b1 = x }
+    else if (hNorm < 240) { g1 = x; b1 = c }
+    else if (hNorm < 300) { r1 = x; b1 = c }
+    else { r1 = c; b1 = x }
+    return {
+      r: Math.round((r1 + m) * 255),
+      g: Math.round((g1 + m) * 255),
+      b: Math.round((b1 + m) * 255),
+    }
+  }
+
+  /**
+   * Parse hex, rgb/rgba, or hsl/hsla string into complete ColorDetails (safe against invalid hex)
    */
   public parseColor(input: string): ColorDetails {
     let r = 10, g = 132, b = 255, a = 1.0 // Default electric blue
@@ -57,24 +106,37 @@ class ColorStudioService {
 
     if (clean.startsWith('#')) {
       const hex = clean.replace('#', '')
-      if (hex.length === 3) {
+      if (/^[0-9a-fA-F]{3}$/.test(hex)) {
         r = parseInt(hex[0] + hex[0], 16)
         g = parseInt(hex[1] + hex[1], 16)
         b = parseInt(hex[2] + hex[2], 16)
-      } else if (hex.length >= 6) {
+      } else if (/^[0-9a-fA-F]{6}$/.test(hex)) {
         r = parseInt(hex.substring(0, 2), 16)
         g = parseInt(hex.substring(2, 4), 16)
         b = parseInt(hex.substring(4, 6), 16)
-        if (hex.length === 8) {
-          a = Math.round((parseInt(hex.substring(6, 8), 16) / 255) * 100) / 100
-        }
+      } else if (/^[0-9a-fA-F]{8}$/.test(hex)) {
+        r = parseInt(hex.substring(0, 2), 16)
+        g = parseInt(hex.substring(2, 4), 16)
+        b = parseInt(hex.substring(4, 6), 16)
+        a = Math.round((parseInt(hex.substring(6, 8), 16) / 255) * 100) / 100
       }
-    } else if (clean.startsWith('rgb')) {
+    } else if (/^rgba?\(/i.test(clean)) {
       const parts = clean.match(/[\d.]+/g)
       if (parts && parts.length >= 3) {
-        r = Math.min(255, Math.max(0, parseInt(parts[0], 10)))
-        g = Math.min(255, Math.max(0, parseInt(parts[1], 10)))
-        b = Math.min(255, Math.max(0, parseInt(parts[2], 10)))
+        r = Math.min(255, Math.max(0, Math.round(parseFloat(parts[0]))))
+        g = Math.min(255, Math.max(0, Math.round(parseFloat(parts[1]))))
+        b = Math.min(255, Math.max(0, Math.round(parseFloat(parts[2]))))
+        if (parts.length >= 4) {
+          a = Math.min(1, Math.max(0, parseFloat(parts[3])))
+        }
+      }
+    } else if (/^hsla?\(/i.test(clean)) {
+      const parts = clean.match(/[\d.]+/g)
+      if (parts && parts.length >= 3) {
+        const rgb = this.hslToRgb(parseFloat(parts[0]), parseFloat(parts[1]), parseFloat(parts[2]))
+        r = rgb.r
+        g = rgb.g
+        b = rgb.b
         if (parts.length >= 4) {
           a = Math.min(1, Math.max(0, parseFloat(parts[3])))
         }
@@ -84,10 +146,10 @@ class ColorStudioService {
     const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase()
     const hsl = this.rgbToHsl(r, g, b, a)
     const cmyk = this.rgbToCmyk(r, g, b)
+    const oklch = this.rgbToOklch(r, g, b)
 
-    // Calculate luminance for contrast
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    const isDark = luminance < 0.5
+    const luminance = this.getRelativeLuminance(r, g, b)
+    const isDark = luminance < 0.179
 
     return {
       hex,
@@ -95,7 +157,7 @@ class ColorStudioService {
       hsl,
       rgbString: a < 1 ? `rgba(${r}, ${g}, ${b}, ${a})` : `rgb(${r}, ${g}, ${b})`,
       hslString: a < 1 ? `hsla(${hsl.h}, ${hsl.s}%, ${hsl.l}%, ${a})` : `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`,
-      oklchString: `oklch(${(luminance * 100).toFixed(1)}% ${(hsl.s / 500).toFixed(3)} ${hsl.h})`,
+      oklchString: `oklch(${(oklch.l * 100).toFixed(1)}% ${oklch.c.toFixed(3)} ${Math.round(oklch.h)})`,
       cmykString: `cmyk(${cmyk.c}%, ${cmyk.m}%, ${cmyk.y}%, ${cmyk.k}%)`,
       isDark,
     }
@@ -156,7 +218,13 @@ class ColorStudioService {
     const fg = this.parseColor(fgHex)
     const bg = this.parseColor(bgHex)
 
-    const l1 = this.getRelativeLuminance(fg.rgb.r, fg.rgb.g, fg.rgb.b)
+    // Alpha-composite translucent foreground over background per WCAG 2.2
+    const alpha = fg.rgb.a
+    const compR = Math.round(fg.rgb.r * alpha + bg.rgb.r * (1 - alpha))
+    const compG = Math.round(fg.rgb.g * alpha + bg.rgb.g * (1 - alpha))
+    const compB = Math.round(fg.rgb.b * alpha + bg.rgb.b * (1 - alpha))
+
+    const l1 = this.getRelativeLuminance(compR, compG, compB)
     const l2 = this.getRelativeLuminance(bg.rgb.r, bg.rgb.g, bg.rgb.b)
 
     const lighter = Math.max(l1, l2)
@@ -191,7 +259,7 @@ class ColorStudioService {
   private getRelativeLuminance(r: number, g: number, b: number): number {
     const sRGB = [r, g, b].map((val) => {
       const v = val / 255
-      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+      return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
     })
     return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2]
   }

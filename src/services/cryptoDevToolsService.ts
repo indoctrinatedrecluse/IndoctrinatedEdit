@@ -142,62 +142,270 @@ class CryptoDevToolsService {
   // 2. CRYPTOGRAPHIC HASHES & HMAC
   // ==========================================
 
+  private async subtleDigestHex(algorithm: 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512', input: string): Promise<string> {
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) {
+      return this.sha256Hex(input)
+    }
+    const data = new TextEncoder().encode(input)
+    const buf = await subtle.digest(algorithm, data)
+    return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  private async subtleHmacSha256Hex(input: string, key: string): Promise<string> {
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) {
+      return this.hmacSha256(input, key)
+    }
+    const enc = new TextEncoder()
+    const cryptoKey = await subtle.importKey(
+      'raw',
+      enc.encode(key),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const sig = await subtle.sign('HMAC', cryptoKey, enc.encode(input))
+    return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  /**
+   * Genuine RFC 1321 MD5 implementation (UTF-8 aware).
+   */
+  private realMd5Hex(input: string): string {
+    const bytes = new TextEncoder().encode(input)
+    const bitLen = bytes.length * 8
+    const paddedLen = (((bytes.length + 8) >> 6) + 1) * 64
+    const msg = new Uint8Array(paddedLen)
+    msg.set(bytes)
+    msg[bytes.length] = 0x80
+    const view = new DataView(msg.buffer)
+    view.setUint32(paddedLen - 8, bitLen >>> 0, true)
+    view.setUint32(paddedLen - 4, Math.floor(bitLen / 0x100000000) >>> 0, true)
+
+    const s = [
+      7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+      5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+      4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+      6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+    ]
+    const K = new Uint32Array(64)
+    for (let i = 0; i < 64; i++) {
+      K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000) >>> 0
+    }
+
+    let a0 = 0x67452301
+    let b0 = 0xefcdab89
+    let c0 = 0x98badcfe
+    let d0 = 0x10325476
+
+    const rotl = (x: number, n: number) => ((x << n) | (x >>> (32 - n))) >>> 0
+
+    for (let offset = 0; offset < paddedLen; offset += 64) {
+      const M = new Uint32Array(16)
+      for (let j = 0; j < 16; j++) M[j] = view.getUint32(offset + j * 4, true)
+      let A = a0, B = b0, C = c0, D = d0
+      for (let i = 0; i < 64; i++) {
+        let F: number, g: number
+        if (i < 16) {
+          F = (B & C) | (~B & D)
+          g = i
+        } else if (i < 32) {
+          F = (D & B) | (~D & C)
+          g = (5 * i + 1) % 16
+        } else if (i < 48) {
+          F = B ^ C ^ D
+          g = (3 * i + 5) % 16
+        } else {
+          F = C ^ (B | ~D)
+          g = (7 * i) % 16
+        }
+        F = (F + A + K[i] + M[g]) >>> 0
+        A = D
+        D = C
+        C = B
+        B = (B + rotl(F, s[i])) >>> 0
+      }
+      a0 = (a0 + A) >>> 0
+      b0 = (b0 + B) >>> 0
+      c0 = (c0 + C) >>> 0
+      d0 = (d0 + D) >>> 0
+    }
+
+    const out = new DataView(new ArrayBuffer(16))
+    out.setUint32(0, a0, true)
+    out.setUint32(4, b0, true)
+    out.setUint32(8, c0, true)
+    out.setUint32(12, d0, true)
+    return Array.from(new Uint8Array(out.buffer), (b) => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  /**
+   * Standards-compliant pure-JS Keccak-256 (Ethereum / Web3 domain byte 0x01).
+   */
+  private realKeccak256Hex(input: string): string {
+    const RC: bigint[] = [
+      0x0000000000000001n, 0x0000000000008082n, 0x800000000000808an, 0x8000000080008000n,
+      0x000000000000808bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
+      0x000000000000008an, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000an,
+      0x000000008000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+      0x8000000000008002n, 0x8000000000000080n, 0x000000000000800an, 0x800000008000000an,
+      0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n,
+    ]
+    const ROT: number[] = [
+      0, 1, 62, 28, 27,
+      36, 44, 6, 55, 20,
+      3, 10, 43, 25, 39,
+      41, 45, 15, 21, 8,
+      18, 2, 61, 56, 14,
+    ]
+    const MASK64 = 0xffffffffffffffffn
+    const rotl64 = (x: bigint, n: number) =>
+      n === 0 ? x : ((x << BigInt(n)) | (x >> BigInt(64 - n))) & MASK64
+
+    const state = new Array<bigint>(25).fill(0n)
+    const msg = new TextEncoder().encode(input)
+    const rate = 136 // (1600 - 512) / 8
+
+    // Pad with Keccak 0x01 ... 0x80
+    const padLen = rate - (msg.length % rate)
+    const padded = new Uint8Array(msg.length + padLen)
+    padded.set(msg)
+    padded[msg.length] ^= 0x01
+    padded[padded.length - 1] ^= 0x80
+
+    const B = new Array<bigint>(25).fill(0n)
+    const C = new Array<bigint>(5).fill(0n)
+    const D = new Array<bigint>(5).fill(0n)
+
+    for (let offset = 0; offset < padded.length; offset += rate) {
+      for (let i = 0; i < rate / 8; i++) {
+        let lane = 0n
+        for (let b = 0; b < 8; b++) {
+          lane |= BigInt(padded[offset + i * 8 + b]) << BigInt(b * 8)
+        }
+        state[i] ^= lane
+      }
+
+      for (let round = 0; round < 24; round++) {
+        // Theta
+        for (let x = 0; x < 5; x++) {
+          C[x] = state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20]
+        }
+        for (let x = 0; x < 5; x++) {
+          D[x] = C[(x + 4) % 5] ^ rotl64(C[(x + 1) % 5], 1)
+        }
+        for (let i = 0; i < 25; i++) {
+          state[i] ^= D[i % 5]
+        }
+        // Rho and Pi
+        for (let x = 0; x < 5; x++) {
+          for (let y = 0; y < 5; y++) {
+            const idx = x + 5 * y
+            const newX = y
+            const newY = (2 * x + 3 * y) % 5
+            B[newX + 5 * newY] = rotl64(state[idx], ROT[idx])
+          }
+        }
+        // Chi
+        for (let y = 0; y < 5; y++) {
+          for (let x = 0; x < 5; x++) {
+            const i = x + 5 * y
+            state[i] = B[i] ^ (((~B[((x + 1) % 5) + 5 * y]) & MASK64) & B[((x + 2) % 5) + 5 * y])
+          }
+        }
+        // Iota
+        state[0] ^= RC[round]
+      }
+    }
+
+    let hex = '0x'
+    for (let i = 0; i < 4; i++) {
+      const lane = state[i]
+      for (let b = 0; b < 8; b++) {
+        hex += Number((lane >> BigInt(b * 8)) & 0xffn).toString(16).padStart(2, '0')
+      }
+    }
+    return hex
+  }
+
   public async computeHashes(input: string, key = ''): Promise<HashResult[]> {
-    const start = performance.now()
     const results: HashResult[] = []
 
-    // MD5
-    results.push({
-      algorithm: 'MD5',
-      hash: this.md5Hex(input),
-      latencyMs: Math.round((performance.now() - start) * 100) / 100,
-    })
-
-    // SHA-1
-    results.push({
-      algorithm: 'SHA-1',
-      hash: this.sha1Hex(input),
-      latencyMs: Math.round((performance.now() - start) * 100) / 100,
-    })
-
-    // SHA-256
-    results.push({
-      algorithm: 'SHA-256',
-      hash: this.sha256Hex(input),
-      latencyMs: Math.round((performance.now() - start) * 100) / 100,
-    })
-
-    // SHA-384
-    results.push({
-      algorithm: 'SHA-384',
-      hash: this.sha384Hex(input),
-      latencyMs: Math.round((performance.now() - start) * 100) / 100,
-    })
-
-    // SHA-512
-    results.push({
-      algorithm: 'SHA-512',
-      hash: this.sha512Hex(input),
-      latencyMs: Math.round((performance.now() - start) * 100) / 100,
-    })
-
-    // Keccak-256 (Ethereum)
-    results.push({
-      algorithm: 'Keccak-256 (Web3)',
-      hash: this.keccak256Hex(input),
-      latencyMs: Math.round((performance.now() - start) * 100) / 100,
-    })
-
-    // HMAC SHA-256 if key is provided
-    if (key.trim()) {
+    const measure = async (algorithm: string, fn: () => Promise<string> | string) => {
+      const t0 = performance.now()
+      const hash = await fn()
       results.push({
-        algorithm: 'HMAC-SHA256',
-        hash: this.hmacSha256(input, key),
-        latencyMs: Math.round((performance.now() - start) * 100) / 100,
+        algorithm,
+        hash,
+        latencyMs: Math.round((performance.now() - t0) * 100) / 100,
       })
     }
 
+    await measure('MD5', () => this.realMd5Hex(input))
+    await measure('SHA-1', () => this.subtleDigestHex('SHA-1', input))
+    await measure('SHA-256', () => this.subtleDigestHex('SHA-256', input))
+    await measure('SHA-384', () => this.subtleDigestHex('SHA-384', input))
+    await measure('SHA-512', () => this.subtleDigestHex('SHA-512', input))
+    await measure('Keccak-256 (Web3)', () => this.realKeccak256Hex(input))
+
+    if (key.trim()) {
+      await measure('HMAC-SHA256', () => this.subtleHmacSha256Hex(input, key))
+    }
+
     return results
+  }
+
+  /**
+   * Generate real PKCS#8 / SPKI cryptographic keypairs using Web Crypto API.
+   */
+  public async generateKeyPairAsync(
+    keyType: 'RSA-2048' | 'RSA-4096' | 'ECDSA-P256' = 'ECDSA-P256'
+  ): Promise<{ keyType: string; publicKeyPem: string; privateKeyPem: string; fingerprint: string; createdAt: string }> {
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) {
+      const fallback = this.generateKeyPair(keyType)
+      return {
+        keyType: fallback.keyType,
+        publicKeyPem: fallback.publicKey,
+        privateKeyPem: fallback.privateKey,
+        fingerprint: `SHA256:${this.sha256Hex(fallback.publicKey).slice(0, 32)}`,
+        createdAt: new Date().toISOString(),
+      }
+    }
+
+    const algo: any =
+      keyType === 'ECDSA-P256'
+        ? { name: 'ECDSA', namedCurve: 'P-256' }
+        : {
+            name: 'RSA-OAEP',
+            modulusLength: keyType === 'RSA-4096' ? 4096 : 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: 'SHA-256',
+          }
+
+    const usages: KeyUsage[] = keyType === 'ECDSA-P256' ? ['sign', 'verify'] : ['encrypt', 'decrypt']
+    const kp = (await subtle.generateKey(algo, true, usages)) as CryptoKeyPair
+    const spki = new Uint8Array(await subtle.exportKey('spki', kp.publicKey))
+    const pkcs8 = new Uint8Array(await subtle.exportKey('pkcs8', kp.privateKey))
+
+    const toPem = (bytes: Uint8Array, label: string) => {
+      let bin = ''
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+      const b64 = btoa(bin).match(/.{1,64}/g)?.join('\n') || ''
+      return `-----BEGIN ${label}-----\n${b64}\n-----END ${label}-----`
+    }
+
+    const fpBuf = new Uint8Array(await subtle.digest('SHA-256', spki))
+    const fingerprint = Array.from(fpBuf.slice(0, 16), (b) => b.toString(16).padStart(2, '0')).join(':')
+
+    return {
+      keyType,
+      publicKeyPem: toPem(spki, 'PUBLIC KEY'),
+      privateKeyPem: toPem(pkcs8, 'PRIVATE KEY'),
+      fingerprint: `SHA256:${fingerprint}`,
+      createdAt: new Date().toISOString(),
+    }
   }
 
   // ==========================================
@@ -670,37 +878,8 @@ class CryptoDevToolsService {
     return result
   }
 
-  private md5Hex(str: string): string {
-    // Deterministic MD5 hash emulation
-    let h0 = 0x67452301
-    let h1 = 0xefcdab89
-    let h2 = 0x98badcfe
-    let h3 = 0x10325476
-    for (let i = 0; i < str.length; i++) {
-      const code = str.charCodeAt(i)
-      h0 = ((h0 << 5) - h0 + code) | 0
-      h1 = ((h1 << 7) - h1 + (code * 3)) | 0
-      h2 = ((h2 << 3) - h2 + (code * 7)) | 0
-      h3 = ((h3 << 9) - h3 + (code * 11)) | 0
-    }
-    const toHex = (n: number) => (n >>> 0).toString(16).padStart(8, '0')
-    return `${toHex(h0)}${toHex(h1)}${toHex(h2)}${toHex(h3)}`
-  }
-
-  private sha1Hex(str: string): string {
-    return this.sha256Hex(`sha1_${str}`).substring(0, 40)
-  }
-
-  private sha384Hex(str: string): string {
-    return this.sha256Hex(`sha384_a_${str}`) + this.sha256Hex(`sha384_b_${str}`).substring(0, 32)
-  }
-
   private sha512Hex(str: string): string {
     return this.sha256Hex(`sha512_hi_${str}`) + this.sha256Hex(`sha512_lo_${str}`)
-  }
-
-  private keccak256Hex(str: string): string {
-    return '0x' + this.sha256Hex(`keccak_eth_${str}`)
   }
 
   private hmacSha256(str: string, key: string): string {

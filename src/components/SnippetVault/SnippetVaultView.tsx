@@ -60,6 +60,7 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
     setNewTitle('')
     setNewDesc('')
     setNewCode('')
+    setNewTags('')
     setActiveTab('snippets')
   }
 
@@ -68,12 +69,20 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
     setSnippets(snippetVaultService.getAllSnippets())
   }
 
+  const availableLanguages = Array.from(
+    new Set(['all', ...snippets.map((s) => s.language.toLowerCase())])
+  )
+
   const filteredSnippets = snippets.filter((s) => {
     const matchesLang = selectedLang === 'all' || s.language.toLowerCase() === selectedLang.toLowerCase()
-    const matchesQuery = !searchQuery.trim() ||
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
+    const q = searchQuery.toLowerCase().trim()
+    const matchesQuery =
+      !q ||
+      s.title.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q) ||
+      s.code.toLowerCase().includes(q) ||
+      s.language.toLowerCase().includes(q) ||
+      s.tags.some((t) => t.toLowerCase().includes(q))
     return matchesLang && matchesQuery
   })
 
@@ -135,7 +144,7 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
                   e.currentTarget.scrollLeft += e.deltaY
                 }}
               >
-                {['all', 'typescript', 'python', 'rust', 'sql', 'shell'].map((l) => (
+                {availableLanguages.map((l) => (
                   <button
                     key={l}
                     className={`lang-chip ${selectedLang === l ? 'active' : ''}`}

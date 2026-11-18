@@ -49,20 +49,39 @@ class JsonStudioService {
         } else if (segment === 'keys') {
           current = typeof current === 'object' && current !== null ? Object.keys(current) : []
         } else if (segment.startsWith('.')) {
-          const pathTokens = segment
-            .replace(/^\./, '')
-            .split(/\.|\b(?=\[)/)
-            .filter(Boolean)
+          // Properly tokenize chained brackets like .matrix[0][1], .[0], .items[1:3], .items[-1]
+          const pathTokens: string[] = []
+          const tokenRe = /(\[[^\]]*\])|([^.[\]]+)/g
+          const stripped = segment.replace(/^\./, '')
+          let tm: RegExpExecArray | null
+          while ((tm = tokenRe.exec(stripped)) !== null) {
+            if (tm[0]) pathTokens.push(tm[0])
+          }
 
           for (const token of pathTokens) {
             if (token === '[]') {
               if (Array.isArray(current)) {
                 current = current.flat()
+              } else if (current && typeof current === 'object') {
+                current = Object.values(current)
               }
             } else if (token.startsWith('[') && token.endsWith(']')) {
-              const idx = parseInt(token.slice(1, -1), 10)
-              if (Array.isArray(current)) {
-                current = current[idx]
+              const inner = token.slice(1, -1).trim()
+              if (inner.includes(':') && Array.isArray(current)) {
+                const [sRaw, eRaw] = inner.split(':')
+                const sIdx = sRaw ? parseInt(sRaw, 10) : 0
+                const eIdx = eRaw ? parseInt(eRaw, 10) : undefined
+                current = current.slice(sIdx, eIdx)
+              } else if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith("'") && inner.endsWith("'"))) {
+                const key = inner.slice(1, -1)
+                current = current && typeof current === 'object' ? current[key] : undefined
+              } else {
+                const idx = parseInt(inner, 10)
+                if (Array.isArray(current) && !isNaN(idx)) {
+                  current = idx < 0 ? current[current.length + idx] : current[idx]
+                } else {
+                  current = undefined
+                }
               }
             } else if (Array.isArray(current)) {
               current = current.map((item) => (item && typeof item === 'object' ? item[token] : undefined)).filter((v) => v !== undefined)
@@ -72,6 +91,18 @@ class JsonStudioService {
               current = undefined
               break
             }
+          }
+        } else if (segment === 'type') {
+          current = current === null ? 'null' : Array.isArray(current) ? 'array' : typeof current
+        } else if (segment === 'reverse' && Array.isArray(current)) {
+          current = [...current].reverse()
+        } else if (segment === 'unique' && Array.isArray(current)) {
+          current = Array.from(new Set(current.map((v) => JSON.stringify(v)))).map((s) => JSON.parse(s))
+        } else {
+          return {
+            result: null,
+            executionTimeMs: Math.round((performance.now() - t0) * 100) / 100,
+            error: `Unsupported JQ filter segment: "${segment}"`,
           }
         }
       }

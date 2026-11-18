@@ -3,6 +3,8 @@
  * Real-time SVG preview canvas, path optimizer / minifier, palette recolorer, JSX component generator, and sprite sheet builder.
  */
 
+import { utf8ToBase64 } from '../utils/security'
+
 export interface SvgOptimizationResult {
   originalSvg: string
   optimizedSvg: string
@@ -74,19 +76,19 @@ class SvgStudioService {
    * Generates a React TypeScript component from SVG markup.
    */
   public generateReactComponent(svgMarkup: string, componentName = 'IconAsset'): string {
-    // Convert attributes like stroke-width to strokeWidth, fill-rule to fillRule, etc.
+    // Strip HTML comments (invalid in JSX) and convert hyphenated SVG attributes to React camelCase
     let jsx = svgMarkup
-      .replace(/stroke-width/g, 'strokeWidth')
-      .replace(/stroke-linecap/g, 'strokeLinecap')
-      .replace(/stroke-linejoin/g, 'strokeLinejoin')
-      .replace(/fill-rule/g, 'fillRule')
-      .replace(/clip-rule/g, 'clipRule')
-      .replace(/stop-color/g, 'stopColor')
-      .replace(/stop-opacity/g, 'stopOpacity')
-      .replace(/class=/g, 'className=')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\bclass=/g, 'className=')
+      .replace(/\bxmlns:xlink=/g, 'xmlnsXlink=')
+      .replace(/\bxlink:href=/g, 'xlinkHref=')
+      .replace(/\b([a-z]+)-([a-z][a-zA-Z]*)=/g, (match, p1, p2) => {
+        if (p1 === 'data' || p1 === 'aria') return match
+        return `${p1}${p2[0].toUpperCase()}${p2.slice(1)}=`
+      })
 
-    // Inject props spread into opening <svg tag
-    jsx = jsx.replace(/<svg([^>]*)>/, `<svg$1 {...props}>`)
+    // Inject size -> width/height and {...props} spread cleanly on opening <svg> tag
+    jsx = jsx.replace(/<svg([^>]*)>/, `<svg$1 width={size ?? props.width} height={size ?? props.height} {...props}>`)
 
     return `import React from 'react'
 
@@ -103,11 +105,10 @@ export const ${componentName}: React.FC<${componentName}Props> = ({ size, ...pro
   }
 
   /**
-   * Converts SVG markup to a Base64 Data URI.
+   * Converts SVG markup to a UTF-8 safe Base64 Data URI (no deprecated unescape()).
    */
   public toDataUri(svgMarkup: string): string {
-    const encoded = typeof window !== 'undefined' ? window.btoa(unescape(encodeURIComponent(svgMarkup))) : Buffer.from(svgMarkup).toString('base64')
-    return `data:image/svg+xml;base64,${encoded}`
+    return `data:image/svg+xml;base64,${utf8ToBase64(svgMarkup)}`
   }
 
   /**
@@ -119,19 +120,37 @@ export const ${componentName}: React.FC<${componentName}Props> = ({ size, ...pro
   }
 
   /**
-   * Recolor all fills and strokes in an SVG with target colors.
+   * Dynamically recolor fills, strokes, and gradient stops in ANY SVG (not limited to sample colors).
    */
   public recolorSvg(svgMarkup: string, primaryColor: string, secondaryColor?: string): string {
+    // Discover unique hex/rgb colors present in the SVG in order of appearance
+    const colorMatches = Array.from(
+      new Set(
+        (svgMarkup.match(/(?:fill|stroke|stop-color)\s*=\s*["']([^"']+)["']/gi) || [])
+          .map((m) => m.replace(/^(?:fill|stroke|stop-color)\s*=\s*["']|["']$/gi, '').trim())
+          .filter((c) => c && c !== 'none' && c !== 'transparent' && !c.startsWith('url('))
+      )
+    )
+
+    const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     let recolored = svgMarkup
-    if (primaryColor) {
-      recolored = recolored.replace(/stop-color="#0A84FF"/gi, `stop-color="${primaryColor}"`)
-      recolored = recolored.replace(/fill="#0A84FF"/gi, `fill="${primaryColor}"`)
-      recolored = recolored.replace(/stroke="#0A84FF"/gi, `stroke="${primaryColor}"`)
+
+    const firstTarget = colorMatches.find((c) => c.toLowerCase() === '#0a84ff') || colorMatches[0]
+    const secondTarget =
+      colorMatches.find((c) => c.toLowerCase() === '#bf5af2') ||
+      colorMatches.find((c) => c !== firstTarget)
+
+    if (primaryColor && firstTarget) {
+      recolored = recolored.replace(
+        new RegExp(`(stop-color|fill|stroke)\\s*=\\s*["']${escapeRe(firstTarget)}["']`, 'gi'),
+        `$1="${primaryColor}"`
+      )
     }
-    if (secondaryColor) {
-      recolored = recolored.replace(/stop-color="#BF5AF2"/gi, `stop-color="${secondaryColor}"`)
-      recolored = recolored.replace(/fill="#BF5AF2"/gi, `fill="${secondaryColor}"`)
-      recolored = recolored.replace(/stroke="#BF5AF2"/gi, `stroke="${secondaryColor}"`)
+    if (secondaryColor && secondTarget) {
+      recolored = recolored.replace(
+        new RegExp(`(stop-color|fill|stroke)\\s*=\\s*["']${escapeRe(secondTarget)}["']`, 'gi'),
+        `$1="${secondaryColor}"`
+      )
     }
     return recolored
   }

@@ -61,36 +61,37 @@ export const JsonStudioView: React.FC = () => {
   const [transFrom, setTransFrom] = useState<'json' | 'yaml'>('json')
   const [transTo, setTransTo] = useState<'json' | 'yaml' | 'csv' | 'xml'>('yaml')
 
-  // Expanded Tree Nodes
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({ $: true })
+  // Expanded Tree Nodes (matches buildJsonTree root id "$_root")
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({ $_root: true })
 
-  // Parse JSON data safely
-  const parsedData = useMemo(() => {
+  // Parse JSON data safely (supports falsy valid JSON: false, 0, "", null)
+  const parsedState = useMemo<{ ok: boolean; value: any }>(() => {
     try {
-      return JSON.parse(rawJson)
+      return { ok: true, value: JSON.parse(rawJson) }
     } catch {
-      return null
+      return { ok: false, value: null }
     }
   }, [rawJson])
+  const parsedData = parsedState.ok ? parsedState.value : undefined
 
   // JQ query result
   const jqResult = useMemo(() => {
-    if (!parsedData) return { result: null, executionTimeMs: 0, error: 'Invalid JSON input' }
-    return jsonStudioService.queryJq(parsedData, jqQuery)
-  }, [parsedData, jqQuery])
+    if (!parsedState.ok) return { result: null, executionTimeMs: 0, error: 'Invalid JSON input' }
+    return jsonStudioService.queryJq(parsedState.value, jqQuery)
+  }, [parsedState, jqQuery])
 
   // Tree structure
   const treeRoot = useMemo(() => {
-    if (!parsedData) return null
-    return jsonStudioService.buildJsonTree(parsedData)
-  }, [parsedData])
+    if (!parsedState.ok) return null
+    return jsonStudioService.buildJsonTree(parsedState.value)
+  }, [parsedState])
 
   // Schema validation result
   const schemaValidation: JsonSchemaValidationResult = useMemo(() => {
-    if (!parsedData) return { isValid: false, errors: [{ path: '$', message: 'Invalid JSON payload' }] }
+    if (!parsedState.ok) return { isValid: false, errors: [{ path: '$', message: 'Invalid JSON payload' }] }
     try {
       const schemaObj = JSON.parse(schemaText)
-      return jsonStudioService.validateJsonSchema(parsedData, schemaObj)
+      return jsonStudioService.validateJsonSchema(parsedState.value, schemaObj)
     } catch (err: any) {
       return { isValid: false, errors: [{ path: '$schema', message: `Invalid Schema: ${err.message}` }] }
     }

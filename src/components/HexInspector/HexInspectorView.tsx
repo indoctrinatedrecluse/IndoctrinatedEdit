@@ -22,10 +22,11 @@ export const HexInspectorView: React.FC<HexInspectorViewProps> = ({
   const [searchIsHex, setSearchIsHex] = useState<boolean>(false)
 
   useEffect(() => {
-    if (activeFileContent) {
+    if (activeFileContent !== undefined && activeFileContent !== '') {
       setInputText(activeFileContent)
+      setSelectedByteOffset(0)
     }
-  }, [activeFileContent])
+  }, [activeFileContent, activeFileName])
 
   const hexRows: HexRow[] = useMemo(() => {
     return hexInspectorService.generateHexDump(inputText)
@@ -38,6 +39,19 @@ export const HexInspectorView: React.FC<HexInspectorViewProps> = ({
   const searchMatches = useMemo(() => {
     return hexInspectorService.searchBytes(inputText, searchQuery, searchIsHex)
   }, [inputText, searchQuery, searchIsHex])
+
+  // Highlight every byte of multi-byte search matches in O(1) lookup via Set
+  const matchedByteSet = useMemo(() => {
+    const set = new Set<number>()
+    if (searchMatches.length === 0) return set
+    const matchLen = searchIsHex
+      ? Math.max(1, searchQuery.replace(/\s+/g, '').length / 2 | 0)
+      : Math.max(1, new TextEncoder().encode(searchQuery).length)
+    for (const startOffset of searchMatches) {
+      for (let i = 0; i < matchLen; i++) set.add(startOffset + i)
+    }
+    return set
+  }, [searchMatches, searchQuery, searchIsHex])
 
   return (
     <div className="hex-inspector-root">
@@ -91,7 +105,7 @@ export const HexInspectorView: React.FC<HexInspectorViewProps> = ({
                 <div className="row-bytes-grid">
                   {row.bytes.map((b) => {
                     const isSelected = b.index === selectedByteOffset
-                    const isMatch = searchMatches.includes(b.index)
+                    const isMatch = matchedByteSet.has(b.index)
                     return (
                       <span
                         key={b.index}

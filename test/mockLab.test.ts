@@ -31,7 +31,7 @@ describe('MockLabService', () => {
   it('handles simulated requests and expands dynamic template tokens', async () => {
     const res = await mockLabService.handleRequest('GET', '/api/v1/users')
     expect(res.statusCode).toBe(200)
-    expect(res.body).toContain('Abhishek Mitra')
+    expect(res.body).toContain('Alex Mercer')
     expect(res.durationMs).toBeGreaterThanOrEqual(0)
   })
 

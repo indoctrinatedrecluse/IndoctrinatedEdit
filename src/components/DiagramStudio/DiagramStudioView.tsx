@@ -373,27 +373,32 @@ export const DiagramStudioView: React.FC<DiagramStudioViewProps> = ({
                 </marker>
               </defs>
 
-              {/* Edges */}
-              {graphData.edges.map((e) => {
-                const src = graphData.nodes.find((n) => n.id === e.source)
-                const tgt = graphData.nodes.find((n) => n.id === e.target)
-                if (!src || !tgt) return null
-                const isCycleEdge = highlightCircular && src.isCircular && tgt.isCircular
+              {/* Edges (filtered so removed nodes never leave floating dangling edges) */}
+              {(() => {
+                const visibleIds = new Set(filteredNodes.map((n) => n.id))
+                return graphData.edges
+                  .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+                  .map((e) => {
+                    const src = filteredNodes.find((n) => n.id === e.source)
+                    const tgt = filteredNodes.find((n) => n.id === e.target)
+                    if (!src || !tgt) return null
+                    const isCycleEdge = highlightCircular && src.isCircular && tgt.isCircular
 
-                return (
-                  <line
-                    key={e.id}
-                    x1={src.x}
-                    y1={src.y}
-                    x2={tgt.x}
-                    y2={tgt.y}
-                    stroke={isCycleEdge ? '#FF453A' : 'rgba(100, 210, 255, 0.35)'}
-                    strokeWidth={isCycleEdge ? 2 : 1.2}
-                    strokeDasharray={e.importType === 'type-only' ? '4,4' : undefined}
-                    markerEnd={isCycleEdge ? 'url(#arrow-circular)' : 'url(#arrow-default)'}
-                  />
-                )
-              })}
+                    return (
+                      <line
+                        key={e.id}
+                        x1={src.x}
+                        y1={src.y}
+                        x2={tgt.x}
+                        y2={tgt.y}
+                        stroke={isCycleEdge ? '#FF453A' : 'rgba(100, 210, 255, 0.35)'}
+                        strokeWidth={isCycleEdge ? 2 : 1.2}
+                        strokeDasharray={e.importType === 'type-only' ? '4,4' : undefined}
+                        markerEnd={isCycleEdge ? 'url(#arrow-circular)' : 'url(#arrow-default)'}
+                      />
+                    )
+                  })
+              })()}
 
               {/* Nodes */}
               {filteredNodes.map((n) => {
