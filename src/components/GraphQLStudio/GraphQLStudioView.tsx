@@ -36,6 +36,7 @@ export const GraphQLStudioView: React.FC = () => {
 }`)
   const [variablesJson, setVariablesJson] = useState<string>('{\n  "limit": 5\n}')
   const [headersJson, setHeadersJson] = useState<string>('{\n  "Content-Type": "application/json"\n}')
+  const [headersError, setHeadersError] = useState<string | null>(null)
   const [execResult, setExecResult] = useState<GraphQLQueryExecutionResult | null>(null)
   const [isExecuting, setIsExecuting] = useState<boolean>(false)
   const [schemaDoc, setSchemaDoc] = useState<GraphQLSchemaDoc>(() => graphQLStudioService.getSchema())
@@ -68,19 +69,27 @@ export const GraphQLStudioView: React.FC = () => {
     )
   }, [schemaDoc, schemaFilter])
 
-  const parseHeaders = (): Record<string, string> => {
+  const parseHeaders = (): Record<string, string> | null => {
     try {
-      const p = JSON.parse(headersJson)
-      return p && typeof p === 'object' ? p : {}
-    } catch {
-      return {}
+      const p = JSON.parse(headersJson || '{}')
+      if (p && typeof p === 'object' && !Array.isArray(p)) {
+        setHeadersError(null)
+        return p
+      }
+      setHeadersError('HTTP Headers must be a JSON object')
+      return null
+    } catch (err: any) {
+      setHeadersError(`Invalid Headers JSON: ${err?.message || 'parse error'}`)
+      return null
     }
   }
 
   const handleRunQuery = async () => {
+    const parsedHeaders = parseHeaders()
+    if (!parsedHeaders) return
     setIsExecuting(true)
     try {
-      const res = await graphQLStudioService.executeQuery(endpointUrl, queryCode, variablesJson, parseHeaders())
+      const res = await graphQLStudioService.executeQuery(endpointUrl, queryCode, variablesJson, parsedHeaders)
       setExecResult(res)
     } finally {
       setIsExecuting(false)
@@ -88,10 +97,12 @@ export const GraphQLStudioView: React.FC = () => {
   }
 
   const handleIntrospectLive = async () => {
+    const parsedHeaders = parseHeaders()
+    if (!parsedHeaders) return
     setIsIntrospecting(true)
     setSchemaStatus(null)
     try {
-      const types = await graphQLStudioService.introspectSchema(endpointUrl, parseHeaders())
+      const types = await graphQLStudioService.introspectSchema(endpointUrl, parsedHeaders)
       if (types && types.length > 0) {
         setSchemaDoc({ queryType: 'Query', types })
         setSchemaStatus(`Introspected ${types.length} live GraphQL types from ${endpointUrl}`)
@@ -136,8 +147,18 @@ export const GraphQLStudioView: React.FC = () => {
     try {
       let payloadObj: Record<string, any> = {}
       let metaObj: Record<string, string> = {}
-      try { payloadObj = JSON.parse(grpcPayload || '{}') } catch {}
-      try { metaObj = JSON.parse(grpcMetadata || '{}') } catch {}
+      try {
+        payloadObj = JSON.parse(grpcPayload || '{}')
+      } catch (err: any) {
+        setGrpcResponse(`Payload JSON Error: ${err?.message || 'Invalid JSON'}`)
+        return
+      }
+      try {
+        metaObj = JSON.parse(grpcMetadata || '{}')
+      } catch (err: any) {
+        setGrpcResponse(`Metadata JSON Error: ${err?.message || 'Invalid JSON'}`)
+        return
+      }
       const res = await graphQLStudioService.invokeGrpcUnary({
         protoPath,
         address: grpcAddress,
@@ -155,8 +176,13 @@ export const GraphQLStudioView: React.FC = () => {
   }
 
   const exportedCode = useMemo(() => {
-    return graphQLStudioService.exportCode(queryCode, exportLang, endpointUrl)
-  }, [queryCode, exportLang, endpointUrl])
+    let parsedHeaders: Record<string, string> = {}
+    try {
+      const p = JSON.parse(headersJson || '{}')
+      if (p && typeof p === 'object' && !Array.isArray(p)) parsedHeaders = p
+    } catch {}
+    return graphQLStudioService.exportCode(queryCode, exportLang, endpointUrl, variablesJson, parsedHeaders)
+  }, [queryCode, exportLang, endpointUrl, variablesJson, headersJson])
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text)
@@ -254,10 +280,13 @@ export const GraphQLStudioView: React.FC = () => {
               </div>
               <textarea
                 value={headersJson}
-                onChange={(e) => setHeadersJson(e.target.value)}
+                onChange={(e) => { setHeadersJson(e.target.value); if (headersError) setHeadersError(null) }}
                 className="variables-textarea"
                 rows={2}
               />
+              {headersError && (
+                <div style={{ fontSize: 10, color: '#FB7185', marginTop: 2 }}>{headersError}</div>
+              )}
             </div>
 
             <div className="result-col">
@@ -339,9 +368,21 @@ export const GraphQLStudioView: React.FC = () => {
                 {t.fields && (
                   <div className="fields-table">
                     {t.fields.map((f) => (
-                      <div key={f.name} className="field-row">
-                        <span className="field-name">{f.name}</span>
+                      <div key={f.name} className="field-row" style={{ flexWrap: 'wrap' }}>
+                        <span className="field-name">
+                          {f.name}
+                          {f.args && f.args.length > 0 && (
+                            <span style={{ opacity: 0.72, fontWeight: 400 }}>
+                              ({f.args.map((a) => `${a.name}: ${a.type}${a.defaultValue ? ` = ${a.defaultValue}` : ''}`).join(', ')})
+                            </span>
+                          )}
+                        </span>
                         <span className="field-type">{f.type}</span>
+                        {f.description && (
+                          <div style={{ width: '100%', fontSize: 10, opacity: 0.65, marginTop: 2 }}>
+                            {f.description}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

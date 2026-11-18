@@ -9,6 +9,7 @@ import {
   Square,
   RefreshCw,
   Upload,
+  Download,
   Trash2,
   Edit3,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   Terminal as TerminalIcon,
   Star,
   Lock,
+  X,
 } from 'lucide-react'
 import {
   remoteProtocolService,
@@ -37,9 +39,10 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
   const [sshUser, setSshUser] = useState('root')
   const [sshAuthType, setSshAuthType] = useState<'password' | 'key'>('key')
   const [sshKeyPath, setSshKeyPath] = useState('')
+  const [sshPassword, setSshPassword] = useState('')
   const [isSshConnected, setIsSshConnected] = useState(false)
   const [sshTerminalBuffer, setSshTerminalBuffer] = useState<string[]>([
-    'IndoctrinatedEdit Remote Protocol Studio [Real OpenSSH / SFTP / SMTP / TCP-TLS]',
+    'IndoctrinatedEdit Remote Protocol Studio [Real OpenSSH / SFTP / FTP / SMTP / TCP-TLS]',
     'Configure host & key, then click Quick Connect to run real OpenSSH commands.',
   ])
   const [sshInput, setSshInput] = useState('')
@@ -47,7 +50,9 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
 
   const [savedBookmarks, setSavedBookmarks] = useState<SshSessionBookmark[]>(() => remoteProtocolService.getBookmarks())
 
-  // --- SFTP State ---
+  // --- SFTP / FTP State ---
+  const [fileProtocol, setFileProtocol] = useState<'sftp' | 'ftp'>('sftp')
+  const [ftpPort, setFtpPort] = useState<number>(21)
   const [currentRemotePath, setCurrentRemotePath] = useState('/var/www')
   const [remoteFiles, setRemoteFiles] = useState<RemoteFileItem[]>([])
   const [selectedRemoteFile, setSelectedRemoteFile] = useState<RemoteFileItem | null>(null)
@@ -210,27 +215,43 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
       authType: sshAuthType,
       keyPath: sshKeyPath || undefined,
       group: 'Local',
+      category: 'Local',
     })
     setSavedBookmarks(remoteProtocolService.getBookmarks())
   }
 
-  // --- SFTP Actions (Real OpenSSH / SCP via Electron IPC) ---
+  const handleDeleteBookmark = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    remoteProtocolService.deleteBookmark(id)
+    setSavedBookmarks(remoteProtocolService.getBookmarks())
+  }
+
+  // --- SFTP / FTP Actions (Real OpenSSH/SCP & Pure-Node RFC 959 FTP via Electron IPC) ---
   const handleRefreshSftp = async (targetPath = currentRemotePath) => {
-    setTransferStatus(`Listing ${targetPath}...`)
-    const res = await remoteProtocolService.sftpList({
-      host: sshHost,
-      port: sshPort,
-      username: sshUser,
-      keyPath: sshKeyPath || undefined,
-      remotePath: targetPath,
-    })
+    setTransferStatus(`[${fileProtocol.toUpperCase()}] Listing ${targetPath}...`)
+    const res =
+      fileProtocol === 'ftp'
+        ? await remoteProtocolService.ftpList({
+            host: sshHost,
+            port: ftpPort,
+            username: sshUser || 'anonymous',
+            password: sshPassword,
+            remotePath: targetPath,
+          })
+        : await remoteProtocolService.sftpList({
+            host: sshHost,
+            port: sshPort,
+            username: sshUser,
+            keyPath: sshKeyPath || undefined,
+            remotePath: targetPath,
+          })
     if (res.ok) {
       const parentEntry: RemoteFileItem = { name: '..', type: 'directory', size: '--', permissions: 'drwxr-xr-x', modified: '' }
       const withoutParent = res.entries.filter((e) => e.name !== '..')
       setRemoteFiles([parentEntry, ...withoutParent])
-      setTransferStatus(`Loaded ${withoutParent.length} items from ${targetPath}`)
+      setTransferStatus(`[${fileProtocol.toUpperCase()}] Loaded ${withoutParent.length} items from ${targetPath}`)
     } else {
-      setTransferStatus(`SFTP Error: ${res.error || 'Failed to list directory'}`)
+      setTransferStatus(`${fileProtocol.toUpperCase()} Error: ${res.error || 'Failed to list directory'}`)
     }
   }
 
@@ -250,14 +271,23 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
     }
 
     const remoteFile = currentRemotePath.endsWith('/') ? currentRemotePath + file.name : currentRemotePath + '/' + file.name
-    setTransferStatus(`Reading ${remoteFile}...`)
-    const res = await remoteProtocolService.sftpRead({
-      host: sshHost,
-      port: sshPort,
-      username: sshUser,
-      keyPath: sshKeyPath || undefined,
-      remoteFile,
-    })
+    setTransferStatus(`[${fileProtocol.toUpperCase()}] Reading ${remoteFile}...`)
+    const res =
+      fileProtocol === 'ftp'
+        ? await remoteProtocolService.ftpRead({
+            host: sshHost,
+            port: ftpPort,
+            username: sshUser || 'anonymous',
+            password: sshPassword,
+            remoteFile,
+          })
+        : await remoteProtocolService.sftpRead({
+            host: sshHost,
+            port: sshPort,
+            username: sshUser,
+            keyPath: sshKeyPath || undefined,
+            remoteFile,
+          })
     if (res.ok) {
       setSelectedRemoteFile(file)
       setEditingFileContent(res.content || '')
@@ -273,35 +303,125 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
     const remoteFile = currentRemotePath.endsWith('/')
       ? currentRemotePath + selectedRemoteFile.name
       : currentRemotePath + '/' + selectedRemoteFile.name
-    const res = await remoteProtocolService.sftpWrite({
-      host: sshHost,
-      port: sshPort,
-      username: sshUser,
-      keyPath: sshKeyPath || undefined,
-      remoteFile,
-      content: editingFileContent,
-    })
+    const res =
+      fileProtocol === 'ftp'
+        ? await remoteProtocolService.ftpWrite({
+            host: sshHost,
+            port: ftpPort,
+            username: sshUser || 'anonymous',
+            password: sshPassword,
+            remoteFile,
+            content: editingFileContent,
+          })
+        : await remoteProtocolService.sftpWrite({
+            host: sshHost,
+            port: sshPort,
+            username: sshUser,
+            keyPath: sshKeyPath || undefined,
+            remoteFile,
+            content: editingFileContent,
+          })
     setIsEditModalOpen(false)
     if (res.ok) {
-      setTransferStatus(`Saved ${remoteFile} to remote host.`)
+      setTransferStatus(`[${fileProtocol.toUpperCase()}] Saved ${remoteFile} to remote host.`)
       await handleRefreshSftp(currentRemotePath)
     } else {
       setTransferStatus(`Save failed: ${res.error}`)
     }
   }
 
+  const handleDownloadRemoteFile = async (file: RemoteFileItem) => {
+    const remoteFile = currentRemotePath.endsWith('/') ? currentRemotePath + file.name : currentRemotePath + '/' + file.name
+    setTransferStatus(`[${fileProtocol.toUpperCase()}] Downloading ${file.name}...`)
+    const readRes =
+      fileProtocol === 'ftp'
+        ? await remoteProtocolService.ftpRead({
+            host: sshHost,
+            port: ftpPort,
+            username: sshUser || 'anonymous',
+            password: sshPassword,
+            remoteFile,
+          })
+        : await remoteProtocolService.sftpRead({
+            host: sshHost,
+            port: sshPort,
+            username: sshUser,
+            keyPath: sshKeyPath || undefined,
+            remoteFile,
+          })
+    if (!readRes.ok) {
+      setTransferStatus(`Download failed: ${readRes.error}`)
+      return
+    }
+    const content = readRes.content || ''
+    if (window.electronAPI?.saveFileAs) {
+      const saved = await window.electronAPI.saveFileAs(file.name, content)
+      setTransferStatus(saved ? `Downloaded ${file.name} to ${saved.path}` : 'Download canceled.')
+    } else {
+      const blob = new Blob([content], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.name
+      a.click()
+      URL.revokeObjectURL(url)
+      setTransferStatus(`Downloaded ${file.name}`)
+    }
+  }
+
+  const handleDeleteRemoteFile = async (file: RemoteFileItem) => {
+    const remoteFile = currentRemotePath.endsWith('/') ? currentRemotePath + file.name : currentRemotePath + '/' + file.name
+    setTransferStatus(`[${fileProtocol.toUpperCase()}] Deleting ${file.name}...`)
+    const res =
+      fileProtocol === 'ftp'
+        ? await remoteProtocolService.ftpDelete({
+            host: sshHost,
+            port: ftpPort,
+            username: sshUser || 'anonymous',
+            password: sshPassword,
+            remoteFile,
+          })
+        : await remoteProtocolService.sftpDelete({
+            host: sshHost,
+            port: sshPort,
+            username: sshUser,
+            keyPath: sshKeyPath || undefined,
+            remoteFile,
+          })
+    if (res.ok) {
+      setTransferStatus(`Deleted ${remoteFile}`)
+      await handleRefreshSftp(currentRemotePath)
+    } else {
+      setTransferStatus(`Delete failed: ${res.error}`)
+    }
+  }
+
   const handleUploadFile = async () => {
     const picked = await window.electronAPI?.openFileDialog?.()
     if (!picked?.path) return
-    setTransferStatus(`Uploading ${picked.name} to ${currentRemotePath}...`)
-    const res = await remoteProtocolService.sftpUpload({
-      host: sshHost,
-      port: sshPort,
-      username: sshUser,
-      keyPath: sshKeyPath || undefined,
-      localPath: picked.path,
-      remotePath: currentRemotePath,
-    })
+    setTransferStatus(`[${fileProtocol.toUpperCase()}] Uploading ${picked.name} to ${currentRemotePath}...`)
+    let res: { ok: boolean; error?: string }
+    if (fileProtocol === 'ftp') {
+      const content = (await window.electronAPI?.readFile?.(picked.path)) ?? ''
+      const remoteFile = currentRemotePath.endsWith('/') ? currentRemotePath + picked.name : currentRemotePath + '/' + picked.name
+      res = await remoteProtocolService.ftpWrite({
+        host: sshHost,
+        port: ftpPort,
+        username: sshUser || 'anonymous',
+        password: sshPassword,
+        remoteFile,
+        content,
+      })
+    } else {
+      res = await remoteProtocolService.sftpUpload({
+        host: sshHost,
+        port: sshPort,
+        username: sshUser,
+        keyPath: sshKeyPath || undefined,
+        localPath: picked.path,
+        remotePath: currentRemotePath,
+      })
+    }
     if (res.ok) {
       setTransferStatus(`Uploaded ${picked.name} successfully.`)
       await handleRefreshSftp(currentRemotePath)
@@ -434,7 +554,7 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
               onClick={() => setActiveSubTab('sftp')}
             >
               <Folder size={12} />
-              <span>SFTP Explorer</span>
+              <span>SFTP / FTP Explorer</span>
             </button>
 
             <button
@@ -494,13 +614,34 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                 </div>
 
                 <div className="qc-field auth-field">
-                  <label>Auth / Key Path</label>
-                  <input
-                    type="text"
-                    value={sshKeyPath}
-                    onChange={(e) => setSshKeyPath(e.target.value)}
-                    placeholder="~/.ssh/id_ed25519 (optional)"
-                  />
+                  <label>Auth Mode</label>
+                  <select
+                    value={sshAuthType}
+                    onChange={(e) => setSshAuthType(e.target.value as 'password' | 'key')}
+                    style={{ background: 'rgba(15,23,42,0.7)', color: '#E2E8F0', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '4px 6px', fontSize: 11 }}
+                  >
+                    <option value="key">SSH Key</option>
+                    <option value="password">Password</option>
+                  </select>
+                </div>
+
+                <div className="qc-field auth-field">
+                  <label>{sshAuthType === 'key' ? 'Key Path' : 'Password'}</label>
+                  {sshAuthType === 'key' ? (
+                    <input
+                      type="text"
+                      value={sshKeyPath}
+                      onChange={(e) => setSshKeyPath(e.target.value)}
+                      placeholder="~/.ssh/id_ed25519 (optional)"
+                    />
+                  ) : (
+                    <input
+                      type="password"
+                      value={sshPassword}
+                      onChange={(e) => setSshPassword(e.target.value)}
+                      placeholder="Password (used for FTP / auth)"
+                    />
+                  )}
                 </div>
 
                 <button
@@ -542,7 +683,17 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                       className={`star-icon ${bm.starred ? 'starred' : ''}`}
                     />
                     <span className="bm-name">{bm.name}</span>
-                    <span className={`bm-tag ${bm.category}`}>{bm.category}</span>
+                    <span className={`bm-tag ${(bm.category || bm.group || 'Local').toLowerCase()}`}>
+                      {bm.category || bm.group || 'Local'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteBookmark(bm.id, e)}
+                      title="Delete Bookmark"
+                      style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0, marginLeft: 4, display: 'inline-flex' }}
+                    >
+                      <X size={10} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -602,12 +753,41 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
           </div>
         )}
 
-        {/* ======================= SFTP TAB ======================= */}
+        {/* ======================= SFTP / FTP TAB ======================= */}
         {activeSubTab === 'sftp' && (
           <div className="sftp-studio-pane">
-            {/* SFTP Toolbar */}
+            {/* SFTP / FTP Toolbar */}
             <div className="sftp-toolbar glass-panel">
-              <div className="sftp-path-bar">
+              <div className="sftp-path-bar" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <select
+                  value={fileProtocol}
+                  onChange={(e) => setFileProtocol(e.target.value as 'sftp' | 'ftp')}
+                  style={{ background: 'rgba(15,23,42,0.75)', color: '#64D2FF', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, padding: '3px 6px', fontSize: 11, fontWeight: 600 }}
+                  title="File Transfer Protocol"
+                >
+                  <option value="sftp">SFTP (OpenSSH)</option>
+                  <option value="ftp">FTP (RFC 959)</option>
+                </select>
+                {fileProtocol === 'ftp' && (
+                  <>
+                    <input
+                      type="number"
+                      value={ftpPort}
+                      onChange={(e) => setFtpPort(Number(e.target.value) || 21)}
+                      style={{ width: 56, fontSize: 11 }}
+                      className="path-input"
+                      title="FTP Port (default 21)"
+                    />
+                    <input
+                      type="password"
+                      value={sshPassword}
+                      onChange={(e) => setSshPassword(e.target.value)}
+                      placeholder="FTP Password"
+                      style={{ width: 110, fontSize: 11 }}
+                      className="path-input"
+                    />
+                  </>
+                )}
                 <span className="path-label">Remote Path:</span>
                 <input
                   type="text"
@@ -618,7 +798,7 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                 <button
                   className="sftp-tool-btn"
                   onClick={() => void handleRefreshSftp(currentRemotePath)}
-                  title="Refresh Remote Directory (OpenSSH)"
+                  title={`Refresh Remote Directory (${fileProtocol.toUpperCase()})`}
                 >
                   <RefreshCw size={12} />
                 </button>
@@ -665,15 +845,31 @@ export const RemoteProtocolStudioView: React.FC<{ isDocked?: boolean; onClose?: 
                         <code>{file.permissions}</code>
                       </td>
                       <td className="time-cell">{file.modified}</td>
-                      <td className="actions-cell">
+                      <td className="actions-cell" style={{ display: 'flex', gap: 4 }}>
                         {file.type === 'file' && (
-                          <button
-                            className="row-action-btn"
-                            onClick={() => handleOpenRemoteFile(file)}
-                            title="Edit Remote File"
-                          >
-                            <Edit3 size={11} /> Edit
-                          </button>
+                          <>
+                            <button
+                              className="row-action-btn"
+                              onClick={() => handleOpenRemoteFile(file)}
+                              title="Edit Remote File"
+                            >
+                              <Edit3 size={11} /> Edit
+                            </button>
+                            <button
+                              className="row-action-btn"
+                              onClick={() => void handleDownloadRemoteFile(file)}
+                              title="Download Remote File"
+                            >
+                              <Download size={11} />
+                            </button>
+                            <button
+                              className="row-action-btn"
+                              onClick={() => void handleDeleteRemoteFile(file)}
+                              title="Delete Remote File"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </>
                         )}
                       </td>
                     </tr>

@@ -167,6 +167,78 @@ class RemoteProtocolService {
     }
     return await infra.sftpDelete(spec)
   }
+
+  public async sftpDownload(spec: {
+    host: string
+    port: number
+    username: string
+    keyPath?: string
+    localPath: string
+    remotePath: string
+  }): Promise<{ ok: boolean; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.sftpDownload) {
+      return { ok: false, error: 'SFTP download requires the Electron desktop app.' }
+    }
+    return await infra.sftpDownload(spec)
+  }
+
+  public async ftpList(spec: {
+    host: string
+    port?: number
+    username: string
+    password?: string
+    remotePath: string
+  }): Promise<{ ok: boolean; entries: RemoteFileItem[]; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.ftpList) {
+      return { ok: false, entries: [], error: 'FTP directory listing requires the Electron desktop app.' }
+    }
+    return await infra.ftpList(spec)
+  }
+
+  public async ftpRead(spec: {
+    host: string
+    port?: number
+    username: string
+    password?: string
+    remoteFile: string
+  }): Promise<{ ok: boolean; content?: string; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.ftpRead) {
+      return { ok: false, error: 'FTP file read requires the Electron desktop app.' }
+    }
+    return await infra.ftpRead(spec)
+  }
+
+  public async ftpWrite(spec: {
+    host: string
+    port?: number
+    username: string
+    password?: string
+    remoteFile: string
+    content: string
+  }): Promise<{ ok: boolean; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.ftpWrite) {
+      return { ok: false, error: 'FTP file write requires the Electron desktop app.' }
+    }
+    return await infra.ftpWrite(spec)
+  }
+
+  public async ftpDelete(spec: {
+    host: string
+    port?: number
+    username: string
+    password?: string
+    remoteFile: string
+  }): Promise<{ ok: boolean; error?: string }> {
+    const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
+    if (!infra?.ftpDelete) {
+      return { ok: false, error: 'FTP file delete requires the Electron desktop app.' }
+    }
+    return await infra.ftpDelete(spec)
+  }
 }
 
 export const remoteProtocolService = new RemoteProtocolService()

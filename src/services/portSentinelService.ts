@@ -265,18 +265,47 @@ class PortSentinelService {
 
   /**
    * Terminates a real OS process via Electron IPC when available.
+   * Never invokes OS kill for PID <= 0 (watchlist-only entries).
    */
-  public async killProcessAsync(pid: number): Promise<{ success: boolean; message: string; killCommand: string }> {
+  public async killProcessAsync(pid: number, port?: number): Promise<{ success: boolean; message: string; killCommand: string }> {
     const isWindows =
       (typeof window !== 'undefined' && window.electronAPI?.platform === 'win32') ||
       (typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows'))
     const killCommand = isWindows ? `Stop-Process -Id ${pid} -Force` : `kill -9 ${pid}`
+
+    if (!Number.isFinite(pid) || pid <= 0) {
+      if (port !== undefined) {
+        const removed = this.removeWatchlistPort(port)
+        return {
+          success: removed,
+          message: removed
+            ? `Removed watched port :${port} from watchlist.`
+            : `No active OS PID bound to port :${port}.`,
+          killCommand: '',
+        }
+      }
+      return {
+        success: false,
+        message: 'Cannot terminate invalid or watchlist-only PID (0).',
+        killCommand: '',
+      }
+    }
 
     if (typeof window !== 'undefined' && window.electronAPI?.infra?.portsKill) {
       const res = await window.electronAPI.infra.portsKill(pid)
       return { ...res, killCommand }
     }
     return this.killProcess(pid)
+  }
+
+  public removeWatchlistPort(port: number): boolean {
+    const before = this.watchlistPorts.length
+    this.watchlistPorts = this.watchlistPorts.filter((w) => w.port !== port)
+    if (this.watchlistPorts.length !== before) {
+      this.persistWatchlist()
+      return true
+    }
+    return false
   }
 
   /**

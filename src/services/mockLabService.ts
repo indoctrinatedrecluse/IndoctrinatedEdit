@@ -202,7 +202,7 @@ class MockLabService {
           url: ev.path || '/',
           statusCode: Number(ev.statusCode) || 200,
           durationMs: Number(ev.latencyMs) || 0,
-          requestHeaders: {},
+          requestHeaders: ev.requestHeaders || {},
           requestBody: ev.requestBody,
           responseBody: ev.responseBody || '',
           matchedEndpointId: ev.matchedEndpointId,
@@ -329,7 +329,14 @@ class MockLabService {
   public updateEndpoint(id: string, updates: Partial<MockEndpoint>): MockEndpoint | undefined {
     const ep = this.endpoints.find((e) => e.id === id)
     if (!ep) return undefined
-    Object.assign(ep, updates)
+    const sanitized: Partial<MockEndpoint> = { ...updates }
+    if (sanitized.statusCode !== undefined && (!Number.isFinite(sanitized.statusCode) || sanitized.statusCode < 100)) {
+      sanitized.statusCode = 200
+    }
+    if (sanitized.delayMs !== undefined && (!Number.isFinite(sanitized.delayMs) || sanitized.delayMs < 0)) {
+      sanitized.delayMs = 0
+    }
+    Object.assign(ep, sanitized)
     this.syncToElectron()
     this.notify()
     return ep

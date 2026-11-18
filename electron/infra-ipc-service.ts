@@ -316,7 +316,7 @@ export async function scanOsActivePorts(): Promise<OsActivePort[]> {
     }
   } else {
     try {
-      const { stdout } = await execFileAsync('lsof', ['-i', '-P', '-n', '-sTCP:LISTEN'], {
+      const { stdout } = await execFileAsync('lsof', ['-iTCP', '-iUDP', '-P', '-n'], {
         timeout: 6000,
         maxBuffer: 8 * 1024 * 1024,
       })
@@ -325,20 +325,25 @@ export async function scanOsActivePorts(): Promise<OsActivePort[]> {
         if (parts.length < 9) continue
         const procName = parts[0]
         const pid = Number(parts[1])
+        const nodeField = (parts[7] || '').toUpperCase()
+        const isUdp = nodeField === 'UDP'
+        const restLine = parts.slice(8).join(' ')
+        if (!isUdp && !restLine.includes('(LISTEN)')) continue
         const nameField = parts[8] || ''
         const m = nameField.match(/(.*):(\d+)$/)
         if (!m) continue
         const port = Number(m[2])
-        const key = `TCP:${port}:${pid}`
+        const proto: 'TCP' | 'UDP' = isUdp ? 'UDP' : 'TCP'
+        const key = `${proto}:${port}:${pid}`
         if (seen.has(key)) continue
         seen.add(key)
         results.push({
           port,
-          protocol: 'TCP',
+          protocol: proto,
           pid,
           processName: procName,
           localAddress: m[1] || '*',
-          state: 'LISTENING',
+          state: isUdp ? 'OPEN' : 'LISTENING',
         })
       }
     } catch {
@@ -1357,6 +1362,210 @@ export async function sftpDeleteFile(
   return res.ok ? { ok: true } : { ok: false, error: res.stderr }
 }
 
+// =========================================================================
+// 10. REAL RFC 959 FTP CLIENT (Pure Node.js net.Socket — PASV LIST/RETR/STOR/DELE)
+// =========================================================================
+export interface FtpConnSpec {
+  host: string
+  port?: number
+  username: string
+  password?: string
+  timeoutMs?: number
+}
+
+function parsePasvResponse(replyText: string, fallbackHost: string): { host: string; port: number } | null {
+  const m = replyText.match(/\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/)
+  if (!m) return null
+  const ip = `${m[1]}.${m[2]}.${m[3]}.${m[4]}`
+  const port = Number(m[5]) * 256 + Number(m[6])
+  return { host: ip === '0.0.0.0' ? fallbackHost : ip, port }
+}
+
+async function withFtpSession<T>(
+  spec: FtpConnSpec,
+  action: (helpers: {
+    sendCmd: (cmd: string) => Promise<{ code: number; text: string }>
+    openPasvSocket: () => Promise<net.Socket>
+  }) => Promise<T>
+): Promise<T> {
+  const timeout = Math.min(Math.max(spec.timeoutMs ?? 15000, 1000), 60000)
+  const port = Number(spec.port) || 21
+  const ctrl = await new Promise<net.Socket>((resolve, reject) => {
+    const s = net.createConnection({ host: spec.host, port })
+    const timer = setTimeout(() => { s.destroy(); reject(new Error('FTP connection timed out')) }, timeout)
+    s.once('connect', () => { clearTimeout(timer); resolve(s) })
+    s.once('error', (err) => { clearTimeout(timer); reject(err) })
+  })
+
+  let buffer = ''
+  const readReply = (): Promise<{ code: number; text: string }> =>
+    new Promise((resolve, reject) => {
+      const checkBuffer = (): boolean => {
+        const lines = buffer.split(/\r?\n/)
+        for (let i = 0; i < lines.length - 1; i++) {
+          const m = lines[i].match(/^(\d{3}) (.*)$/)
+          if (m) {
+            const consumed = lines.slice(0, i + 1).join('\n')
+            buffer = lines.slice(i + 1).join('\n')
+            resolve({ code: Number(m[1]), text: consumed.trim() })
+            return true
+          }
+        }
+        return false
+      }
+      if (checkBuffer()) return
+      const timer = setTimeout(() => { cleanup(); reject(new Error('FTP reply timeout')) }, timeout)
+      const onData = (chunk: Buffer) => {
+        buffer += chunk.toString('utf8')
+        if (checkBuffer()) cleanup()
+      }
+      const onErr = (err: Error) => { cleanup(); reject(err) }
+      const onClose = () => { cleanup(); reject(new Error('FTP control socket closed unexpectedly')) }
+      const cleanup = () => {
+        clearTimeout(timer)
+        ctrl.off('data', onData)
+        ctrl.off('error', onErr)
+        ctrl.off('close', onClose)
+      }
+      ctrl.on('data', onData)
+      ctrl.once('error', onErr)
+      ctrl.once('close', onClose)
+    })
+
+  const sendCmd = async (cmd: string) => {
+    ctrl.write(`${cmd}\r\n`, 'utf8')
+    return readReply()
+  }
+
+  const openPasvSocket = async (): Promise<net.Socket> => {
+    const pasv = await sendCmd('PASV')
+    if (pasv.code !== 227) throw new Error(`FTP PASV failed: ${pasv.text}`)
+    const target = parsePasvResponse(pasv.text, spec.host)
+    if (!target) throw new Error(`Unable to parse FTP PASV endpoint: ${pasv.text}`)
+    return new Promise<net.Socket>((resolve, reject) => {
+      const ds = net.createConnection({ host: target.host, port: target.port })
+      const timer = setTimeout(() => { ds.destroy(); reject(new Error('FTP data channel timeout')) }, timeout)
+      ds.once('connect', () => { clearTimeout(timer); resolve(ds) })
+      ds.once('error', (err) => { clearTimeout(timer); reject(err) })
+    })
+  }
+
+  try {
+    const greeting = await readReply()
+    if (greeting.code >= 400) throw new Error(`FTP greeting error: ${greeting.text}`)
+    const uRes = await sendCmd(`USER ${spec.username || 'anonymous'}`)
+    if (uRes.code === 331) {
+      const pRes = await sendCmd(`PASS ${spec.password || ''}`)
+      if (pRes.code >= 400) throw new Error(`FTP authentication failed: ${pRes.text}`)
+    } else if (uRes.code >= 400) {
+      throw new Error(`FTP USER rejected: ${uRes.text}`)
+    }
+    await sendCmd('TYPE I').catch(() => {})
+    return await action({ sendCmd, openPasvSocket })
+  } finally {
+    try { ctrl.end('QUIT\r\n') } catch {}
+    setTimeout(() => { try { ctrl.destroy() } catch {} }, 50).unref?.()
+  }
+}
+
+export async function ftpListDir(
+  spec: FtpConnSpec & { remotePath: string }
+): Promise<{ ok: boolean; entries: SftpEntry[]; error?: string }> {
+  try {
+    const entries = await withFtpSession(spec, async ({ sendCmd, openPasvSocket }) => {
+      if (spec.remotePath?.trim()) {
+        const cwd = await sendCmd(`CWD ${spec.remotePath.trim()}`)
+        if (cwd.code >= 400) throw new Error(`FTP CWD failed: ${cwd.text}`)
+      }
+      const dataSock = await openPasvSocket()
+      const chunks: Buffer[] = []
+      const done = new Promise<string>((resolve, reject) => {
+        dataSock.on('data', (c: Buffer) => chunks.push(c))
+        dataSock.once('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+        dataSock.once('error', reject)
+      })
+      const listRes = await sendCmd('LIST')
+      if (listRes.code >= 400) {
+        dataSock.destroy()
+        throw new Error(`FTP LIST failed: ${listRes.text}`)
+      }
+      const rawListing = await done
+      const parsed = parsePosixLsOutput(rawListing)
+      if (parsed.length > 0) return parsed
+      // Fallback for non-POSIX FTP servers returning plain lines
+      return rawListing
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && l !== '.' && l !== '..')
+        .map((name) => ({ name, type: 'file' as const, size: '--', permissions: '-rw-r--r--', modified: '' }))
+    })
+    return { ok: true, entries }
+  } catch (err: any) {
+    return { ok: false, entries: [], error: err?.message || String(err) }
+  }
+}
+
+export async function ftpReadFile(
+  spec: FtpConnSpec & { remoteFile: string }
+): Promise<{ ok: boolean; content?: string; error?: string }> {
+  try {
+    const content = await withFtpSession(spec, async ({ sendCmd, openPasvSocket }) => {
+      const dataSock = await openPasvSocket()
+      const chunks: Buffer[] = []
+      const done = new Promise<string>((resolve, reject) => {
+        dataSock.on('data', (c: Buffer) => chunks.push(c))
+        dataSock.once('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+        dataSock.once('error', reject)
+      })
+      const retr = await sendCmd(`RETR ${spec.remoteFile}`)
+      if (retr.code >= 400) {
+        dataSock.destroy()
+        throw new Error(`FTP RETR failed: ${retr.text}`)
+      }
+      return await done
+    })
+    return { ok: true, content }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+}
+
+export async function ftpWriteFile(
+  spec: FtpConnSpec & { remoteFile: string; content: string }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await withFtpSession(spec, async ({ sendCmd, openPasvSocket }) => {
+      const dataSock = await openPasvSocket()
+      const stor = await sendCmd(`STOR ${spec.remoteFile}`)
+      if (stor.code >= 400) {
+        dataSock.destroy()
+        throw new Error(`FTP STOR failed: ${stor.text}`)
+      }
+      await new Promise<void>((resolve, reject) => {
+        dataSock.once('error', reject)
+        dataSock.end(Buffer.from(spec.content, 'utf8'), () => resolve())
+      })
+    })
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+}
+
+export async function ftpDeleteFile(
+  spec: FtpConnSpec & { remoteFile: string }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await withFtpSession(spec, async ({ sendCmd }) => {
+      const res = await sendCmd(`DELE ${spec.remoteFile}`)
+      if (res.code >= 400) throw new Error(`FTP DELE failed: ${res.text}`)
+    })
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+}
+
 export const infraSocketManager = new InfraSocketManager()
 
 export function setupInfraIPC(ipcMain: IpcMain, getWin: () => BrowserWindow | null): void {
@@ -1393,6 +1602,12 @@ export function setupInfraIPC(ipcMain: IpcMain, getWin: () => BrowserWindow | nu
   ipcMain.handle('infra:sftpUpload', (_, spec) => sftpTransferScp('upload', spec))
   ipcMain.handle('infra:sftpDownload', (_, spec) => sftpTransferScp('download', spec))
   ipcMain.handle('infra:sftpDelete', (_, spec) => sftpDeleteFile(spec))
+
+  // Real RFC 959 FTP IPC
+  ipcMain.handle('infra:ftpList', (_, spec) => ftpListDir(spec))
+  ipcMain.handle('infra:ftpRead', (_, spec) => ftpReadFile(spec))
+  ipcMain.handle('infra:ftpWrite', (_, spec) => ftpWriteFile(spec))
+  ipcMain.handle('infra:ftpDelete', (_, spec) => ftpDeleteFile(spec))
 
   ipcMain.handle('infra:dockerExec', (_, args: string[], timeoutOrOpts?: number | InfraCliOptions) =>
     execInfraCli('docker', args, timeoutOrOpts)

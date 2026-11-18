@@ -122,6 +122,7 @@ export const WebSocketView: React.FC = () => {
         <div className="protocol-toggle-strip">
           <button
             className={`proto-btn ${protocolType === 'websocket' ? 'active' : ''}`}
+            disabled={isConnected}
             onClick={() => {
               setProtocolType('websocket')
               if (/^https?:\/\//i.test(url)) setUrl('wss://echo.websocket.events')
@@ -132,6 +133,7 @@ export const WebSocketView: React.FC = () => {
           </button>
           <button
             className={`proto-btn ${protocolType === 'sse' ? 'active' : ''}`}
+            disabled={isConnected}
             onClick={() => {
               setProtocolType('sse')
               if (/^wss?:\/\//i.test(url)) setUrl('http://localhost:4040/events')

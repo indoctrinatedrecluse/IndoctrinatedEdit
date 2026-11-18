@@ -544,10 +544,58 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
       return this.executeUpdate(cleanSql, db)
     } else if (firstWord === 'DELETE') {
       return this.executeDelete(cleanSql, db)
+    } else if (firstWord === 'CREATE') {
+      return this.executeCreateTable(cleanSql, db)
     } else if (firstWord === 'SHOW' || firstWord === 'DESCRIBE' || firstWord === 'DESC') {
       return this.executeMetadataQuery(cleanSql, db)
     } else {
-      throw new Error(`Unsupported SQL operation: "${firstWord}". Supported operations: SELECT, INSERT, UPDATE, DELETE, SHOW, DESCRIBE.`)
+      throw new Error(`Unsupported SQL operation: "${firstWord}". Supported operations: SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, SHOW, DESCRIBE.`)
+    }
+  }
+
+  private executeCreateTable(sql: string, db: DatabaseSchema): { columns: string[]; rows: Record<string, any>[]; affectedRows: number } {
+    const match = sql.match(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([a-zA-Z0-9_]+)["`]?\s*\((.+)\)$/is)
+    if (!match) {
+      throw new Error('Syntax error in CREATE TABLE. Format: CREATE TABLE <name> (col1 TYPE [PRIMARY KEY] [NOT NULL], ...)')
+    }
+    const tableName = match[1].toLowerCase()
+    const ifNotExists = /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS/i.test(sql)
+    if (db.tables[tableName]) {
+      if (ifNotExists) {
+        return {
+          columns: ['status', 'table'],
+          rows: [{ status: 'EXISTS', table: tableName }],
+          affectedRows: 0,
+        }
+      }
+      throw new Error(`Table "${tableName}" already exists in database "${db.name}".`)
+    }
+    const colDefs = match[2]
+      .split(/,(?![^()]*\))/)
+      .map((c) => c.trim())
+      .filter((c) => c && !/^(PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CONSTRAINT|CHECK)\b/i.test(c))
+    const columns: DatabaseColumn[] = colDefs.map((def) => {
+      const tokens = def.split(/\s+/)
+      const colName = tokens[0].replace(/^["'`]|["'`]$/g, '')
+      const colType = (tokens[1] || 'TEXT').toUpperCase()
+      return {
+        name: colName,
+        type: colType,
+        isPrimaryKey: /PRIMARY\s+KEY/i.test(def),
+        isNullable: !/NOT\s+NULL/i.test(def),
+      }
+    })
+    db.tables[tableName] = {
+      name: tableName,
+      description: 'User-created table',
+      columns,
+      rowCount: 0,
+      data: [],
+    }
+    return {
+      columns: ['status', 'table', 'columns_created'],
+      rows: [{ status: 'CREATED', table: tableName, columns_created: columns.length }],
+      affectedRows: 0,
     }
   }
 
@@ -555,7 +603,7 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
     // Basic regex extraction for: SELECT ... FROM table [JOIN table ON cond] [WHERE cond] [GROUP BY cols] [ORDER BY col [ASC|DESC]] [LIMIT n]
     const selectMatch = sql.match(/SELECT\s+(.+?)\s+FROM\s+([a-zA-Z0-9_]+)(.*)/is)
     if (!selectMatch) {
-      throw new Error('Syntax error in SELECT statement. Format: SELECT <cols> FROM <table> [JOIN ...] [WHERE ...] [ORDER BY ...] [LIMIT ...]')
+      throw new Error('Syntax error in SELECT statement. Format: SELECT <cols> FROM <table> [JOIN ...] [WHERE ...] [GROUP BY ...] [ORDER BY ...] [LIMIT ...]')
     }
 
     const [, selectClause, primaryTableName, restClauses] = selectMatch
@@ -566,10 +614,11 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
 
     let workingRows: Record<string, any>[] = primaryTable.data.map((r) => ({ ...r }))
 
-    // Check for JOIN: JOIN table ON left.col = right.col
-    const joinMatch = restClauses.match(/(?:INNER\s+|LEFT\s+)?JOIN\s+([a-zA-Z0-9_]+)\s+ON\s+([a-zA-Z0-9_.]+)\s*=\s*([a-zA-Z0-9_.]+)/i)
+    // Check for JOIN: [INNER | LEFT [OUTER]] JOIN table ON left.col = right.col
+    const joinMatch = restClauses.match(/(?:(LEFT(?:\s+OUTER)?|INNER)\s+)?JOIN\s+([a-zA-Z0-9_]+)\s+ON\s+([a-zA-Z0-9_.]+)\s*=\s*([a-zA-Z0-9_.]+)/i)
     if (joinMatch) {
-      const [, joinTableName, leftCol, rightCol] = joinMatch
+      const [, joinType, joinTableName, leftCol, rightCol] = joinMatch
+      const isLeftJoin = Boolean(joinType && joinType.toUpperCase().startsWith('LEFT'))
       const joinTable = db.tables[joinTableName.toLowerCase()]
       if (!joinTable) {
         throw new Error(`Joined table "${joinTableName}" does not exist.`)
@@ -577,6 +626,10 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
 
       const cleanLeft = leftCol.includes('.') ? leftCol.split('.')[1] : leftCol
       const cleanRight = rightCol.includes('.') ? rightCol.split('.')[1] : rightCol
+      const nullRightTemplate: Record<string, any> = {}
+      joinTable.columns.forEach((c) => {
+        nullRightTemplate[c.name] = null
+      })
 
       const merged: Record<string, any>[] = []
       workingRows.forEach((mainRow) => {
@@ -590,6 +643,8 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
           matchingJoinRows.forEach((jr) => {
             merged.push({ ...mainRow, ...jr })
           })
+        } else if (isLeftJoin) {
+          merged.push({ ...nullRightTemplate, ...mainRow })
         }
       })
       workingRows = merged
@@ -602,12 +657,126 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
       workingRows = workingRows.filter((row) => this.evaluateCondition(condition, row))
     }
 
-    // Check for ORDER BY
-    const orderMatch = restClauses.match(/ORDER\s+BY\s+([a-zA-Z0-9_]+)(?:\s+(ASC|DESC))?/i)
+    const rawSelectCols = selectClause.split(',').map((s) => s.trim())
+    const groupMatch = restClauses.match(/GROUP\s+BY\s+([a-zA-Z0-9_.,\s]+?)(?:\s+ORDER\s+BY|\s+LIMIT|\s*$)/i)
+    const hasAggregates = rawSelectCols.some((col) => /^(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(col))
+
+    const computeAggregateRow = (rowsSubset: Record<string, any>[]): { cols: string[]; row: Record<string, any> } => {
+      const aggRow: Record<string, any> = {}
+      const cols: string[] = []
+      rawSelectCols.forEach((colExp) => {
+        const countMatch = colExp.match(/^COUNT\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
+        const sumMatch = colExp.match(/^SUM\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
+        const avgMatch = colExp.match(/^AVG\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
+        const minMatch = colExp.match(/^MIN\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
+        const maxMatch = colExp.match(/^MAX\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
+
+        if (countMatch) {
+          const target = countMatch[1].trim()
+          const colName = countMatch[2] || countMatch[0]
+          const cleanTarget = target.includes('.') ? target.split('.')[1] : target
+          aggRow[colName] = cleanTarget === '*'
+            ? rowsSubset.length
+            : rowsSubset.filter((r) => r[cleanTarget] !== null && r[cleanTarget] !== undefined).length
+          cols.push(colName)
+        } else if (sumMatch) {
+          const target = sumMatch[1].trim()
+          const cleanTarget = target.includes('.') ? target.split('.')[1] : target
+          const colName = sumMatch[2] || sumMatch[0]
+          const sum = rowsSubset.reduce((acc, r) => acc + (Number(r[cleanTarget]) || 0), 0)
+          aggRow[colName] = Math.round(sum * 100) / 100
+          cols.push(colName)
+        } else if (avgMatch) {
+          const target = avgMatch[1].trim()
+          const cleanTarget = target.includes('.') ? target.split('.')[1] : target
+          const colName = avgMatch[2] || avgMatch[0]
+          const vals = rowsSubset.map((r) => Number(r[cleanTarget])).filter((v) => !isNaN(v))
+          const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+          aggRow[colName] = Math.round(avg * 100) / 100
+          cols.push(colName)
+        } else if (minMatch) {
+          const target = minMatch[1].trim()
+          const cleanTarget = target.includes('.') ? target.split('.')[1] : target
+          const colName = minMatch[2] || minMatch[0]
+          const values = rowsSubset.map((r) => Number(r[cleanTarget])).filter((v) => !isNaN(v))
+          aggRow[colName] = values.length > 0 ? Math.min(...values) : null
+          cols.push(colName)
+        } else if (maxMatch) {
+          const target = maxMatch[1].trim()
+          const cleanTarget = target.includes('.') ? target.split('.')[1] : target
+          const colName = maxMatch[2] || maxMatch[0]
+          const values = rowsSubset.map((r) => Number(r[cleanTarget])).filter((v) => !isNaN(v))
+          aggRow[colName] = values.length > 0 ? Math.max(...values) : null
+          cols.push(colName)
+        } else {
+          const asMatch = colExp.match(/^([a-zA-Z0-9_.]+)\s+AS\s+([a-zA-Z0-9_]+)$/i)
+          const src = asMatch ? asMatch[1] : colExp
+          const cleanSrc = src.includes('.') ? src.split('.')[1] : src
+          const target = asMatch ? asMatch[2] : cleanSrc
+          cols.push(target)
+          aggRow[target] = rowsSubset[0]?.[cleanSrc] ?? null
+        }
+      })
+      return { cols, row: aggRow }
+    }
+
+    let finalCols: string[] = []
+    let finalRows: Record<string, any>[] = []
+
+    if (groupMatch) {
+      const groupCols = groupMatch[1]
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .map((c) => (c.includes('.') ? c.split('.')[1] : c))
+
+      const buckets = new Map<string, Record<string, any>[]>()
+      for (const row of workingRows) {
+        const key = groupCols.map((c) => JSON.stringify(row[c] ?? null)).join('|')
+        if (!buckets.has(key)) buckets.set(key, [])
+        buckets.get(key)!.push(row)
+      }
+
+      for (const subset of buckets.values()) {
+        const { cols, row } = computeAggregateRow(subset)
+        if (finalCols.length === 0) finalCols = cols
+        finalRows.push(row)
+      }
+      if (finalCols.length === 0) {
+        finalCols = computeAggregateRow([]).cols
+      }
+    } else if (hasAggregates) {
+      const { cols, row } = computeAggregateRow(workingRows)
+      finalCols = cols
+      finalRows = [row]
+    } else if (rawSelectCols.length === 1 && rawSelectCols[0] === '*') {
+      finalCols = workingRows.length > 0
+        ? Object.keys(workingRows[0])
+        : primaryTable.columns.map((c) => c.name)
+      finalRows = workingRows
+    } else {
+      finalRows = workingRows.map((row) => {
+        const newRow: Record<string, any> = {}
+        rawSelectCols.forEach((colDef) => {
+          const asMatch = colDef.match(/^([a-zA-Z0-9_.]+)\s+AS\s+([a-zA-Z0-9_]+)$/i)
+          const sourceCol = asMatch ? asMatch[1] : colDef
+          const targetCol = asMatch ? asMatch[2] : (sourceCol.includes('.') ? sourceCol.split('.')[1] : sourceCol)
+
+          if (!finalCols.includes(targetCol)) finalCols.push(targetCol)
+          const cleanSource = sourceCol.includes('.') ? sourceCol.split('.')[1] : sourceCol
+          newRow[targetCol] = row[cleanSource] ?? null
+        })
+        return newRow
+      })
+    }
+
+    // Apply ORDER BY after grouping/projection so aliases & aggregate columns sort accurately
+    const orderMatch = restClauses.match(/ORDER\s+BY\s+([a-zA-Z0-9_.]+)(?:\s+(ASC|DESC))?/i)
     if (orderMatch) {
-      const orderCol = orderMatch[1]
+      const rawOrderCol = orderMatch[1]
+      const orderCol = rawOrderCol.includes('.') ? rawOrderCol.split('.')[1] : rawOrderCol
       const isDesc = orderMatch[2]?.toUpperCase() === 'DESC'
-      workingRows.sort((a, b) => {
+      finalRows.sort((a, b) => {
         const valA = a[orderCol]
         const valB = b[orderCol]
         if (valA === undefined || valA === null) return isDesc ? 1 : -1
@@ -619,90 +788,15 @@ INSERT INTO notes (title, body) VALUES ('Welcome to Real SQLite 3', 'Powered by 
       })
     }
 
-    // Check for LIMIT [offset,] count or LIMIT count OFFSET offset
+    // Check for LIMIT [count] [OFFSET offset]
     const limitMatch = restClauses.match(/LIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?/i)
     if (limitMatch) {
       const limit = parseInt(limitMatch[1], 10)
       const offset = limitMatch[2] ? parseInt(limitMatch[2], 10) : 0
-      workingRows = workingRows.slice(offset, offset + limit)
+      finalRows = finalRows.slice(offset, offset + limit)
     }
 
-    // Project columns
-    const rawSelectCols = selectClause.split(',').map((s) => s.trim())
-    if (rawSelectCols.length === 1 && rawSelectCols[0] === '*') {
-      const columns = workingRows.length > 0
-        ? Object.keys(workingRows[0])
-        : primaryTable.columns.map((c) => c.name)
-      return { columns, rows: workingRows }
-    }
-
-    // Handle Aggregates e.g. COUNT(*), SUM(col), AVG(col), MAX(col), MIN(col)
-    if (rawSelectCols.some((col) => /^(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(col))) {
-      const aggregateRow: Record<string, any> = {}
-      const finalCols: string[] = []
-
-      rawSelectCols.forEach((colExp) => {
-        const countMatch = colExp.match(/^COUNT\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
-        const sumMatch = colExp.match(/^SUM\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
-        const avgMatch = colExp.match(/^AVG\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
-        const minMatch = colExp.match(/^MIN\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
-        const maxMatch = colExp.match(/^MAX\s*\((.*?)\)(?:\s+AS\s+([a-zA-Z0-9_]+))?/i)
-
-        if (countMatch) {
-          const colName = countMatch[2] || countMatch[0]
-          aggregateRow[colName] = workingRows.length
-          finalCols.push(colName)
-        } else if (sumMatch) {
-          const target = sumMatch[1].trim()
-          const colName = sumMatch[2] || sumMatch[0]
-          const sum = workingRows.reduce((acc, r) => acc + (Number(r[target]) || 0), 0)
-          aggregateRow[colName] = Math.round(sum * 100) / 100
-          finalCols.push(colName)
-        } else if (avgMatch) {
-          const target = avgMatch[1].trim()
-          const colName = avgMatch[2] || avgMatch[0]
-          const sum = workingRows.reduce((acc, r) => acc + (Number(r[target]) || 0), 0)
-          const avg = workingRows.length > 0 ? sum / workingRows.length : 0
-          aggregateRow[colName] = Math.round(avg * 100) / 100
-          finalCols.push(colName)
-        } else if (minMatch) {
-          const target = minMatch[1].trim()
-          const colName = minMatch[2] || minMatch[0]
-          const values = workingRows.map((r) => Number(r[target])).filter((v) => !isNaN(v))
-          aggregateRow[colName] = values.length > 0 ? Math.min(...values) : null
-          finalCols.push(colName)
-        } else if (maxMatch) {
-          const target = maxMatch[1].trim()
-          const colName = maxMatch[2] || maxMatch[0]
-          const values = workingRows.map((r) => Number(r[target])).filter((v) => !isNaN(v))
-          aggregateRow[colName] = values.length > 0 ? Math.max(...values) : null
-          finalCols.push(colName)
-        } else {
-          finalCols.push(colExp)
-          aggregateRow[colExp] = workingRows[0]?.[colExp] ?? null
-        }
-      })
-
-      return { columns: finalCols, rows: [aggregateRow] }
-    }
-
-    // Normal column projection
-    const projectedCols: string[] = []
-    const projectedRows = workingRows.map((row) => {
-      const newRow: Record<string, any> = {}
-      rawSelectCols.forEach((colDef) => {
-        const asMatch = colDef.match(/^([a-zA-Z0-9_.]+)\s+AS\s+([a-zA-Z0-9_]+)$/i)
-        const sourceCol = asMatch ? asMatch[1] : colDef
-        const targetCol = asMatch ? asMatch[2] : (sourceCol.includes('.') ? sourceCol.split('.')[1] : sourceCol)
-
-        if (!projectedCols.includes(targetCol)) projectedCols.push(targetCol)
-        const cleanSource = sourceCol.includes('.') ? sourceCol.split('.')[1] : sourceCol
-        newRow[targetCol] = row[cleanSource] ?? null
-      })
-      return newRow
-    })
-
-    return { columns: projectedCols, rows: projectedRows }
+    return { columns: finalCols, rows: finalRows }
   }
 
   private executeInsert(sql: string, db: DatabaseSchema): { columns: string[]; rows: Record<string, any>[]; affectedRows: number } {

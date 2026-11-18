@@ -69,6 +69,10 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
   const [showHistory, setShowHistory] = useState(false)
   const [showEnvEditor, setShowEnvEditor] = useState(false)
   const [envVarsText, setEnvVarsText] = useState<string>('')
+  const [envError, setEnvError] = useState<string | null>(null)
+  const [newEnvName, setNewEnvName] = useState('')
+  const [newCollectionName, setNewCollectionName] = useState('')
+  const [showNewColInput, setShowNewColInput] = useState(false)
   const [saveNotice, setSaveNotice] = useState<string | null>(null)
 
   useEffect(() => {
@@ -123,15 +127,37 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
   const handleSaveEnvVars = () => {
     try {
       const parsed = JSON.parse(envVarsText)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const cleaned: Record<string, string> = {}
-        for (const [k, v] of Object.entries(parsed)) cleaned[k] = String(v)
-        restClientService.updateEnvironmentVariables(activeEnv.id, cleaned)
-        setShowEnvEditor(false)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setEnvError('Environment variables must be a JSON object of key/value strings.')
+        return
       }
-    } catch {
-      // ignore invalid JSON
+      const cleaned: Record<string, string> = {}
+      for (const [k, v] of Object.entries(parsed)) cleaned[k] = String(v)
+      restClientService.updateEnvironmentVariables(activeEnv.id, cleaned)
+      setEnvError(null)
+      setShowEnvEditor(false)
+    } catch (err: any) {
+      setEnvError(err?.message || 'Invalid JSON syntax')
     }
+  }
+
+  const handleAddEnvironment = () => {
+    const trimmed = newEnvName.trim()
+    if (!trimmed) return
+    const created = restClientService.addEnvironment(trimmed, { baseUrl: 'http://localhost:3000' })
+    setActiveEnv(created)
+    setEnvVarsText(JSON.stringify(created.variables, null, 2))
+    setNewEnvName('')
+    setEnvError(null)
+  }
+
+  const handleCreateCollection = () => {
+    const trimmed = newCollectionName.trim()
+    if (!trimmed) return
+    const col = restClientService.createCollection(trimmed)
+    setExpandedCollections((prev) => ({ ...prev, [col.id]: true }))
+    setNewCollectionName('')
+    setShowNewColInput(false)
   }
 
   const handleSendRequest = async () => {
@@ -321,24 +347,41 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
       {/* Environment Variables Editor Drawer */}
       {showEnvEditor && (
         <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(15,23,42,0.55)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: '#CBD5E1' }}>
               Environment Variables — {activeEnv.name} (JSON)
             </span>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="text"
+                className="kv-input"
+                style={{ width: 130, fontSize: 11 }}
+                placeholder="New env name..."
+                value={newEnvName}
+                onChange={(e) => setNewEnvName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddEnvironment() }}
+              />
+              <button className="action-pill-btn glass-interactive" onClick={handleAddEnvironment} title="Create Environment">
+                <Plus size={12} /> Add Env
+              </button>
               <button className="action-pill-btn glass-interactive" onClick={handleSaveEnvVars}>
                 <Check size={12} /> Apply
               </button>
-              <button className="action-pill-btn glass-interactive" onClick={() => setShowEnvEditor(false)}>
+              <button className="action-pill-btn glass-interactive" onClick={() => { setEnvError(null); setShowEnvEditor(false) }}>
                 <X size={12} />
               </button>
             </div>
           </div>
+          {envError && (
+            <div style={{ fontSize: 11, color: '#FB7185', marginBottom: 6 }}>
+              Invalid JSON: {envError}
+            </div>
+          )}
           <textarea
             className="body-textarea custom-scrollbar"
             rows={4}
             value={envVarsText}
-            onChange={(e) => setEnvVarsText(e.target.value)}
+            onChange={(e) => { setEnvVarsText(e.target.value); if (envError) setEnvError(null) }}
             spellCheck={false}
           />
         </div>
@@ -350,6 +393,15 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
         <div className="collections-sidebar custom-scrollbar">
           <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="sidebar-title">{showHistory ? 'REQUEST HISTORY' : 'API COLLECTIONS'}</span>
+            {!showHistory && (
+              <button
+                className="kv-delete-btn"
+                onClick={() => setShowNewColInput((prev) => !prev)}
+                title="Create New Collection"
+              >
+                <Plus size={12} />
+              </button>
+            )}
             {showHistory && historyList.length > 0 && (
               <button
                 className="kv-delete-btn"
@@ -360,6 +412,22 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
               </button>
             )}
           </div>
+          {!showHistory && showNewColInput && (
+            <div style={{ display: 'flex', gap: 4, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <input
+                type="text"
+                className="kv-input"
+                style={{ flex: 1, fontSize: 11 }}
+                placeholder="Collection name..."
+                value={newCollectionName}
+                onChange={(e) => setNewCollectionName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCollection() }}
+              />
+              <button className="action-pill-btn glass-interactive" onClick={handleCreateCollection} title="Create">
+                <Check size={11} />
+              </button>
+            </div>
+          )}
 
           {!showHistory ? (
             <div className="collections-tree">
@@ -448,6 +516,19 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
 
         {/* Right / Center: Request Builder + Response Viewer */}
         <div className="request-workspace custom-scrollbar">
+          {/* Request Name Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px 0' }}>
+            <input
+              type="text"
+              className="kv-input"
+              style={{ flex: 1, fontSize: 12, fontWeight: 600, background: 'transparent', border: '1px solid rgba(255,255,255,0.08)' }}
+              value={request.name}
+              onChange={(e) => setRequest((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Request name..."
+              aria-label="Request Name"
+            />
+          </div>
+
           {/* URL & Send Bar */}
           <div className="url-bar-container">
             <select
@@ -859,7 +940,20 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
 
             {/* Response Content View */}
             <div className="response-body-area custom-scrollbar">
-              {isLoading ? (
+              {activeResTab === 'curl' ? (
+                <div className="res-body-wrapper">
+                  <div className="res-body-actions">
+                    <button
+                      className="copy-res-btn glass-interactive"
+                      onClick={() => handleCopy(generatedCurl, 'curl')}
+                    >
+                      {copiedId === 'curl' ? <Check size={12} /> : <Copy size={12} />}
+                      <span>{copiedId === 'curl' ? 'Copied' : 'Copy cURL'}</span>
+                    </button>
+                  </div>
+                  <pre className="curl-pre-code custom-scrollbar">{generatedCurl}</pre>
+                </div>
+              ) : isLoading ? (
                 <div className="response-loading-state">
                   <Sparkles size={24} className="spinning-sparkle" />
                   <span>Executing HTTP Request...</span>
@@ -890,19 +984,6 @@ export const RestClientView: React.FC<RestClientViewProps> = ({
                         <span className="header-val">{v}</span>
                       </div>
                     ))}
-                  </div>
-                ) : activeResTab === 'curl' ? (
-                  <div className="res-body-wrapper">
-                    <div className="res-body-actions">
-                      <button
-                        className="copy-res-btn glass-interactive"
-                        onClick={() => handleCopy(generatedCurl, 'curl')}
-                      >
-                        {copiedId === 'curl' ? <Check size={12} /> : <Copy size={12} />}
-                        <span>{copiedId === 'curl' ? 'Copied' : 'Copy cURL'}</span>
-                      </button>
-                    </div>
-                    <pre className="curl-pre-code custom-scrollbar">{generatedCurl}</pre>
                   </div>
                 ) : (
                   <pre className="raw-pre-code custom-scrollbar">{response.rawText}</pre>

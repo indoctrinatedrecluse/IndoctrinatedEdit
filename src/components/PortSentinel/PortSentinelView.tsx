@@ -65,22 +65,22 @@ export const PortSentinelView: React.FC = () => {
     }
   }
 
-  const handleKill = async (pid: number) => {
-    const res = await portSentinelService.killProcessAsync(pid)
+  const handleKill = async (pid: number, port?: number) => {
+    const res = await portSentinelService.killProcessAsync(pid, port)
     setStatusMessage(res.message)
     setTimeout(() => setStatusMessage(null), 4000)
     await loadPorts()
-    if (selectedPort?.pid === pid) {
+    if (selectedPort?.pid === pid && (port === undefined || selectedPort?.port === port)) {
       setSelectedPort(null)
     }
   }
 
-  const handleAddCustom = () => {
+  const handleAddCustom = async () => {
     const num = parseInt(customPortNum, 10)
     if (!isNaN(num) && num > 0 && num <= 65535) {
       const created = portSentinelService.registerCustomPort(num, customProcName)
       setShowAddModal(false)
-      loadPorts()
+      await loadPorts()
       setSelectedPort(created)
     }
   }
@@ -152,10 +152,14 @@ export const PortSentinelView: React.FC = () => {
             <div className="empty-state">No matching active listening ports</div>
           ) : (
             ports.map((p) => {
-              const isSelected = selectedPort?.port === p.port && selectedPort?.pid === p.pid
+              const isSelected =
+                selectedPort?.port === p.port &&
+                selectedPort?.pid === p.pid &&
+                selectedPort?.protocol === p.protocol &&
+                selectedPort?.localAddress === p.localAddress
               return (
                 <div
-                  key={`${p.port}-${p.pid}`}
+                  key={`${p.port}-${p.protocol}-${p.pid}-${p.localAddress}`}
                   className={`port-card glass-interactive ${isSelected ? 'selected' : ''} ${p.isConflict ? 'conflict' : ''}`}
                   onClick={() => setSelectedPort(p)}
                 >
@@ -184,11 +188,11 @@ export const PortSentinelView: React.FC = () => {
                 </div>
                 <button
                   className="kill-btn glass-interactive"
-                  onClick={() => handleKill(selectedPort.pid)}
-                  title="Terminate Process and Free Port"
+                  onClick={() => void handleKill(selectedPort.pid, selectedPort.port)}
+                  title={selectedPort.pid > 0 ? 'Terminate Process and Free Port' : 'Remove Watched Port from Watchlist'}
                 >
                   <Power size={12} />
-                  <span>Release Port</span>
+                  <span>{selectedPort.pid > 0 ? 'Release Port' : 'Remove Watch'}</span>
                 </button>
               </div>
 

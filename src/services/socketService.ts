@@ -105,8 +105,7 @@ class SocketService {
         (!/^wss?:\/\//i.test(cleanUrl) && !cleanUrl.startsWith('mock://') && /^https?:\/\//i.test(cleanUrl))
 
       if (isSse) {
-        this.connectSse(cleanUrl, config)
-        resolve(true)
+        this.connectSse(cleanUrl, config).then(resolve)
         return
       }
 
@@ -276,47 +275,57 @@ class SocketService {
   private electronSseId: string | null = null
   private unsubElectronSse: (() => void) | null = null
 
-  private connectSse(url: string, config?: SocketConnectionConfig): void {
+  private connectSse(url: string, config?: SocketConnectionConfig): Promise<boolean> {
     const infra = typeof window !== 'undefined' ? (window as any).electronAPI?.infra : undefined
     if (infra?.sseConnect && infra?.onSseEvent) {
-      const sseId = `sse_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      const headers: Record<string, string> = { ...(config?.headers || {}) }
-      if (config?.authToken && !headers['Authorization']) {
-        headers['Authorization'] = config.authToken.startsWith('Bearer ') ? config.authToken : `Bearer ${config.authToken}`
-      }
-      this.unsubElectronSse = infra.onSseEvent((ev: any) => {
-        if (ev.id !== sseId) return
-        if (ev.type === 'message') {
-          this.pushMessage({
-            direction: 'in',
-            data: ev.data,
-            type: 'sse',
-            eventName: ev.eventName || 'message',
-          })
-        } else if (ev.type === 'error') {
-          this.pushMessage({ direction: 'in', data: `[SSE Error] ${ev.error}`, type: 'sse' })
-        } else if (ev.type === 'close') {
-          this.isConnected = false
-          this.electronSseId = null
-          this.notifyStatus(false)
-          this.pushMessage({ direction: 'in', data: '[System] SSE stream closed', type: 'sse' })
+      return new Promise((resolve) => {
+        const sseId = `sse_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        const headers: Record<string, string> = { ...(config?.headers || {}) }
+        if (config?.authToken && !headers['Authorization']) {
+          headers['Authorization'] = config.authToken.startsWith('Bearer ') ? config.authToken : `Bearer ${config.authToken}`
         }
-      })
-      infra.sseConnect({ id: sseId, url, headers }).then((res: any) => {
-        if (res.ok) {
-          this.electronSseId = sseId
-          this.isConnected = true
-          this.notifyStatus(true)
-          this.pushMessage({ direction: 'in', data: `[System] CORS-free SSE stream open at ${url} (HTTP ${res.status})`, type: 'sse' })
-        } else {
+        this.unsubElectronSse = infra.onSseEvent((ev: any) => {
+          if (ev.id !== sseId) return
+          if (ev.type === 'message') {
+            this.pushMessage({
+              direction: 'in',
+              data: ev.data,
+              type: 'sse',
+              eventName: ev.eventName || 'message',
+            })
+          } else if (ev.type === 'error') {
+            this.pushMessage({ direction: 'in', data: `[SSE Error] ${ev.error}`, type: 'sse' })
+          } else if (ev.type === 'close') {
+            this.isConnected = false
+            this.electronSseId = null
+            this.notifyStatus(false)
+            this.pushMessage({ direction: 'in', data: '[System] SSE stream closed', type: 'sse' })
+          }
+        })
+        infra.sseConnect({ id: sseId, url, headers }).then((res: any) => {
+          if (res?.ok) {
+            this.electronSseId = sseId
+            this.isConnected = true
+            this.notifyStatus(true)
+            this.pushMessage({ direction: 'in', data: `[System] CORS-free SSE stream open at ${url} (HTTP ${res.status})`, type: 'sse' })
+            resolve(true)
+          } else {
+            this.unsubElectronSse?.()
+            this.unsubElectronSse = null
+            this.isConnected = false
+            this.notifyStatus(false)
+            this.pushMessage({ direction: 'in', data: `[SSE Error] Failed to connect: ${res?.error || 'Connection failed'}`, type: 'sse' })
+            resolve(false)
+          }
+        }).catch((err: any) => {
           this.unsubElectronSse?.()
           this.unsubElectronSse = null
           this.isConnected = false
           this.notifyStatus(false)
-          this.pushMessage({ direction: 'in', data: `[SSE Error] Failed to connect: ${res.error}`, type: 'sse' })
-        }
+          this.pushMessage({ direction: 'in', data: `[SSE Error] Failed to connect: ${err?.message || String(err)}`, type: 'sse' })
+          resolve(false)
+        })
       })
-      return
     }
 
     if (typeof EventSource !== 'undefined') {
@@ -365,6 +374,7 @@ class SocketService {
         type: 'sse',
       })
     }
+    return Promise.resolve(true)
   }
 
   public disconnect(): void {

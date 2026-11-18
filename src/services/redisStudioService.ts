@@ -367,7 +367,12 @@ class RedisStudioService {
       } else if (rawType === 'zset') {
         resolvedType = 'zset'
         const zRes = await infra.redisExec({ ...base, args: ['ZRANGE', key, '0', '100', 'WITHSCORES'] })
-        value = Array.isArray(zRes?.value) ? zRes.value : []
+        const rawArr = Array.isArray(zRes?.value) ? zRes.value : []
+        const paired: Array<{ member: string; score: number }> = []
+        for (let i = 0; i + 1 < rawArr.length; i += 2) {
+          paired.push({ member: String(rawArr[i]), score: Number(rawArr[i + 1]) || 0 })
+        }
+        value = paired
       } else {
         const gRes = await infra.redisExec({ ...base, args: ['GET', key] })
         const str = String(gRes?.value ?? '')
@@ -408,6 +413,27 @@ class RedisStudioService {
       } catch {
         parsedValue = rawValue.split(',').map((s) => s.trim()).filter(Boolean)
       }
+    } else if (type === 'zset') {
+      try {
+        const p = JSON.parse(rawValue)
+        if (Array.isArray(p)) {
+          parsedValue = p.map((item: any) => ({
+            member: String(item?.member ?? item),
+            score: Number(item?.score ?? 0) || 0,
+          }))
+        } else {
+          parsedValue = []
+        }
+      } catch {
+        parsedValue = rawValue
+          .split(/\r?\n|,/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const [member, scoreStr] = line.split(':')
+            return { member: (member || '').trim(), score: Number(scoreStr) || 0 }
+          })
+      }
     }
 
     if (this.liveMode && infra?.redisExec) {
@@ -422,6 +448,11 @@ class RedisStudioService {
       } else if (type === 'set' && Array.isArray(parsedValue) && parsedValue.length > 0) {
         await infra.redisExec({ ...base, args: ['DEL', key] })
         await infra.redisExec({ ...base, args: ['SADD', key, ...parsedValue.map(String)] })
+      } else if (type === 'zset' && Array.isArray(parsedValue) && parsedValue.length > 0) {
+        await infra.redisExec({ ...base, args: ['DEL', key] })
+        const flatZ: string[] = []
+        for (const item of parsedValue) flatZ.push(String(item.score ?? 0), String(item.member ?? ''))
+        await infra.redisExec({ ...base, args: ['ZADD', key, ...flatZ] })
       } else {
         const strVal = typeof parsedValue === 'string' ? parsedValue : JSON.stringify(parsedValue)
         await infra.redisExec({ ...base, args: ['SET', key, strVal] })

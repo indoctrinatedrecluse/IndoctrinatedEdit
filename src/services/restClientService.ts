@@ -554,12 +554,12 @@ export class RestClientService {
         if (!headers['Content-Type']) headers['Content-Type'] = 'application/json'
       } else if (request.bodyType === 'x-www-form-urlencoded' && request.bodyContent) {
         const raw = this.interpolate(request.bodyContent, env)
-        try {
-          const obj = JSON.parse(raw)
+        const entries = this.parseKeyValueBody(raw)
+        if (entries.length > 0) {
           const params = new URLSearchParams()
-          for (const [k, v] of Object.entries(obj)) params.append(k, String(v))
+          for (const [k, v] of entries) params.append(k, v)
           body = params.toString()
-        } catch {
+        } else {
           body = raw
         }
         if (!headers['Content-Type']) headers['Content-Type'] = 'application/x-www-form-urlencoded'

@@ -428,7 +428,11 @@ export const DatabaseStudio: React.FC<DatabaseStudioProps> = ({
                   className="preset-btn glass-interactive"
                   onClick={() => {
                     const first = Object.keys(activeDb.tables)[0]
-                    setSqlQuery(`SELECT * FROM ${first} LIMIT 50;`)
+                    if (first) {
+                      setSqlQuery(`SELECT * FROM ${first} LIMIT 50;`)
+                    } else {
+                      setSqlQuery('CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL);')
+                    }
                   }}
                   title="Reset query to default SELECT"
                 >

@@ -41,6 +41,9 @@ export const RedisStudioView: React.FC = () => {
   const [pubSubMessages, setPubSubMessages] = useState<PubSubMessage[]>(() => redisStudioService.getPubSubMessages())
   const [isSubscribedLive, setIsSubscribedLive] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [isEditingSelected, setIsEditingSelected] = useState<boolean>(false)
+  const [editValueDraft, setEditValueDraft] = useState<string>('')
+  const [editTtlDraft, setEditTtlDraft] = useState<string>('-1')
 
   // New Key Modal
   const [showAddKey, setShowAddKey] = useState<boolean>(false)
@@ -143,9 +146,30 @@ export const RedisStudioView: React.FC = () => {
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!pubSubMessage.trim()) return
-    await redisStudioService.publishLiveAsync(pubSubChannel, pubSubMessage)
-    setPubSubMessages(redisStudioService.getPubSubMessages())
+    const msg = await redisStudioService.publishLiveAsync(pubSubChannel, pubSubMessage)
+    // Preserve live RESP2 Pub/Sub messages already in the feed instead of overwriting state
+    setPubSubMessages((prev) => [msg, ...prev.slice(0, 100)])
     setPubSubMessage('')
+  }
+
+  const handleStartEditKey = (entry: RedisKeyEntry) => {
+    setEditValueDraft(typeof entry.value === 'object' ? JSON.stringify(entry.value, null, 2) : String(entry.value))
+    setEditTtlDraft(String(entry.ttl))
+    setIsEditingSelected(true)
+  }
+
+  const handleSaveEditedKey = async () => {
+    if (!selectedKey) return
+    const ttlNum = parseInt(editTtlDraft, 10)
+    const updated = await redisStudioService.saveKeyTypedAsync(
+      selectedKey.key,
+      selectedKey.type,
+      editValueDraft,
+      Number.isFinite(ttlNum) ? ttlNum : -1
+    )
+    setSelectedKey(updated)
+    setIsEditingSelected(false)
+    await refreshKeys(searchPattern)
   }
 
   const handleToggleSubscribe = async () => {
@@ -265,7 +289,10 @@ export const RedisStudioView: React.FC = () => {
                     <div
                       key={k.key}
                       className={`key-row glass-interactive ${isSelected ? 'selected' : ''}`}
-                      onClick={() => setSelectedKey(k)}
+                      onClick={() => {
+                        setSelectedKey(k)
+                        setIsEditingSelected(false)
+                      }}
                     >
                       <span className={`type-tag ${k.type}`}>{k.type.toUpperCase()}</span>
                       <span className="key-name-text" title={k.key}>
@@ -303,28 +330,76 @@ export const RedisStudioView: React.FC = () => {
                   <div className="value-area">
                     <div className="value-header">
                       <span className="value-label">Value ({selectedKey.sizeBytes} bytes)</span>
-                      <button
-                        className="copy-val-btn glass-interactive"
-                        onClick={() =>
-                          copyToClipboard(
-                            typeof selectedKey.value === 'object'
-                              ? JSON.stringify(selectedKey.value, null, 2)
-                              : String(selectedKey.value),
-                            'val'
-                          )
-                        }
-                      >
-                        {copiedKey === 'val' ? <Check size={11} /> : <Copy size={11} />}
-                        <span>Copy</span>
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {!isEditingSelected ? (
+                          <button
+                            className="copy-val-btn glass-interactive"
+                            onClick={() => handleStartEditKey(selectedKey)}
+                          >
+                            <span>Edit Value / TTL</span>
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              className="copy-val-btn glass-interactive"
+                              onClick={() => void handleSaveEditedKey()}
+                            >
+                              <Check size={11} />
+                              <span>Save</span>
+                            </button>
+                            <button
+                              className="copy-val-btn glass-interactive"
+                              onClick={() => setIsEditingSelected(false)}
+                            >
+                              <span>Cancel</span>
+                            </button>
+                          </>
+                        )}
+                        <button
+                          className="copy-val-btn glass-interactive"
+                          onClick={() =>
+                            copyToClipboard(
+                              typeof selectedKey.value === 'object'
+                                ? JSON.stringify(selectedKey.value, null, 2)
+                                : String(selectedKey.value),
+                              'val'
+                            )
+                          }
+                        >
+                          {copiedKey === 'val' ? <Check size={11} /> : <Copy size={11} />}
+                          <span>Copy</span>
+                        </button>
+                      </div>
                     </div>
-                    <pre className="value-raw-box">
-                      <code>
-                        {typeof selectedKey.value === 'object'
-                          ? JSON.stringify(selectedKey.value, null, 2)
-                          : String(selectedKey.value)}
-                      </code>
-                    </pre>
+                    {isEditingSelected ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                          <label style={{ color: '#94A3B8' }}>TTL (s, -1 = persist):</label>
+                          <input
+                            type="number"
+                            value={editTtlDraft}
+                            onChange={(e) => setEditTtlDraft(e.target.value)}
+                            className="input-box"
+                            style={{ width: 90, padding: '2px 6px' }}
+                          />
+                        </div>
+                        <textarea
+                          value={editValueDraft}
+                          onChange={(e) => setEditValueDraft(e.target.value)}
+                          rows={7}
+                          className="input-box textarea-box"
+                          spellCheck={false}
+                        />
+                      </div>
+                    ) : (
+                      <pre className="value-raw-box">
+                        <code>
+                          {typeof selectedKey.value === 'object'
+                            ? JSON.stringify(selectedKey.value, null, 2)
+                            : String(selectedKey.value)}
+                        </code>
+                      </pre>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -441,6 +516,7 @@ export const RedisStudioView: React.FC = () => {
                 <option value="hash">Hash Map</option>
                 <option value="list">List</option>
                 <option value="set">Set</option>
+                <option value="zset">Sorted Set (ZSet)</option>
               </select>
             </div>
             <div className="form-item">

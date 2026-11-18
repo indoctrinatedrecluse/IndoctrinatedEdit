@@ -45,7 +45,17 @@ export const MockLabView: React.FC = () => {
   const [portInput, setPortInput] = useState<number>(() => mockLabService.getPort())
   const [serverError, setServerError] = useState<string | null>(null)
   const [runnerBody, setRunnerBody] = useState<string>('')
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
+  const [headersDraft, setHeadersDraft] = useState<string>('')
+  const [headersJsonError, setHeadersJsonError] = useState<string | null>(null)
   const [revision, setRevision] = useState<number>(0)
+
+  React.useEffect(() => {
+    if (selectedEndpoint) {
+      setHeadersDraft(JSON.stringify(selectedEndpoint.headers || {}, null, 2))
+      setHeadersJsonError(null)
+    }
+  }, [selectedEndpoint?.id])
 
   React.useEffect(() => {
     mockLabService.initElectronSync()
@@ -260,12 +270,45 @@ export const MockLabView: React.FC = () => {
 
                 <div className="detail-form">
                   <div className="form-row">
+                    <label>HTTP Method</label>
+                    <select
+                      value={selectedEndpoint.method}
+                      onChange={(e) => {
+                        const method = e.target.value as HttpMethod
+                        mockLabService.updateEndpoint(selectedEndpoint.id, { method })
+                        setSelectedEndpoint({ ...selectedEndpoint, method })
+                      }}
+                      className="form-input"
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="PATCH">PATCH</option>
+                      <option value="DELETE">DELETE</option>
+                    </select>
+                  </div>
+
+                  <div className="form-row">
+                    <label>Route Path</label>
+                    <input
+                      type="text"
+                      value={selectedEndpoint.path}
+                      onChange={(e) => {
+                        const path = e.target.value
+                        mockLabService.updateEndpoint(selectedEndpoint.id, { path })
+                        setSelectedEndpoint({ ...selectedEndpoint, path })
+                      }}
+                      className="form-input"
+                    />
+                  </div>
+
+                  <div className="form-row">
                     <label>HTTP Status</label>
                     <input
                       type="number"
                       value={selectedEndpoint.statusCode}
                       onChange={(e) => {
-                        const val = parseInt(e.target.value, 10)
+                        const val = Number(e.target.value) || 200
                         mockLabService.updateEndpoint(selectedEndpoint.id, { statusCode: val })
                         setSelectedEndpoint({ ...selectedEndpoint, statusCode: val })
                       }}
@@ -279,12 +322,62 @@ export const MockLabView: React.FC = () => {
                       type="number"
                       value={selectedEndpoint.delayMs}
                       onChange={(e) => {
-                        const val = parseInt(e.target.value, 10)
+                        const val = Math.max(0, Number(e.target.value) || 0)
                         mockLabService.updateEndpoint(selectedEndpoint.id, { delayMs: val })
                         setSelectedEndpoint({ ...selectedEndpoint, delayMs: val })
                       }}
                       className="form-input"
                     />
+                  </div>
+
+                  <div className="form-row">
+                    <label>Content-Type</label>
+                    <select
+                      value={selectedEndpoint.contentType}
+                      onChange={(e) => {
+                        const ct = e.target.value as MockEndpoint['contentType']
+                        const nextHeaders = { ...(selectedEndpoint.headers || {}), 'Content-Type': ct }
+                        mockLabService.updateEndpoint(selectedEndpoint.id, { contentType: ct, headers: nextHeaders })
+                        setSelectedEndpoint({ ...selectedEndpoint, contentType: ct, headers: nextHeaders })
+                        setHeadersDraft(JSON.stringify(nextHeaders, null, 2))
+                      }}
+                      className="form-input"
+                    >
+                      <option value="application/json">application/json</option>
+                      <option value="text/plain">text/plain</option>
+                      <option value="text/html">text/html</option>
+                      <option value="application/xml">application/xml</option>
+                    </select>
+                  </div>
+
+                  <div className="form-row full">
+                    <label>Custom Response Headers (JSON)</label>
+                    <textarea
+                      value={headersDraft}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setHeadersDraft(raw)
+                        try {
+                          const parsed = JSON.parse(raw)
+                          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            const cleaned = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, String(v)]))
+                            mockLabService.updateEndpoint(selectedEndpoint.id, { headers: cleaned })
+                            setSelectedEndpoint({ ...selectedEndpoint, headers: cleaned })
+                            setHeadersJsonError(null)
+                          } else {
+                            setHeadersJsonError('Headers must be a JSON object')
+                          }
+                        } catch (err: any) {
+                          setHeadersJsonError(err?.message || 'Invalid JSON')
+                        }
+                      }}
+                      rows={3}
+                      className="body-textarea"
+                      spellCheck={false}
+                    />
+                    {headersJsonError && (
+                      <div style={{ fontSize: 10, color: '#FB7185', marginTop: 2 }}>{headersJsonError}</div>
+                    )}
                   </div>
 
                   <div className="form-row full">
@@ -396,21 +489,59 @@ export const MockLabView: React.FC = () => {
           </div>
 
           <div className="traffic-feed">
-            {trafficLogs.map((log) => (
-              <div key={log.id} className="traffic-card glass-panel">
-                <div className="traffic-top">
-                  <span className={`method-badge ${log.method.toLowerCase()}`}>{log.method}</span>
-                  <span className="url-text">{log.url}</span>
-                  <span className={`status-badge code-${Math.floor(log.statusCode / 100)}xx`}>
-                    {log.statusCode}
-                  </span>
+            {trafficLogs.map((log) => {
+              const isExpanded = expandedLogId === log.id
+              return (
+                <div
+                  key={log.id}
+                  className="traffic-card glass-panel"
+                  onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                  style={{ cursor: 'pointer' }}
+                  title="Click to inspect request/response headers & body"
+                >
+                  <div className="traffic-top">
+                    <span className={`method-badge ${log.method.toLowerCase()}`}>{log.method}</span>
+                    <span className="url-text">{log.url}</span>
+                    <span className={`status-badge code-${Math.floor(log.statusCode / 100)}xx`}>
+                      {log.statusCode}
+                    </span>
+                  </div>
+                  <div className="traffic-bottom">
+                    <span>{log.durationMs}ms duration</span>
+                    <span>{log.timestamp}</span>
+                  </div>
+                  {isExpanded && (
+                    <div
+                      style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 11 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 && (
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ color: '#94A3B8', fontWeight: 600, marginBottom: 2 }}>Request Headers</div>
+                          <pre className="response-body" style={{ margin: 0, maxHeight: 90 }}>
+                            <code>{JSON.stringify(log.requestHeaders, null, 2)}</code>
+                          </pre>
+                        </div>
+                      )}
+                      {log.requestBody && (
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ color: '#94A3B8', fontWeight: 600, marginBottom: 2 }}>Request Body</div>
+                          <pre className="response-body" style={{ margin: 0, maxHeight: 110 }}>
+                            <code>{log.requestBody}</code>
+                          </pre>
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ color: '#94A3B8', fontWeight: 600, marginBottom: 2 }}>Response Body</div>
+                        <pre className="response-body" style={{ margin: 0, maxHeight: 140 }}>
+                          <code>{log.responseBody || '(empty)'}</code>
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="traffic-bottom">
-                  <span>{log.durationMs}ms duration</span>
-                  <span>{log.timestamp}</span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
