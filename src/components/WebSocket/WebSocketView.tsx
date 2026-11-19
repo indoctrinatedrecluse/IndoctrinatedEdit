@@ -215,7 +215,7 @@ export const WebSocketView: React.FC = () => {
             <textarea
               className="cfg-input"
               rows={2}
-              placeholder='{"X-Client-Version": "6.1.0"}'
+              placeholder='{"X-Client-Version": "6.1.1"}'
               value={customHeadersJson}
               onChange={(e) => {
                 setCustomHeadersJson(e.target.value)

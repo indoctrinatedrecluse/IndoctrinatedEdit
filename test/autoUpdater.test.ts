@@ -171,7 +171,7 @@ describe('Auto-Updater Subsystem Tests', () => {
       // Mock updateInfo with an available update and matched asset
       ;(service as any).updateInfo = {
         updateAvailable: true,
-        currentVersion: '6.1.0',
+        currentVersion: '6.1.1',
         latestVersion: '6.2.0',
         releaseName: 'IndoctrinatedEdit 6.2.0',
         releaseNotes: 'Awesome new features',

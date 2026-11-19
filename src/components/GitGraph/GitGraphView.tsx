@@ -1870,7 +1870,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 className="dispatch-input text"
                 value={dispatchTagInput}
                 onChange={(e) => setDispatchTagInput(e.target.value)}
-                placeholder="v6.1.0"
+                placeholder="v6.1.1"
               />
             </div>
 

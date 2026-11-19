@@ -35,7 +35,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ isOpen, onClose }) => 
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [config, setConfig] = useState(rendererUpdateService.getConfig())
   const [showSettings, setShowSettings] = useState(false)
-  const [appVersion, setAppVersion] = useState('6.1.0')
+  const [appVersion, setAppVersion] = useState('6.1.1')
   const [downloadVerified, setDownloadVerified] = useState(false)
 
   useEffect(() => {

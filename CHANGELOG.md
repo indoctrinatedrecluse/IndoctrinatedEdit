@@ -5,20 +5,36 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.1] - 2026-11-19
+
+### 🚀 Hotfix Release: Supercharged Git Graph, GitHub CLI (gh) Integration & Top-of-the-Line Notification Center
+
+IndoctrinatedEdit **6.1.1** is a targeted feature hotfix release delivering a comprehensive visual and functional overhaul to the Git Graph, seamless GitHub CLI (`gh`) out-of-process integration, an interactive Pull Requests & Releases workbench, and a state-of-the-art Liquid Glass Notification Center with synthesized glass chimes and floating toasts:
+
+#### 🌿 Supercharged Subway-Map Git Graph & Repository Controls
+- **Subway-Map Visual Graph Overhaul**: Engineered smooth cubic Bezier spline connections (`M cx cy C cx ... px ... px cy2`), distinct merge commit double-rings with inner target dots, HEAD commit marker with pulsing cyan halo ring, golden tag badges, branch pills, author avatar chips, and 1-click commit hash copy.
+- **Git Tags & Commit Reset Management**: Added real `git tag -l` discovery with create tag and delete tag controls; soft, mixed, and hard resets directly to any selected commit from the interactive commit action strip.
+- **Graph Toolbar Controls**: Added real-time commit search filter (message, author, hash), branch filter dropdown, density mode switcher (Comfortable vs Compact 32px rows), and interactive tag manager drawer.
+
+#### 🐙 Native GitHub CLI (gh) Workbench & Actions Automation
+- **GitHub CLI (gh) Detection & Status**: Out-of-process detection of GitHub CLI (`gh --version` & `gh auth status`), authenticated account status pill (`@user`), and graceful missing-CLI notification prompting 1-click installation.
+- **Live Workflow Watch & Action Controls**: Real-time polling mode (3.5s cadence) watching active workflow runs, step-by-step progress checklist with execution durations, failed job isolation filter (`--log-failed`), and 1-click failed job re-run (`gh run rerun <id> --failed`).
+- **Pull Requests & Releases GUI Tabs**: Interactive PR workbench with status badges (OPEN, MERGED, CLOSED, DRAFT), 1-click branch checkout (`gh pr checkout <num>`), and GitHub Releases browser with tag badges and asset download links.
+
+#### 🔔 Top-of-the-Line Liquid Glass Notification Center & Floating Toasts
+- **Floating Toast Stack (ToastContainer.tsx)**: Mounted dynamic Liquid Glass toast container anchored to the bottom-right viewport with spring entrance/exit transitions, color-coded glowing accents by severity, auto-dismiss countdown bar with pause-on-hover, and external action links.
+- **Synthesized Glass Chimes**: Added pleasant Web Audio API synthesized glass chime harmonics (`playGlassChime`), user-controlled audio mute, and Do Not Disturb (DND) modes.
+- **Persistent Notification Center**: Persists notification history in `localStorage` (`indoctrinated.notifications.v2`) across app restarts, category filter tabs (All, Unread, Errors & Warnings, Git & CI, Compilers), and expandable technical diagnostics drawer with 1-click clipboard copy.
+
+#### 🔍 Extension De-Mocking & Ecosystem Polish
+- **Installed Package License Inspection**: Enhanced `PackageManagerService` with direct `node_modules` installed package inspection to resolve real package licenses from disk.
+- **Cryptographic Sample Signatures**: Hardened sample JWT generation in `CryptoDevToolsService` to produce compliant base64url HMAC signatures.
+
 ## [6.1.0] - 2026-11-18
 
 ### 🚀 Complete Ecosystem Hardening & Round 3 Feature Completeness Across All 60 Extensions & 24 Studios
 
 IndoctrinatedEdit **6.1.0** is an exhaustive hardening and feature-completeness release verifying and finalizing every registered capability across all 60 extensions, 28 language packs, and 24 built-in studios. Every component, Monaco language tokenizer, snippet pack, formatting engine, and protocol driver has been audited, strengthened with end-to-end unit tests, and verified across a 96-file, 717-test suite:
-
-#### 🌿 Supercharged Git Graph, GitHub CLI (gh) Workbench & Top-of-the-Line Notification Center
-- **Subway-Map Visual Graph Overhaul**: Engineered smooth cubic Bezier spline curves (`M cx cy C cx ... px ... px cy2`), distinct merge commit double-rings with target dots, HEAD commit marker with pulsing halo ring, golden tag badges, branch pills, author avatar chips, and 1-click commit hash copy.
-- **Git Tags & Reset Management**: Added real `git tag -l` discovery with create tag and delete tag controls; soft, mixed, and hard resets directly to any selected commit from the interactive commit action strip.
-- **GitHub CLI (gh) Full Integration**: Out-of-process detection of GitHub CLI (`gh --version` & `gh auth status`), authenticated account status pill (`@user`), and graceful missing-CLI notification prompting 1-click installation.
-- **Live Workflow Watch & Action Controls**: Real-time polling mode (3.5s cadence) watching active workflow runs, step-by-step progress checklist with execution durations, failed job isolation filter (`--log-failed`), and 1-click failed job re-run (`gh run rerun <id> --failed`).
-- **Pull Requests & Releases GUI Tabs**: Interactive PR workbench with status badges (OPEN, MERGED, CLOSED, DRAFT), 1-click branch checkout (`gh pr checkout <num>`), and GitHub Releases browser with tag badges and asset download links.
-- **Top-of-the-Line Liquid Glass Notification Center & Floating Toasts**: Web Audio API synthesized glass chime harmonics (`playGlassChime`), user-controlled audio mute and Do Not Disturb (DND) modes, persistent notification history in `localStorage`, animated floating toast stack (`ToastContainer.tsx`) with auto-dismiss countdown bar that pauses on hover, expandable diagnostic details drawer with 1-click clipboard copy, and category filters (All, Unread, Errors & Warnings, Git & CI, Compilers).
-- **Installed Package License Inspection**: Enhanced `PackageManagerService` with direct `node_modules` installed package inspection to resolve real package licenses from disk.
 
 #### 🧩 Shell, Extension Lifecycle, Shortcuts & Core/AI Wiring
 - **Right Auxiliary Pane Identifier Parity**: Realigned all 26 auxiliary dock IDs to match `extensionRegistry.ts` exactly (`indoctrinated.ext.jupyter`, `indoctrinated.ext.cryptotools`, `indoctrinated.ext.socket`, `indoctrinated.ext.database`, `indoctrinated.ext.taskrunner`, `indoctrinated.ext.colorstudio`, etc.), complete with keyboard shortcut badges (`Ctrl+Alt+1`..`8` + studio hotkeys).
