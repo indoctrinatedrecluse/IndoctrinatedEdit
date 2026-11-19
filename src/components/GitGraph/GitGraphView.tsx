@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   GitBranch,
   RotateCw,
@@ -24,6 +24,15 @@ import {
   GitMerge,
   FileDiff,
   Square,
+  Tag,
+  GitPullRequest,
+  Search,
+  Copy,
+  ExternalLink,
+  Sliders,
+  AlertTriangle,
+  Radio,
+  FileCode,
 } from 'lucide-react'
 import { GitRepoStatus, GitCommit } from '@sdk/types'
 import {
@@ -31,7 +40,11 @@ import {
   WorkflowFile,
   WorkflowRun,
   WorkflowJob,
+  GitHubPullRequest,
+  GitHubReleaseItem,
+  GhCliStatus,
 } from '../../services/gitWorkflowService'
+import { notificationService } from '../../services/notificationService'
 import { MergeStudioModal } from '../Git/MergeStudioModal'
 import './GitGraphView.css'
 
@@ -47,12 +60,13 @@ const TRACK_COLORS = [
   '#FF9F0A', // Amber Gold
   '#FF0055', // Synthwave Magenta
   '#00F0FF', // Cyan Glow
+  '#FFD60A', // Cyber Gold
 ]
 
 export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpenFile }) => {
   const [status, setStatus] = useState<GitRepoStatus | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
-  const [activeTab, setActiveTab] = useState<'changes' | 'graph' | 'workflows'>('changes')
+  const [activeTab, setActiveTab] = useState<'changes' | 'graph' | 'workflows' | 'prs' | 'releases'>('changes')
   const [commitMessage, setCommitMessage] = useState<string>('')
   const [stagedExpanded, setStagedExpanded] = useState<boolean>(true)
   const [changesExpanded, setChangesExpanded] = useState<boolean>(true)
@@ -60,20 +74,34 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
   const [commitDetail, setCommitDetail] = useState<{ hash: string; stat: string; files: string[]; diff: string } | null>(null)
   const [committing, setCommitting] = useState<boolean>(false)
   const [gitToast, setGitToast] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [copiedHash, setCopiedHash] = useState<string | null>(null)
 
-  // Branch & Stash state
+  // Branch, Stash & Tag state
   const [branches, setBranches] = useState<{ current: string; local: string[]; remote: string[] }>({ current: '', local: [], remote: [] })
   const [showBranchMenu, setShowBranchMenu] = useState<boolean>(false)
   const [newBranchName, setNewBranchName] = useState<string>('')
   const [stashes, setStashes] = useState<Array<{ ref: string; message: string; date: string }>>([])
   const [stashExpanded, setStashExpanded] = useState<boolean>(false)
   const [stashMsg, setStashMsg] = useState<string>('')
+  const [tags, setTags] = useState<Array<{ name: string; hash: string; date: string; message: string }>>([])
+  const [tagsExpanded, setTagsExpanded] = useState<boolean>(false)
+  const [newTagName, setNewTagName] = useState<string>('')
+  const [newTagMessage, setNewTagMessage] = useState<string>('')
+  const [showTagCreateDrawer, setShowTagCreateDrawer] = useState<boolean>(false)
+
+  // Graph UI enhancements state
+  const [graphSearch, setGraphSearch] = useState<string>('')
+  const [graphBranchFilter, setGraphBranchFilter] = useState<string>('all')
+  const [graphDensity, setGraphDensity] = useState<'comfortable' | 'compact'>('comfortable')
+  const [resetModalCommit, setResetModalCommit] = useState<string | null>(null)
+  const [resetMode, setResetMode] = useState<'soft' | 'mixed' | 'hard'>('mixed')
+  const [newBranchAtCommit, setNewBranchAtCommit] = useState<{ hash: string; name: string } | null>(null)
 
   // Diff Preview & 3-Way Merge Studio state
   const [diffPreview, setDiffPreview] = useState<{ filePath: string; diff: string } | null>(null)
   const [mergeTarget, setMergeTarget] = useState<{ filePath: string; content: string } | null>(null)
 
-  // Workflows state
+  // Workflows & GitHub CLI state
   const [workflows, setWorkflows] = useState<WorkflowFile[]>(() => gitWorkflowService.getWorkflows())
   const [runs, setRuns] = useState<WorkflowRun[]>(() => gitWorkflowService.getRuns())
   const [workflowDataSource, setWorkflowDataSource] = useState(() => gitWorkflowService.getDataSource())
@@ -85,11 +113,28 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
   const [dispatchWorkflowId, setDispatchWorkflowId] = useState<string>('release.yml')
   const [dispatchBranch, setDispatchBranch] = useState<string>('master')
   const [dispatchTagInput, setDispatchTagInput] = useState<string>('')
+  const [isLiveWatching, setIsLiveWatching] = useState<boolean>(false)
+  const [ghStatus, setGhStatus] = useState<GhCliStatus | null>(null)
+  const [showingFailedLogsOnly, setShowingFailedLogsOnly] = useState<boolean>(false)
+
+  // Pull Requests & Releases state
+  const [pullRequests, setPullRequests] = useState<GitHubPullRequest[]>([])
+  const [releases, setReleases] = useState<GitHubReleaseItem[]>([])
+  const [loadingGhData, setLoadingGhData] = useState<boolean>(false)
 
   const showToast = useCallback((type: 'ok' | 'err', text: string) => {
     setGitToast({ type, text })
     setTimeout(() => setGitToast((prev) => (prev?.text === text ? null : prev)), 4000)
   }, [])
+
+  const copyHash = async (hash: string) => {
+    try {
+      await navigator.clipboard.writeText(hash)
+      setCopiedHash(hash)
+      setTimeout(() => setCopiedHash((curr) => (curr === hash ? null : curr)), 2000)
+      showToast('ok', `Copied commit hash ${hash.slice(0, 8)}`)
+    } catch {}
+  }
 
   const fetchGitStatus = useCallback(async () => {
     if (!window.electronAPI?.git?.getRepoStatus) {
@@ -110,6 +155,10 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         const st = await window.electronAPI.git.stashList(workspacePath)
         setStashes(st)
       }
+      if (window.electronAPI.git.listTags) {
+        const tg = await window.electronAPI.git.listTags(workspacePath)
+        setTags(tg)
+      }
     } catch (err) {
       console.warn('Failed to fetch git status:', err)
     } finally {
@@ -117,11 +166,18 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     }
   }, [workspacePath])
 
+  const checkGh = useCallback(async () => {
+    const status = await gitWorkflowService.checkGhCliStatus(workspacePath)
+    setGhStatus(status)
+  }, [workspacePath])
+
   useEffect(() => {
     fetchGitStatus()
+    void checkGh()
     void gitWorkflowService.loadWorkspaceWorkflows(workspacePath)
-  }, [fetchGitStatus, workspacePath])
+  }, [fetchGitStatus, checkGh, workspacePath])
 
+  // Subscribe to workflow service updates
   useEffect(() => {
     return gitWorkflowService.subscribe(() => {
       const wfs = gitWorkflowService.getWorkflows()
@@ -140,6 +196,40 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
       }
     })
   }, [selectedWorkflowFilter, dispatchWorkflowId])
+
+  // Live Watch Poller for GitHub Actions active runs
+  useEffect(() => {
+    if (!isLiveWatching) return
+    const interval = setInterval(async () => {
+      await gitWorkflowService.loadWorkspaceWorkflows(workspacePath)
+      if (selectedRun?.id) {
+        await gitWorkflowService.fetchRunDetailsAsync(selectedRun.id)
+        if (selectedJob?.id) {
+          const lines = await gitWorkflowService.fetchJobLogsAsync(selectedRun.id, selectedJob.id, showingFailedLogsOnly)
+          setJobLogs(lines)
+        }
+      }
+    }, 3500)
+
+    return () => clearInterval(interval)
+  }, [isLiveWatching, workspacePath, selectedRun?.id, selectedJob?.id, showingFailedLogsOnly])
+
+  // Load Pull Requests & Releases when respective tabs are opened
+  useEffect(() => {
+    if (activeTab === 'prs') {
+      setLoadingGhData(true)
+      gitWorkflowService
+        .fetchPullRequestsAsync(workspacePath)
+        .then((prs) => setPullRequests(prs))
+        .finally(() => setLoadingGhData(false))
+    } else if (activeTab === 'releases') {
+      setLoadingGhData(true)
+      gitWorkflowService
+        .fetchReleasesAsync(workspacePath)
+        .then((rels) => setReleases(rels))
+        .finally(() => setLoadingGhData(false))
+    }
+  }, [activeTab, workspacePath])
 
   const handleCheckout = async (branch: string, createNew = false) => {
     if (!window.electronAPI?.git?.checkout || !branch.trim()) return
@@ -233,6 +323,70 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     }
   }
 
+  const handleCreateTag = async () => {
+    if (!window.electronAPI?.git?.createTag || !newTagName.trim()) return
+    const res = await window.electronAPI.git.createTag(
+      newTagName.trim(),
+      newTagMessage.trim() || undefined,
+      selectedCommit?.hash || undefined,
+      workspacePath
+    )
+    if (res.success) {
+      showToast('ok', `Created tag ${newTagName.trim()}`)
+      setNewTagName('')
+      setNewTagMessage('')
+      setShowTagCreateDrawer(false)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Tag creation failed')
+    }
+  }
+
+  const handleDeleteTag = async (tagName: string) => {
+    if (!window.electronAPI?.git?.deleteTag) return
+    const res = await window.electronAPI.git.deleteTag(tagName, workspacePath)
+    if (res.success) {
+      showToast('ok', `Deleted tag ${tagName}`)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Tag deletion failed')
+    }
+  }
+
+  const handleResetToCommit = async () => {
+    if (!window.electronAPI?.git?.resetToCommit || !resetModalCommit) return
+    const res = await window.electronAPI.git.resetToCommit(resetModalCommit, resetMode, workspacePath)
+    if (res.success) {
+      showToast('ok', `Reset to ${resetModalCommit.slice(0, 8)} (${resetMode})`)
+      setResetModalCommit(null)
+      await fetchGitStatus()
+    } else {
+      showToast('err', res.error || 'Reset failed')
+    }
+  }
+
+  const handleCreateBranchAtCommit = async () => {
+    if (!newBranchAtCommit?.name.trim() || !window.electronAPI?.git?.checkout) return
+    const { hash, name } = newBranchAtCommit
+    try {
+      if (window.electronAPI?.workspace?.execCommand) {
+        const res = await window.electronAPI.workspace.execCommand({
+          command: `git branch ${name.trim()} ${hash}`,
+          cwd: workspacePath,
+        })
+        if (res.exitCode === 0) {
+          showToast('ok', `Created branch ${name.trim()} at ${hash.slice(0, 7)}`)
+          setNewBranchAtCommit(null)
+          await fetchGitStatus()
+          return
+        }
+      }
+      showToast('err', 'Failed to create branch at commit')
+    } catch (err: any) {
+      showToast('err', err?.message || 'Branch creation failed')
+    }
+  }
+
   const handleSelectCommit = async (commit: GitCommit) => {
     setSelectedCommit(commit)
     setCommitDetail(null)
@@ -309,30 +463,72 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
     setActiveTab('workflows')
   }
 
-  const handleSelectRun = (run: WorkflowRun) => {
+  const handleSelectRun = async (run: WorkflowRun) => {
     gitWorkflowService.setSelectedRunId(run.id)
     setSelectedRun(run)
-    if (run.jobs.length > 0) {
-      setSelectedJob(run.jobs[0])
-      setJobLogs(gitWorkflowService.getJobLogs(run.id, run.jobs[0].id))
-      void gitWorkflowService.fetchJobLogsAsync(run.id, run.jobs[0].id).then((lines) => setJobLogs(lines))
+    // Deep populate jobs & steps from gh run view
+    const enriched = await gitWorkflowService.fetchRunDetailsAsync(run.id)
+    if (enriched && enriched.jobs.length > 0) {
+      setSelectedJob(enriched.jobs[0])
+      const lines = await gitWorkflowService.fetchJobLogsAsync(run.id, enriched.jobs[0].id, showingFailedLogsOnly)
+      setJobLogs(lines)
     }
   }
 
-  const handleSelectJob = (job: WorkflowJob) => {
+  const handleSelectJob = async (job: WorkflowJob) => {
     gitWorkflowService.setSelectedJobId(job.id)
     setSelectedJob(job)
     if (selectedRun) {
-      setJobLogs(gitWorkflowService.getJobLogs(selectedRun.id, job.id))
-      void gitWorkflowService.fetchJobLogsAsync(selectedRun.id, job.id).then((lines) => setJobLogs(lines))
+      const lines = await gitWorkflowService.fetchJobLogsAsync(selectedRun.id, job.id, showingFailedLogsOnly)
+      setJobLogs(lines)
     }
   }
+
+  const handleToggleFailedLogs = async () => {
+    const next = !showingFailedLogsOnly
+    setShowingFailedLogsOnly(next)
+    if (selectedRun && selectedJob) {
+      const lines = await gitWorkflowService.fetchJobLogsAsync(selectedRun.id, selectedJob.id, next)
+      setJobLogs(lines)
+    }
+  }
+
+  const handleRerunFailedJobs = async (runId: string) => {
+    const res = await gitWorkflowService.rerunFailedJobsAsync(runId)
+    showToast(res.ok ? 'ok' : 'err', res.message)
+  }
+
+  const handleCheckoutPr = async (prNumber: number) => {
+    const res = await gitWorkflowService.checkoutPullRequestAsync(prNumber, workspacePath)
+    showToast(res.ok ? 'ok' : 'err', res.message)
+    if (res.ok) await fetchGitStatus()
+  }
+
+  // Filter commits for graph view
+  const filteredCommits = useMemo(() => {
+    if (!status?.commits) return []
+    let list = status.commits
+    if (graphBranchFilter !== 'all' && status.branch) {
+      list = list.filter((c) => c.refs.includes(status.branch) || c.refs.includes(`origin/${status.branch}`))
+    }
+    if (graphSearch.trim()) {
+      const q = graphSearch.toLowerCase()
+      list = list.filter(
+        (c) =>
+          c.message.toLowerCase().includes(q) ||
+          c.authorName.toLowerCase().includes(q) ||
+          c.hash.toLowerCase().includes(q) ||
+          c.shortHash.toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [status?.commits, status?.branch, graphBranchFilter, graphSearch])
 
   if (loading && !status) {
     return (
       <div className="git-view-empty">
         <RotateCw size={18} className="spinner" />
-        <span>Scanning Git repository...</span>
+        <span>Scanning Git repository & GitHub services...</span>
       </div>
     )
   }
@@ -342,7 +538,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
       <div className="git-view-empty">
         <FolderGit2 size={32} className="git-empty-icon" />
         <h3>No Git Repository Detected</h3>
-        <p>Initialize version control to track changes and visualize your commit graph.</p>
+        <p>Initialize version control to track changes, view visual commit graphs, and stream GitHub CI/CD runs.</p>
         <button className="git-btn primary glass-interactive" onClick={handleInitRepo}>
           <Sparkles size={14} />
           <span>Initialize Git Repository</span>
@@ -375,6 +571,12 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
               {status.behind > 0 && <span className="sync-down">↓ {status.behind}</span>}
             </div>
           )}
+          {ghStatus?.installed && (
+            <div className="gh-connected-pill" title={`GitHub CLI active${ghStatus.account ? ` as @${ghStatus.account}` : ''}`}>
+              <span className="gh-dot-active" />
+              <span>gh {ghStatus.account ? `@${ghStatus.account}` : 'v' + (ghStatus.version || '')}</span>
+            </div>
+          )}
         </div>
 
         <div className="git-header-right">
@@ -396,6 +598,34 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
           </button>
         </div>
       </div>
+
+      {/* GitHub CLI Missing Banner */}
+      {ghStatus && !ghStatus.installed && (
+        <div className="gh-missing-banner glass-panel">
+          <div className="gh-banner-left">
+            <AlertTriangle size={13} color="#FF9F0A" />
+            <span>GitHub CLI (`gh`) not detected in PATH.</span>
+          </div>
+          <div className="gh-banner-right">
+            <button
+              className="gh-banner-btn primary"
+              onClick={() => window.open('https://cli.github.com', '_blank')}
+            >
+              Install gh
+            </button>
+            <button
+              className="gh-banner-btn secondary"
+              onClick={() => {
+                notificationService.notifyGitHubCliMissing()
+                showToast('ok', 'Pinned GitHub CLI setup to Notification Center')
+              }}
+              title="Pin alert to Notification Center"
+            >
+              Notify Me
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Inline Branch Switcher / Create Drawer */}
       {showBranchMenu && (
@@ -455,11 +685,12 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         </div>
       )}
 
-      {/* Mode Switcher Tabs */}
+      {/* 5-Mode Switcher Tabs */}
       <div className="git-tab-switcher">
         <button
           className={`switcher-tab ${activeTab === 'changes' ? 'active' : ''}`}
           onClick={() => setActiveTab('changes')}
+          title="Staged & Working Tree Changes"
         >
           <Layers size={13} />
           <span>Changes ({totalChanges})</span>
@@ -467,6 +698,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         <button
           className={`switcher-tab ${activeTab === 'graph' ? 'active' : ''}`}
           onClick={() => setActiveTab('graph')}
+          title="Subway-Map Visual Commit Graph"
         >
           <GitCommitIcon size={13} />
           <span>Graph ({status.commits.length})</span>
@@ -474,10 +706,27 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         <button
           className={`switcher-tab workflows-tab ${activeTab === 'workflows' ? 'active' : ''}`}
           onClick={() => setActiveTab('workflows')}
+          title="GitHub Actions CI/CD Pipeline Monitor"
         >
           <Workflow size={13} />
           <span>Workflows</span>
           {activeRunsCount > 0 && <span className="tab-pulse-dot" />}
+        </button>
+        <button
+          className={`switcher-tab ${activeTab === 'prs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('prs')}
+          title="GitHub Pull Requests"
+        >
+          <GitPullRequest size={13} />
+          <span>PRs</span>
+        </button>
+        <button
+          className={`switcher-tab ${activeTab === 'releases' ? 'active' : ''}`}
+          onClick={() => setActiveTab('releases')}
+          title="GitHub Releases"
+        >
+          <Tag size={13} />
+          <span>Releases</span>
         </button>
       </div>
 
@@ -656,6 +905,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
               </div>
             )}
           </div>
+
           {/* Diff Preview Drawer */}
           {diffPreview && (
             <div className="selected-commit-drawer glass-panel" style={{ marginTop: 8 }}>
@@ -719,165 +969,495 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
         </div>
       )}
 
-      {/* 2. Visual Subway-Map Git Graph Mode */}
+      {/* 2. Enhanced Visual Subway-Map Git Graph Mode */}
       {activeTab === 'graph' && (
         <div className="git-content graph-mode custom-scrollbar">
-          <div className="graph-commit-list">
+          {/* Graph Toolbar with Search, Branch Filter & Density Toggle */}
+          <div className="graph-toolbar glass-panel">
+            <div className="graph-search-box">
+              <Search size={11} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search commits by message, author, or hash..."
+                value={graphSearch}
+                onChange={(e) => setGraphSearch(e.target.value)}
+              />
+              {graphSearch && (
+                <button className="clear-search-btn" onClick={() => setGraphSearch('')}>
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="graph-toolbar-actions">
+              <select
+                className="graph-filter-select glass-interactive"
+                value={graphBranchFilter}
+                onChange={(e) => setGraphBranchFilter(e.target.value)}
+                title="Filter by branch"
+              >
+                <option value="all">All Branches</option>
+                {status.branch && <option value={status.branch}>Current ({status.branch})</option>}
+              </select>
+
+              <button
+                className={`density-toggle-btn glass-interactive ${graphDensity === 'compact' ? 'active' : ''}`}
+                onClick={() => setGraphDensity((d) => (d === 'comfortable' ? 'compact' : 'comfortable'))}
+                title={`Row Density: ${graphDensity}`}
+              >
+                <Sliders size={11} />
+                <span>{graphDensity === 'compact' ? 'Compact' : 'Comfy'}</span>
+              </button>
+
+              <button
+                className="density-toggle-btn glass-interactive"
+                onClick={() => setTagsExpanded((t) => !t)}
+                title="View & manage repository tags"
+              >
+                <Tag size={11} />
+                <span>Tags ({tags.length})</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tags Drawer in Graph View */}
+          {tagsExpanded && (
+            <div className="tags-drawer glass-panel">
+              <div className="tags-drawer-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Tag size={12} color="#FFD60A" />
+                  <span style={{ fontWeight: 600, fontSize: 11 }}>REPOSITORY TAGS</span>
+                </div>
+                <button
+                  className="sec-action-link"
+                  onClick={() => setShowTagCreateDrawer((v) => !v)}
+                >
+                  {showTagCreateDrawer ? 'Cancel' : '+ New Tag'}
+                </button>
+              </div>
+
+              {showTagCreateDrawer && (
+                <div className="tag-create-form">
+                  <input
+                    type="text"
+                    className="tag-input glass-input"
+                    placeholder="Tag name (e.g. v6.2.0)..."
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="tag-input glass-input"
+                    placeholder="Annotation message (optional)..."
+                    value={newTagMessage}
+                    onChange={(e) => setNewTagMessage(e.target.value)}
+                  />
+                  <button
+                    className="tag-submit-btn glass-interactive"
+                    onClick={handleCreateTag}
+                    disabled={!newTagName.trim()}
+                  >
+                    Create Tag
+                  </button>
+                </div>
+              )}
+
+              <div className="tags-chips-list">
+                {tags.length === 0 ? (
+                  <div className="empty-hint">No tags created yet</div>
+                ) : (
+                  tags.map((t) => (
+                    <div key={t.name} className="tag-chip glass-interactive">
+                      <Tag size={10} color="#FFD60A" />
+                      <span className="tag-name">{t.name}</span>
+                      <span className="tag-hash">{t.hash}</span>
+                      <button
+                        className="tag-del-btn"
+                        onClick={() => handleDeleteTag(t.name)}
+                        title={`Delete tag ${t.name}`}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Visual Subway Commit Rows */}
+          <div className={`graph-commit-list density-${graphDensity}`}>
             {(() => {
               const trackByHash = new Map<string, number>()
               let maxTrack = 0
-              for (const c of status.commits) {
+              for (const c of filteredCommits) {
                 const t = c.trackIndex ?? 0
                 trackByHash.set(c.hash, t)
                 if (t > maxTrack) maxTrack = t
               }
-              const laneGap = 14
-              const svgWidth = Math.max(28, (Math.min(maxTrack, 6) + 1) * laneGap + 12)
+              const laneGap = 16
+              const svgWidth = Math.max(32, (Math.min(maxTrack, 7) + 1) * laneGap + 12)
+              const rowHeight = graphDensity === 'compact' ? 32 : 44
+              const centerY = rowHeight / 2
 
-              return status.commits.map((commit, rowIdx) => {
-                const track = Math.min(commit.trackIndex ?? 0, 6)
-                const cx = 12 + track * laneGap
+              if (filteredCommits.length === 0) {
+                return (
+                  <div className="empty-hint" style={{ padding: 24, textAlign: 'center' }}>
+                    No commits match "{graphSearch}".
+                  </div>
+                )
+              }
+
+              return filteredCommits.map((commit, rowIdx) => {
+                const track = Math.min(commit.trackIndex ?? 0, 7)
+                const cx = 14 + track * laneGap
                 const color = TRACK_COLORS[track % TRACK_COLORS.length]
                 const isSelected = selectedCommit?.hash === commit.hash
+                const isHead = rowIdx === 0
+                const isMerge = (commit.parents || []).length > 1
                 const parentTracks = (commit.parents || []).map((p) =>
-                  Math.min(trackByHash.get(p) ?? track, 6)
+                  Math.min(trackByHash.get(p) ?? track, 7)
                 )
+
+                // Author Initials Avatar
+                const initials = (commit.authorName || 'Dev')
+                  .split(' ')
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
 
                 return (
                   <div
                     key={commit.hash}
-                    className={`graph-row glass-interactive ${isSelected ? 'selected' : ''}`}
+                    className={`graph-row glass-interactive ${isSelected ? 'selected' : ''} ${isHead ? 'is-head' : ''}`}
                     onClick={() => void handleSelectCommit(commit)}
                   >
-                    <div className="subway-canvas" style={{ minWidth: svgWidth }}>
-                      <svg width={svgWidth} height="42" viewBox={`0 0 ${svgWidth} 42`}>
-                        {/* Incoming rail from top (unless HEAD/first row) */}
+                    <div className="subway-canvas" style={{ minWidth: svgWidth, width: svgWidth }}>
+                      <svg width={svgWidth} height={rowHeight} viewBox={`0 0 ${svgWidth} ${rowHeight}`}>
+                        {/* Smooth Incoming rail from top (unless HEAD/first row) */}
                         {rowIdx > 0 && (
                           <line
                             x1={cx}
                             y1="0"
                             x2={cx}
-                            y2="21"
+                            y2={centerY}
                             stroke={color}
-                            strokeWidth="2.2"
-                            strokeOpacity="0.65"
+                            strokeWidth="2.5"
+                            strokeOpacity="0.75"
+                            strokeLinecap="round"
                           />
                         )}
-                        {/* Outgoing rails / Bezier merge branches to each parent track */}
+
+                        {/* Smooth Bezier curves to parents */}
                         {parentTracks.length > 0 ? (
                           parentTracks.map((pTrack, pIdx) => {
-                            const px = 12 + pTrack * laneGap
+                            const px = 14 + pTrack * laneGap
                             const pColor = TRACK_COLORS[pTrack % TRACK_COLORS.length]
                             if (px === cx) {
                               return (
                                 <line
                                   key={pIdx}
                                   x1={cx}
-                                  y1="21"
+                                  y1={centerY}
                                   x2={px}
-                                  y2="42"
+                                  y2={rowHeight}
                                   stroke={pColor}
-                                  strokeWidth="2.2"
-                                  strokeOpacity="0.65"
+                                  strokeWidth="2.5"
+                                  strokeOpacity="0.75"
+                                  strokeLinecap="round"
                                 />
                               )
                             }
                             return (
                               <path
                                 key={pIdx}
-                                d={`M ${cx} 21 C ${cx} 32, ${px} 30, ${px} 42`}
+                                d={`M ${cx} ${centerY} C ${cx} ${centerY + 10}, ${px} ${centerY + 4}, ${px} ${rowHeight}`}
                                 fill="none"
                                 stroke={pColor}
-                                strokeWidth="2.2"
-                                strokeOpacity="0.75"
+                                strokeWidth="2.5"
+                                strokeOpacity="0.8"
+                                strokeLinecap="round"
                               />
                             )
                           })
                         ) : (
-                          rowIdx < status.commits.length - 1 && (
+                          rowIdx < filteredCommits.length - 1 && (
                             <line
                               x1={cx}
-                              y1="21"
+                              y1={centerY}
                               x2={cx}
-                              y2="42"
+                              y2={rowHeight}
                               stroke={color}
-                              strokeWidth="2.2"
-                              strokeOpacity="0.35"
+                              strokeWidth="2.5"
+                              strokeOpacity="0.4"
+                              strokeLinecap="round"
                             />
                           )
                         )}
-                        <circle cx={cx} cy="21" r="6" fill={color} fillOpacity="0.35" />
-                        <circle cx={cx} cy="21" r="3.5" fill="#FFF" stroke={color} strokeWidth="1.5" />
+
+                        {/* Commit Node with glow and specular ring */}
+                        {isHead && (
+                          <circle
+                            cx={cx}
+                            cy={centerY}
+                            r="9"
+                            fill="none"
+                            stroke="#0A84FF"
+                            strokeWidth="1.2"
+                            strokeDasharray="2,2"
+                            className="head-pulse-halo"
+                          />
+                        )}
+                        <circle cx={cx} cy={centerY} r="6.5" fill={color} fillOpacity="0.4" />
+                        <circle
+                          cx={cx}
+                          cy={centerY}
+                          r={isMerge ? '4.5' : '3.8'}
+                          fill={isMerge ? color : '#FFFFFF'}
+                          stroke={isMerge ? '#FFFFFF' : color}
+                          strokeWidth="1.8"
+                        />
+                        {isMerge && (
+                          <circle cx={cx} cy={centerY} r="1.5" fill="#FFFFFF" />
+                        )}
                       </svg>
                     </div>
 
                     <div className="graph-commit-info">
                       <div className="commit-top-line">
-                        <span className="commit-hash">{commit.shortHash}</span>
+                        <button
+                          className="commit-hash-pill"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void copyHash(commit.hash)
+                          }}
+                          title="Click to copy SHA-1 hash"
+                        >
+                          <Copy size={9} />
+                          <span>{commit.shortHash}</span>
+                        </button>
+
                         {commit.refs.length > 0 && (
                           <div className="refs-container">
-                            {commit.refs.map((ref) => (
-                              <span key={ref} className="ref-pill">
-                                {ref}
-                              </span>
-                            ))}
+                            {commit.refs.map((ref) => {
+                              const isTag = ref.startsWith('tag: ') || tags.some((t) => t.name === ref)
+                              const cleanRef = ref.replace(/^tag:\s*/, '')
+                              return (
+                                <span
+                                  key={ref}
+                                  className={`ref-pill ${isTag ? 'is-tag' : 'is-branch'}`}
+                                >
+                                  {isTag ? <Tag size={9} /> : <GitBranch size={9} />}
+                                  <span>{cleanRef}</span>
+                                </span>
+                              )
+                            })}
                           </div>
                         )}
-                        <span className="commit-msg">{commit.message}</span>
-                    </div>
 
-                    <div className="commit-bottom-line">
-                      <span className="commit-author">{commit.authorName}</span>
-                      <span className="commit-date">{commit.relativeDate}</span>
+                        <span className="commit-msg">{commit.message}</span>
+                      </div>
+
+                      <div className="commit-bottom-line">
+                        <span className="author-avatar-chip" title={commit.authorEmail}>
+                          {initials}
+                        </span>
+                        <span className="commit-author">{commit.authorName}</span>
+                        <span className="commit-date" title={new Date(commit.date).toLocaleString()}>
+                          {commit.relativeDate}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })
+                )
+              })
             })()}
           </div>
 
+          {/* Selected Commit Rich Inspector Drawer */}
           {selectedCommit && (
             <div className="selected-commit-drawer glass-panel">
               <div className="drawer-header">
-                <span className="drawer-hash">{selectedCommit.hash.substring(0, 10)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <GitCommitIcon size={13} color="#0A84FF" />
+                  <span className="drawer-hash">{selectedCommit.hash.substring(0, 10)}</span>
+                  <button
+                    className="copy-hash-btn"
+                    onClick={() => void copyHash(selectedCommit.hash)}
+                    title="Copy full 40-char SHA"
+                  >
+                    <Copy size={10} />
+                    <span>{copiedHash === selectedCommit.hash ? 'Copied' : 'Copy SHA'}</span>
+                  </button>
+                </div>
                 <button className="close-btn" onClick={() => setSelectedCommit(null)}>
                   ✕
                 </button>
               </div>
+
               <p className="drawer-message">{selectedCommit.message}</p>
               <div className="drawer-meta">
                 <span>By {selectedCommit.authorName} &lt;{selectedCommit.authorEmail}&gt;</span>
                 <span>{new Date(selectedCommit.date).toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+
+              {/* Action Buttons for Commit */}
+              <div className="commit-action-strip">
                 <button
                   className="details-btn glass-interactive"
                   onClick={() => void handleCommitAction('cherryPick', selectedCommit.hash)}
+                  title="Cherry-pick this commit into current branch"
                 >
                   Cherry-Pick
                 </button>
                 <button
                   className="details-btn glass-interactive"
                   onClick={() => void handleCommitAction('revert', selectedCommit.hash)}
+                  title="Create revert commit"
                 >
                   Revert
                 </button>
+                <button
+                  className="details-btn glass-interactive"
+                  onClick={() => setNewBranchAtCommit({ hash: selectedCommit.hash, name: '' })}
+                  title="Create branch pointing to this commit"
+                >
+                  Branch Here
+                </button>
+                <button
+                  className="details-btn glass-interactive"
+                  onClick={() => {
+                    setNewTagName(`v-${selectedCommit.shortHash}`)
+                    setShowTagCreateDrawer(true)
+                  }}
+                  title="Create tag on this commit"
+                >
+                  Tag Here
+                </button>
+                <button
+                  className="details-btn glass-interactive reset-btn"
+                  onClick={() => setResetModalCommit(selectedCommit.hash)}
+                  title="Reset HEAD to this commit"
+                >
+                  Reset...
+                </button>
               </div>
-              {commitDetail && commitDetail.files.length > 0 && (
-                <div style={{ marginTop: 8, fontSize: 10.5, maxHeight: 110, overflowY: 'auto' }}>
-                  <div style={{ opacity: 0.65, marginBottom: 3 }}>Changed Files ({commitDetail.files.length}):</div>
-                  {commitDetail.files.map((fp) => (
-                    <div
-                      key={fp}
-                      style={{ cursor: 'pointer', padding: '1px 0', color: '#5AC8FA' }}
-                      onClick={() => onOpenFile?.(fp)}
-                    >
-                      {fp}
-                    </div>
-                  ))}
+
+              {/* Inline Branch Creation at Selected Commit */}
+              {newBranchAtCommit && newBranchAtCommit.hash === selectedCommit.hash && (
+                <div className="inline-branch-form glass-panel">
+                  <input
+                    type="text"
+                    className="branch-name-input glass-input"
+                    placeholder="New branch name..."
+                    value={newBranchAtCommit.name}
+                    onChange={(e) =>
+                      setNewBranchAtCommit({ hash: newBranchAtCommit.hash, name: e.target.value })
+                    }
+                  />
+                  <button
+                    className="sec-action-link"
+                    onClick={handleCreateBranchAtCommit}
+                    disabled={!newBranchAtCommit.name.trim()}
+                  >
+                    Create Branch
+                  </button>
+                  <button className="sec-action-link" onClick={() => setNewBranchAtCommit(null)}>
+                    Cancel
+                  </button>
                 </div>
               )}
+
+              {/* Changed Files Breakdown */}
+              {commitDetail && commitDetail.files.length > 0 && (
+                <div className="commit-files-section">
+                  <div className="files-header-label">
+                    <span>CHANGED FILES ({commitDetail.files.length})</span>
+                  </div>
+                  <div className="commit-files-list custom-scrollbar">
+                    {commitDetail.files.map((fp) => (
+                      <div
+                        key={fp}
+                        className="commit-file-item glass-interactive"
+                        onClick={() => onOpenFile?.(fp)}
+                      >
+                        <FileCode size={11} color="#64D2FF" />
+                        <span className="file-name">{fp}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reset Confirmation Modal */}
+          {resetModalCommit && (
+            <div className="dispatch-modal-overlay">
+              <div className="dispatch-modal glass-panel" style={{ maxWidth: 360 }}>
+                <div className="dispatch-modal-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <AlertTriangle size={14} color="#FF453A" />
+                    <span>Reset HEAD to Commit</span>
+                  </div>
+                  <button className="close-btn" onClick={() => setResetModalCommit(null)}>
+                    ✕
+                  </button>
+                </div>
+
+                <div className="dispatch-modal-body">
+                  <p style={{ fontSize: 11, color: '#CBD5E1', margin: '0 0 10px' }}>
+                    Reset current branch to <strong>{resetModalCommit.slice(0, 10)}</strong>:
+                  </p>
+                  <label className="input-label">Reset Mode:</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="resetMode"
+                        checked={resetMode === 'soft'}
+                        onChange={() => setResetMode('soft')}
+                      />
+                      <span><strong>Soft:</strong> Keep working tree & staged files</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="resetMode"
+                        checked={resetMode === 'mixed'}
+                        onChange={() => setResetMode('mixed')}
+                      />
+                      <span><strong>Mixed:</strong> Keep files unstaged in working tree</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#FF453A' }}>
+                      <input
+                        type="radio"
+                        name="resetMode"
+                        checked={resetMode === 'hard'}
+                        onChange={() => setResetMode('hard')}
+                      />
+                      <span><strong>Hard:</strong> Discard all changes (irreversible)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="dispatch-modal-footer">
+                  <button
+                    className="dispatch-cancel-btn glass-interactive"
+                    onClick={() => setResetModalCommit(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="dispatch-confirm-btn glass-interactive"
+                    style={{ background: resetMode === 'hard' ? '#FF453A' : undefined }}
+                    onClick={handleResetToCommit}
+                  >
+                    Confirm Reset
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -900,6 +1480,16 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 </option>
               ))}
             </select>
+
+            <button
+              className={`run-dispatch-btn glass-interactive ${isLiveWatching ? 'active-watch' : ''}`}
+              onClick={() => setIsLiveWatching((w) => !w)}
+              title={isLiveWatching ? 'Live Watch active (polling every 3.5s)' : 'Click to enable live watching'}
+            >
+              <Radio size={11} className={isLiveWatching ? 'spinner' : ''} />
+              <span>{isLiveWatching ? 'WATCHING' : 'WATCH'}</span>
+            </button>
+
             <button
               className="run-dispatch-btn glass-interactive"
               onClick={() => void gitWorkflowService.loadWorkspaceWorkflows(workspacePath)}
@@ -908,12 +1498,13 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
               <RotateCw size={11} />
               <span>{workflowDataSource === 'live-gh' ? 'LIVE' : workflowDataSource === 'github-api' ? 'API' : workflowDataSource === 'local-yaml' ? 'YAML' : 'SYNC'}</span>
             </button>
+
             <button
-              className="run-dispatch-btn glass-interactive"
+              className="run-dispatch-btn glass-interactive primary"
               onClick={() => setIsDispatchModalOpen(true)}
             >
               <Play size={11} fill="currentColor" />
-              <span>Run Workflow</span>
+              <span>Run</span>
             </button>
           </div>
 
@@ -970,11 +1561,20 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                   <div className="details-actions">
                     {selectedRun.status === 'in_progress' && (
                       <button
-                        className="details-btn glass-interactive"
+                        className="details-btn glass-interactive cancel-btn"
                         onClick={() => void gitWorkflowService.cancelWorkflowAsync(selectedRun.id)}
                         title="Cancel running workflow"
                       >
                         <Square size={10} /> Cancel
+                      </button>
+                    )}
+                    {selectedRun.conclusion === 'failure' && (
+                      <button
+                        className="details-btn glass-interactive rerun-failed-btn"
+                        onClick={() => void handleRerunFailedJobs(selectedRun.id)}
+                        title="Re-run only failed jobs in workflow"
+                      >
+                        <RotateCw size={10} /> Re-run Failed
                       </button>
                     )}
                     <button
@@ -982,7 +1582,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                       onClick={() => void gitWorkflowService.rerunWorkflowAsync(selectedRun.id)}
                       title="Re-run all jobs in workflow"
                     >
-                      <RotateCw size={11} /> Re-run
+                      <RotateCw size={11} /> Re-run All
                     </button>
                   </div>
                 </div>
@@ -1015,7 +1615,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
               {selectedJob && (
                 <div className="job-steps-box">
                   <div className="steps-header">
-                    <span>STEPS FOR {selectedJob.runner.toUpperCase()}</span>
+                    <span>STEPS ({selectedJob.name})</span>
                     <span className="steps-duration">{selectedJob.durationSeconds}s</span>
                   </div>
                   <div className="steps-list">
@@ -1027,6 +1627,8 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                             <RotateCw size={11} className="spinner cyan" />
                           ) : step.conclusion === 'success' ? (
                             <Check size={11} color="#30D158" />
+                          ) : step.conclusion === 'failure' ? (
+                            <XCircle size={11} color="#FF453A" />
                           ) : (
                             <Clock size={11} color="rgba(255,255,255,0.4)" />
                           )}
@@ -1039,11 +1641,20 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 </div>
               )}
 
-              {/* Real-time Terminal Log Viewer */}
+              {/* Real-time Terminal Log Viewer with Failed Logs Switcher */}
               <div className="workflow-log-viewer">
                 <div className="log-viewer-header">
-                  <Terminal size={12} className="log-term-icon" />
-                  <span>Execution Logs ({selectedJob?.name})</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Terminal size={12} className="log-term-icon" />
+                    <span>Logs: {selectedJob?.name || selectedRun.name}</span>
+                  </div>
+                  <button
+                    className={`log-filter-btn ${showingFailedLogsOnly ? 'active' : ''}`}
+                    onClick={handleToggleFailedLogs}
+                    title="Toggle failed step logs only vs full logs"
+                  >
+                    <span>{showingFailedLogsOnly ? 'Failed Steps Only' : 'All Logs'}</span>
+                  </button>
                 </div>
                 <div className="log-terminal custom-scrollbar">
                   {jobLogs.map((line, idx) => (
@@ -1058,6 +1669,8 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                           ? 'running'
                           : line.includes('[INFO]')
                           ? 'info'
+                          : line.toLowerCase().includes('error') || line.includes('FAIL')
+                          ? 'error'
                           : ''
                       }`}
                     >
@@ -1066,6 +1679,149 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. GitHub Pull Requests Tab */}
+      {activeTab === 'prs' && (
+        <div className="git-content prs-mode custom-scrollbar">
+          <div className="sub-view-toolbar glass-panel">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GitPullRequest size={13} color="#BF5AF2" />
+              <span style={{ fontWeight: 600, fontSize: 11 }}>PULL REQUESTS</span>
+            </div>
+            <button
+              className="sec-action-link"
+              onClick={() => {
+                setLoadingGhData(true)
+                gitWorkflowService
+                  .fetchPullRequestsAsync(workspacePath)
+                  .then((prs) => setPullRequests(prs))
+                  .finally(() => setLoadingGhData(false))
+              }}
+            >
+              <RotateCw size={11} className={loadingGhData ? 'spinner' : ''} />
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          {loadingGhData ? (
+            <div className="git-view-empty">
+              <RotateCw size={16} className="spinner" />
+              <span>Fetching pull requests via GitHub CLI...</span>
+            </div>
+          ) : pullRequests.length === 0 ? (
+            <div className="empty-hint" style={{ padding: 24, textAlign: 'center' }}>
+              No open pull requests found for this repository.
+            </div>
+          ) : (
+            <div className="pr-list-container">
+              {pullRequests.map((pr) => (
+                <div key={pr.number} className="pr-card glass-panel">
+                  <div className="pr-card-header">
+                    <span className="pr-number">#{pr.number}</span>
+                    <span className="pr-title">{pr.title}</span>
+                    <span className={`pr-state-badge ${pr.state.toLowerCase()}`}>{pr.state}</span>
+                  </div>
+                  <div className="pr-card-meta">
+                    <span>By @{pr.author.login}</span>
+                    <span>{pr.headRefName} → {pr.baseRefName}</span>
+                    <span>{new Date(pr.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="pr-card-actions">
+                    <button
+                      className="pr-action-btn primary"
+                      onClick={() => handleCheckoutPr(pr.number)}
+                      title={`Checkout branch ${pr.headRefName}`}
+                    >
+                      <GitBranch size={11} />
+                      <span>Checkout Branch</span>
+                    </button>
+                    {pr.url && (
+                      <button
+                        className="pr-action-btn secondary"
+                        onClick={() => window.open(pr.url, '_blank')}
+                        title="View on GitHub"
+                      >
+                        <ExternalLink size={11} />
+                        <span>View PR</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 5. GitHub Releases Tab */}
+      {activeTab === 'releases' && (
+        <div className="git-content releases-mode custom-scrollbar">
+          <div className="sub-view-toolbar glass-panel">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Tag size={13} color="#FFD60A" />
+              <span style={{ fontWeight: 600, fontSize: 11 }}>GITHUB RELEASES</span>
+            </div>
+            <button
+              className="sec-action-link"
+              onClick={() => {
+                setLoadingGhData(true)
+                gitWorkflowService
+                  .fetchReleasesAsync(workspacePath)
+                  .then((rels) => setReleases(rels))
+                  .finally(() => setLoadingGhData(false))
+              }}
+            >
+              <RotateCw size={11} className={loadingGhData ? 'spinner' : ''} />
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          {loadingGhData ? (
+            <div className="git-view-empty">
+              <RotateCw size={16} className="spinner" />
+              <span>Fetching releases via GitHub CLI...</span>
+            </div>
+          ) : releases.length === 0 ? (
+            <div className="empty-hint" style={{ padding: 24, textAlign: 'center' }}>
+              No releases found for this repository.
+            </div>
+          ) : (
+            <div className="pr-list-container">
+              {releases.map((rel) => (
+                <div key={rel.tagName} className="pr-card glass-panel">
+                  <div className="pr-card-header">
+                    <Tag size={12} color="#FFD60A" />
+                    <span className="pr-title" style={{ fontWeight: 700 }}>
+                      {rel.name || rel.tagName}
+                    </span>
+                    {rel.isPrerelease && <span className="pr-state-badge prerelease">Pre-release</span>}
+                    {rel.isDraft && <span className="pr-state-badge draft">Draft</span>}
+                  </div>
+                  <div className="pr-card-meta">
+                    <span>Tag: <strong>{rel.tagName}</strong></span>
+                    <span>Published: {new Date(rel.publishedAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="pr-card-actions">
+                    <button
+                      className="pr-action-btn secondary"
+                      onClick={() =>
+                        window.open(
+                          `https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases/tag/${rel.tagName}`,
+                          '_blank'
+                        )
+                      }
+                      title="View release notes and download assets"
+                    >
+                      <ExternalLink size={11} />
+                      <span>Release Notes & Assets</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -1114,7 +1870,7 @@ export const GitGraphView: React.FC<GitGraphViewProps> = ({ workspacePath, onOpe
                 className="dispatch-input text"
                 value={dispatchTagInput}
                 onChange={(e) => setDispatchTagInput(e.target.value)}
-                placeholder="v4.1.0"
+                placeholder="v6.1.0"
               />
             </div>
 

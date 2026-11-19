@@ -133,9 +133,13 @@ class CryptoDevToolsService {
 
     const encHeader = this.base64UrlEncode(JSON.stringify(header))
     const encPayload = this.base64UrlEncode(JSON.stringify(payload))
-    const mockSignature = this.sha256Hex(`${encHeader}.${encPayload}.indoctrinated-secret`).substring(0, 43)
+    const sigHex = this.sha256Hex(`${encHeader}.${encPayload}.indoctrinated-secret`)
+    const sigBytes = new Uint8Array(sigHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [])
+    let bin = ''
+    sigBytes.forEach((b) => (bin += String.fromCharCode(b)))
+    const sigB64Url = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
-    return `${encHeader}.${encPayload}.${mockSignature}`
+    return `${encHeader}.${encPayload}.${sigB64Url}`
   }
 
   /**

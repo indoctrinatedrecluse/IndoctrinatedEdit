@@ -523,3 +523,186 @@ export async function getRemoteInfo(cwd: string): Promise<{ url: string; owner?:
     return { url: '' }
   }
 }
+
+export interface GitTagEntry {
+  name: string
+  hash: string
+  date: string
+  message: string
+}
+
+export async function listTags(cwd: string): Promise<GitTagEntry[]> {
+  try {
+    const delimiter = '~~~'
+    const format = `%(refname:short)${delimiter}%(objectname:short)${delimiter}%(creatordate:iso8601)${delimiter}%(contents:subject)`
+    const raw = await runGit(['tag', '-l', `--format=${format}`, '--sort=-creatordate'], cwd)
+    if (!raw) return []
+    return raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        const [name, hash, date, message] = line.split(delimiter)
+        return {
+          name: name || '',
+          hash: hash || '',
+          date: date || '',
+          message: message || '',
+        }
+      })
+  } catch {
+    return []
+  }
+}
+
+export async function createTag(
+  cwd: string,
+  tagName: string,
+  message?: string,
+  commitHash?: string
+): Promise<GitActionResult> {
+  const safeTag = tagName.trim()
+  if (!safeTag) return { success: false, error: 'Tag name cannot be empty' }
+  const args = message?.trim()
+    ? ['tag', '-a', safeTag, '-m', message.trim()]
+    : ['tag', safeTag]
+  if (commitHash?.trim()) {
+    args.push(commitHash.trim())
+  }
+  return runGitAction(args, cwd)
+}
+
+export async function deleteTag(cwd: string, tagName: string): Promise<GitActionResult> {
+  return runGitAction(['tag', '-d', tagName.trim()], cwd)
+}
+
+export async function resetToCommit(
+  cwd: string,
+  hash: string,
+  mode: 'soft' | 'mixed' | 'hard' = 'mixed'
+): Promise<GitActionResult> {
+  return runGitAction(['reset', `--${mode}`, hash.trim()], cwd)
+}
+
+export interface GhCliStatus {
+  installed: boolean
+  version?: string
+  authenticated: boolean
+  account?: string
+  error?: string
+}
+
+export async function checkGhCli(cwd: string): Promise<GhCliStatus> {
+  try {
+    const { stdout: verOut } = await execFileAsync('gh', ['--version'], { cwd, timeout: 5000, windowsHide: true })
+    const verMatch = verOut.match(/gh version\s+([0-9.]+)/i)
+    const version = verMatch ? verMatch[1] : verOut.split('\n')[0].trim()
+
+    let authenticated = false
+    let account = ''
+    try {
+      const { stdout: authOut, stderr: authErr } = await execFileAsync('gh', ['auth', 'status'], {
+        cwd,
+        timeout: 6000,
+        windowsHide: true,
+      })
+      const combined = `${authOut}\n${authErr}`
+      authenticated = combined.includes('Logged in to') || combined.includes('Active account: true')
+      const acctMatch = combined.match(/account\s+([a-zA-Z0-9_-]+)/i) || combined.match(/Logged in to [^\s]+ account\s+([a-zA-Z0-9_-]+)/i)
+      if (acctMatch) account = acctMatch[1]
+    } catch (authErr: any) {
+      const msg = String(authErr?.message || authErr)
+      authenticated = msg.includes('Logged in to')
+    }
+
+    return {
+      installed: true,
+      version,
+      authenticated,
+      account,
+    }
+  } catch (err: any) {
+    return {
+      installed: false,
+      authenticated: false,
+      error: err?.message || 'GitHub CLI (gh) executable not found in PATH',
+    }
+  }
+}
+
+export async function ghPrList(cwd: string, limit = 20): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  try {
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['pr', 'list', '--limit', String(limit), '--json', 'number,title,author,state,headRefName,baseRefName,createdAt,url,isDraft'],
+      { cwd, timeout: 12000, windowsHide: true }
+    )
+    const data = JSON.parse(stdout || '[]')
+    return { success: true, data }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to list pull requests' }
+  }
+}
+
+export async function ghPrCheckout(cwd: string, prNumber: number): Promise<GitActionResult> {
+  try {
+    const { stdout } = await execFileAsync('gh', ['pr', 'checkout', String(prNumber)], {
+      cwd,
+      timeout: 20000,
+      windowsHide: true,
+    })
+    return { success: true, output: stdout.trim() }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'gh pr checkout failed' }
+  }
+}
+
+export async function ghReleaseList(cwd: string, limit = 15): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  try {
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['release', 'list', '--limit', String(limit), '--json', 'tagName,name,publishedAt,isDraft,isPrerelease'],
+      { cwd, timeout: 12000, windowsHide: true }
+    )
+    const data = JSON.parse(stdout || '[]')
+    return { success: true, data }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to list GitHub releases' }
+  }
+}
+
+export async function ghRunView(cwd: string, runId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['run', 'view', runId.replace(/[^0-9]/g, ''), '--json', 'jobs,status,conclusion,event,workflowName,headBranch,headSha,url'],
+      { cwd, timeout: 15000, windowsHide: true }
+    )
+    const data = JSON.parse(stdout || '{}')
+    return { success: true, data }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to view workflow run details' }
+  }
+}
+
+export async function ghRunLogs(
+  cwd: string,
+  runId: string,
+  jobId?: string,
+  failedOnly = false
+): Promise<{ success: boolean; logs?: string[]; error?: string }> {
+  try {
+    const args = ['run', 'view', runId.replace(/[^0-9]/g, '')]
+    if (failedOnly) {
+      args.push('--log-failed')
+    } else if (jobId) {
+      args.push('--job', jobId.replace(/[^0-9]/g, ''), '--log')
+    } else {
+      args.push('--log')
+    }
+    const { stdout } = await execFileAsync('gh', args, { cwd, timeout: 20000, maxBuffer: 15 * 1024 * 1024, windowsHide: true })
+    const logs = stdout.split(/\r?\n/).slice(-300)
+    return { success: true, logs }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to fetch workflow run logs' }
+  }
+}

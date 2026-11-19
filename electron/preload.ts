@@ -66,6 +66,16 @@ export interface ElectronGitAPI {
   rebase: (branch: string, cwd?: string) => Promise<ElectronGitActionResult>
   showCommit: (hash: string, cwd?: string) => Promise<{ hash: string; stat: string; files: string[]; diff: string }>
   remoteInfo: (cwd?: string) => Promise<{ url: string; owner?: string; repo?: string }>
+  listTags: (cwd?: string) => Promise<Array<{ name: string; hash: string; date: string; message: string }>>
+  createTag: (tagName: string, message?: string, commitHash?: string, cwd?: string) => Promise<ElectronGitActionResult>
+  deleteTag: (tagName: string, cwd?: string) => Promise<ElectronGitActionResult>
+  resetToCommit: (hash: string, mode: 'soft' | 'mixed' | 'hard', cwd?: string) => Promise<ElectronGitActionResult>
+  checkGhCli: (cwd?: string) => Promise<{ installed: boolean; version?: string; authenticated: boolean; account?: string; error?: string }>
+  ghPrList: (limit?: number, cwd?: string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+  ghPrCheckout: (prNumber: number, cwd?: string) => Promise<ElectronGitActionResult>
+  ghReleaseList: (limit?: number, cwd?: string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+  ghRunView: (runId: string, cwd?: string) => Promise<{ success: boolean; data?: any; error?: string }>
+  ghRunLogs: (runId: string, jobId?: string, failedOnly?: boolean, cwd?: string) => Promise<{ success: boolean; logs?: string[]; error?: string }>
 }
 
 export interface ElectronJupyterAPI {
@@ -508,6 +518,16 @@ const api: ElectronAPI = {
     rebase: (branch: string, cwd?: string) => ipcRenderer.invoke('git:rebase', branch, cwd),
     showCommit: (hash: string, cwd?: string) => ipcRenderer.invoke('git:showCommit', hash, cwd),
     remoteInfo: (cwd?: string) => ipcRenderer.invoke('git:remoteInfo', cwd),
+    listTags: (cwd?: string) => ipcRenderer.invoke('git:listTags', cwd),
+    createTag: (tagName: string, message?: string, commitHash?: string, cwd?: string) => ipcRenderer.invoke('git:createTag', tagName, message, commitHash, cwd),
+    deleteTag: (tagName: string, cwd?: string) => ipcRenderer.invoke('git:deleteTag', tagName, cwd),
+    resetToCommit: (hash: string, mode: 'soft' | 'mixed' | 'hard', cwd?: string) => ipcRenderer.invoke('git:resetToCommit', hash, mode, cwd),
+    checkGhCli: (cwd?: string) => ipcRenderer.invoke('git:checkGhCli', cwd),
+    ghPrList: (limit?: number, cwd?: string) => ipcRenderer.invoke('git:ghPrList', limit, cwd),
+    ghPrCheckout: (prNumber: number, cwd?: string) => ipcRenderer.invoke('git:ghPrCheckout', prNumber, cwd),
+    ghReleaseList: (limit?: number, cwd?: string) => ipcRenderer.invoke('git:ghReleaseList', limit, cwd),
+    ghRunView: (runId: string, cwd?: string) => ipcRenderer.invoke('git:ghRunView', runId, cwd),
+    ghRunLogs: (runId: string, jobId?: string, failedOnly?: boolean, cwd?: string) => ipcRenderer.invoke('git:ghRunLogs', runId, jobId, failedOnly, cwd),
   },
 
   debug: {

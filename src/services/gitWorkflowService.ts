@@ -3,6 +3,7 @@
  * Inspects repository workflows, triggers manual dispatches, monitors active runs,
  * visualizes matrix jobs, and streams colorized step execution logs.
  */
+import { notificationService } from './notificationService'
 
 export type WorkflowRunStatus = 'completed' | 'in_progress' | 'queued' | 'failed' | 'cancelled'
 export type WorkflowConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | null
@@ -58,6 +59,34 @@ export interface WorkflowRun {
   startedAt: string
   durationFormatted: string
   jobs: WorkflowJob[]
+}
+
+export interface GitHubPullRequest {
+  number: number
+  title: string
+  author: { login: string }
+  state: 'OPEN' | 'CLOSED' | 'MERGED'
+  headRefName: string
+  baseRefName: string
+  createdAt: string
+  url: string
+  isDraft: boolean
+}
+
+export interface GitHubReleaseItem {
+  tagName: string
+  name: string
+  publishedAt: string
+  isDraft: boolean
+  isPrerelease: boolean
+}
+
+export interface GhCliStatus {
+  installed: boolean
+  version?: string
+  authenticated: boolean
+  account?: string
+  error?: string
 }
 
 export class GitWorkflowService {
@@ -256,22 +285,133 @@ export class GitWorkflowService {
     this.notify()
   }
 
-  public async fetchJobLogsAsync(runId: string, jobId: string): Promise<string[]> {
+  public async checkGhCliStatus(workspacePath?: string): Promise<GhCliStatus> {
+    const cwd = workspacePath || this.activeWorkspacePath
+    if (typeof window === 'undefined' || !window.electronAPI?.git?.checkGhCli) {
+      return { installed: false, authenticated: false }
+    }
+    const res = await window.electronAPI.git.checkGhCli(cwd)
+    if (!res.installed) {
+      notificationService.notifyGitHubCliMissing()
+    }
+    return res
+  }
+
+  public async fetchRunDetailsAsync(runId: string): Promise<WorkflowRun | null> {
+    const run = this.runs.find((r) => r.id === runId)
+    if (!run) return null
+
+    if (this.dataSource === 'live-gh' && this.activeWorkspacePath && window.electronAPI?.git?.ghRunView) {
+      try {
+        const res = await window.electronAPI.git.ghRunView(runId, this.activeWorkspacePath)
+        if (res.success && res.data) {
+          const d = res.data
+          if (Array.isArray(d.jobs) && d.jobs.length > 0) {
+            run.jobs = d.jobs.map((j: any) => ({
+              id: String(j.databaseId || j.name),
+              name: j.name || 'Job',
+              runner: j.name?.includes('ubuntu') ? 'ubuntu' : j.name?.includes('windows') ? 'windows' : 'github-hosted',
+              status: (j.status === 'completed' ? (j.conclusion === 'failure' ? 'failed' : j.conclusion === 'cancelled' ? 'cancelled' : 'completed') : j.status === 'queued' ? 'queued' : 'in_progress') as WorkflowRunStatus,
+              conclusion: (j.conclusion || null) as WorkflowConclusion,
+              durationSeconds: j.startedAt && j.completedAt ? Math.round((new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime()) / 1000) : 0,
+              steps: (j.steps || []).map((s: any) => ({
+                number: s.number,
+                name: s.name,
+                status: (s.status === 'completed' ? 'completed' : s.status === 'queued' ? 'queued' : 'in_progress') as any,
+                conclusion: (s.conclusion || null) as WorkflowConclusion,
+                durationSeconds: s.startedAt && s.completedAt ? Math.round((new Date(s.completedAt).getTime() - new Date(s.startedAt).getTime()) / 1000) : 0,
+              })),
+            }))
+            this.notify()
+          }
+        }
+      } catch {
+        // fallback to existing run state
+      }
+    }
+    return run
+  }
+
+  public async fetchJobLogsAsync(runId: string, jobId?: string, failedOnly = false): Promise<string[]> {
+    if (this.dataSource === 'live-gh' && this.activeWorkspacePath && typeof window !== 'undefined' && window.electronAPI?.git?.ghRunLogs) {
+      const res = await window.electronAPI.git.ghRunLogs(runId, jobId, failedOnly, this.activeWorkspacePath)
+      if (res.success && res.logs && res.logs.length > 0) {
+        const key = `${runId}:${jobId || 'all'}:${failedOnly ? 'failed' : 'all'}`
+        this.liveJobLogsCache.set(key, res.logs)
+        this.notify()
+        return res.logs
+      }
+      return [`[INFO] Could not fetch logs via gh CLI: ${res.error || 'Run may still be queued or unauthenticated'}`]
+    }
+    return this.getJobLogs(runId, jobId || '')
+  }
+
+  public async rerunFailedJobsAsync(runId: string): Promise<{ ok: boolean; message: string }> {
     if (this.dataSource === 'live-gh' && this.activeWorkspacePath && typeof window !== 'undefined' && window.electronAPI?.workspace?.execCommand) {
       const res = await window.electronAPI.workspace.execCommand({
-        command: `gh run view ${runId} --log`,
+        command: `gh run rerun ${runId.replace(/[^0-9]/g, '')} --failed`,
         cwd: this.activeWorkspacePath,
         timeoutMs: 15000,
       })
-      if (res.exitCode === 0 && res.stdout.trim()) {
-        const lines = res.stdout.split(/\r?\n/).slice(-250)
-        this.liveJobLogsCache.set(`${runId}:${jobId}`, lines)
-        this.notify()
-        return lines
+      if (res.exitCode === 0) {
+        await this.loadWorkspaceWorkflows(this.activeWorkspacePath)
+        return { ok: true, message: `Re-run requested for failed jobs in #${runId}` }
       }
-      return [`[INFO] Could not fetch logs via gh CLI: ${res.stderr.trim() || 'Run may still be queued or unauthenticated'}`]
+      return { ok: false, message: res.stderr.trim() || 'gh run rerun --failed failed' }
     }
-    return this.getJobLogs(runId, jobId)
+    return { ok: false, message: 'GitHub CLI not available for live re-run' }
+  }
+
+  public async fetchPullRequestsAsync(workspacePath?: string): Promise<GitHubPullRequest[]> {
+    const cwd = workspacePath || this.activeWorkspacePath
+    if (typeof window === 'undefined' || !window.electronAPI?.git?.ghPrList) return []
+    try {
+      const res = await window.electronAPI.git.ghPrList(20, cwd)
+      if (res.success && Array.isArray(res.data)) {
+        return res.data.map((pr: any) => ({
+          number: Number(pr.number),
+          title: pr.title || `PR #${pr.number}`,
+          author: { login: pr.author?.login || 'unknown' },
+          state: pr.state || 'OPEN',
+          headRefName: pr.headRefName || '',
+          baseRefName: pr.baseRefName || 'master',
+          createdAt: pr.createdAt || new Date().toISOString(),
+          url: pr.url || '',
+          isDraft: Boolean(pr.isDraft),
+        }))
+      }
+    } catch {}
+    return []
+  }
+
+  public async checkoutPullRequestAsync(prNumber: number, workspacePath?: string): Promise<{ ok: boolean; message: string }> {
+    const cwd = workspacePath || this.activeWorkspacePath
+    if (typeof window === 'undefined' || !window.electronAPI?.git?.ghPrCheckout) {
+      return { ok: false, message: 'GitHub CLI is not available' }
+    }
+    const res = await window.electronAPI.git.ghPrCheckout(prNumber, cwd)
+    if (res.success) {
+      return { ok: true, message: `Checked out PR #${prNumber}${res.output ? `: ${res.output}` : ''}` }
+    }
+    return { ok: false, message: res.error || `Failed to checkout PR #${prNumber}` }
+  }
+
+  public async fetchReleasesAsync(workspacePath?: string): Promise<GitHubReleaseItem[]> {
+    const cwd = workspacePath || this.activeWorkspacePath
+    if (typeof window === 'undefined' || !window.electronAPI?.git?.ghReleaseList) return []
+    try {
+      const res = await window.electronAPI.git.ghReleaseList(15, cwd)
+      if (res.success && Array.isArray(res.data)) {
+        return res.data.map((rel: any) => ({
+          tagName: rel.tagName || '',
+          name: rel.name || rel.tagName || '',
+          publishedAt: rel.publishedAt || new Date().toISOString(),
+          isDraft: Boolean(rel.isDraft),
+          isPrerelease: Boolean(rel.isPrerelease),
+        }))
+      }
+    } catch {}
+    return []
   }
 
   public async triggerWorkflowAsync(

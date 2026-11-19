@@ -1,7 +1,10 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell,
+  BellOff,
+  Volume2,
+  VolumeX,
   X,
   AlertTriangle,
   AlertCircle,
@@ -10,8 +13,19 @@ import {
   Trash2,
   ExternalLink,
   CheckCheck,
+  Search,
+  Copy,
+  ChevronDown,
+  ChevronUp,
+  GitBranch,
+  Cpu,
+  Sparkles,
+  Terminal,
 } from 'lucide-react'
-import { NotificationItem } from '../../services/notificationService'
+import {
+  notificationService,
+  NotificationItem,
+} from '../../services/notificationService'
 
 interface NotificationCenterProps {
   isOpen: boolean
@@ -22,6 +36,8 @@ interface NotificationCenterProps {
   onMarkAllAsRead: () => void
 }
 
+type FilterCategory = 'all' | 'unread' | 'errors' | 'git' | 'compiler'
+
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   isOpen,
   onClose,
@@ -31,13 +47,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   onMarkAllAsRead,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null)
-
-  // Mark all as read when opening
-  useEffect(() => {
-    if (isOpen) {
-      onMarkAllAsRead()
-    }
-  }, [isOpen, onMarkAllAsRead])
+  const [filterCategory, setFilterCategory] = useState<FilterCategory>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({})
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [soundEnabled, setSoundEnabled] = useState(() => notificationService.isSoundEnabled())
+  const [dndEnabled, setDndEnabled] = useState(() => notificationService.isDndEnabled())
 
   // Click outside to close
   useEffect(() => {
@@ -64,6 +79,52 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     }
   }, [isOpen, onClose])
 
+  const toggleSound = () => {
+    const next = !soundEnabled
+    notificationService.setSoundEnabled(next)
+    setSoundEnabled(next)
+  }
+
+  const toggleDnd = () => {
+    const next = !dndEnabled
+    notificationService.setDndEnabled(next)
+    setDndEnabled(next)
+  }
+
+  const toggleDetails = (id: string) => {
+    setExpandedDetails((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const copyDetails = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedId(id)
+      setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 2000)
+    } catch {}
+  }
+
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter((item) => {
+      // Category filter
+      if (filterCategory === 'unread' && item.read) return false
+      if (filterCategory === 'errors' && item.type !== 'error' && item.type !== 'warning') return false
+      if (filterCategory === 'git' && item.category !== 'git' && !item.source?.toLowerCase().includes('git')) return false
+      if (filterCategory === 'compiler' && item.category !== 'compiler' && !item.source?.toLowerCase().includes('compiler') && !item.source?.toLowerCase().includes('toolchain')) return false
+
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase()
+        const matchTitle = item.title.toLowerCase().includes(q)
+        const matchMsg = item.message.toLowerCase().includes(q)
+        const matchSource = (item.source || '').toLowerCase().includes(q)
+        const matchDetails = (item.details || '').toLowerCase().includes(q)
+        if (!matchTitle && !matchMsg && !matchSource && !matchDetails) return false
+      }
+
+      return true
+    })
+  }, [notifications, filterCategory, searchQuery])
+
   const formatTime = (ts: number) => {
     const diff = Math.floor((Date.now() - ts) / 1000)
     if (diff < 30) return 'Just now'
@@ -87,6 +148,22 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     }
   }
 
+  const renderCategoryIcon = (category?: string) => {
+    switch (category) {
+      case 'git':
+        return <GitBranch size={9} />
+      case 'compiler':
+        return <Cpu size={9} />
+      case 'ai':
+        return <Sparkles size={9} />
+      default:
+        return <Terminal size={9} />
+    }
+  }
+
+  const unreadCount = notifications.filter((n) => !n.read).length
+  const errorCount = notifications.filter((n) => n.type === 'error' || n.type === 'warning').length
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -104,9 +181,37 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               <Bell size={14} className="notif-bell-icon" />
               <span className="notif-title">NOTIFICATIONS</span>
               <span className="notif-count-pill">{notifications.length}</span>
+              {unreadCount > 0 && <span className="notif-unread-pill">{unreadCount} new</span>}
             </div>
 
             <div className="notif-header-actions">
+              <button
+                className={`notif-action-btn ${!soundEnabled ? 'active-mute' : ''}`}
+                onClick={toggleSound}
+                title={soundEnabled ? 'Mute Chime Sound' : 'Enable Chime Sound'}
+              >
+                {soundEnabled ? <Volume2 size={12} /> : <VolumeX size={12} color="#FF9F0A" />}
+              </button>
+
+              <button
+                className={`notif-action-btn ${dndEnabled ? 'active-dnd' : ''}`}
+                onClick={toggleDnd}
+                title={dndEnabled ? 'Do Not Disturb: Active' : 'Enable Do Not Disturb'}
+              >
+                {dndEnabled ? <BellOff size={12} color="#FF453A" /> : <Bell size={12} />}
+              </button>
+
+              {unreadCount > 0 && (
+                <button
+                  className="notif-action-btn"
+                  onClick={onMarkAllAsRead}
+                  title="Mark All as Read"
+                >
+                  <CheckCheck size={12} />
+                  <span>Read</span>
+                </button>
+              )}
+
               {notifications.length > 0 && (
                 <button
                   className="notif-action-btn dismiss-all-btn"
@@ -114,9 +219,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                   title="Dismiss All Notifications"
                 >
                   <Trash2 size={12} />
-                  <span>Dismiss All</span>
                 </button>
               )}
+
               <button
                 className="notif-action-btn close-panel-btn"
                 onClick={onClose}
@@ -127,34 +232,100 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             </div>
           </div>
 
+          {/* Search & Category Filter Toolbar */}
+          <div className="notif-toolbar">
+            <div className="notif-search-box glass-input">
+              <Search size={11} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search alerts & logs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button className="search-clear-btn" onClick={() => setSearchQuery('')}>
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+
+            <div className="notif-tabs-row">
+              <button
+                className={`notif-tab ${filterCategory === 'all' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('all')}
+              >
+                All
+              </button>
+              <button
+                className={`notif-tab ${filterCategory === 'unread' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('unread')}
+              >
+                Unread {unreadCount > 0 && `(${unreadCount})`}
+              </button>
+              <button
+                className={`notif-tab ${filterCategory === 'errors' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('errors')}
+              >
+                Errors & Warnings {errorCount > 0 && `(${errorCount})`}
+              </button>
+              <button
+                className={`notif-tab ${filterCategory === 'git' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('git')}
+              >
+                Git & CI
+              </button>
+              <button
+                className={`notif-tab ${filterCategory === 'compiler' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('compiler')}
+              >
+                Compilers
+              </button>
+            </div>
+          </div>
+
           {/* Body */}
-          <div className="notif-body">
-            {notifications.length === 0 ? (
+          <div className="notif-body custom-scrollbar">
+            {filteredNotifications.length === 0 ? (
               <div className="notif-empty-state">
                 <div className="empty-bell-glow">
                   <CheckCheck size={28} className="empty-check-icon" />
                 </div>
-                <span className="empty-title">All Caught Up</span>
-                <span className="empty-desc">No pending notifications or system alerts.</span>
+                <span className="empty-title">
+                  {searchQuery ? 'No Matching Notifications' : 'All Caught Up'}
+                </span>
+                <span className="empty-desc">
+                  {searchQuery
+                    ? `No notification matched "${searchQuery}".`
+                    : 'No pending alerts, issues, or background warnings.'}
+                </span>
               </div>
             ) : (
               <div className="notif-list">
-                {notifications.map((item) => (
+                {filteredNotifications.map((item) => (
                   <motion.div
                     key={item.id}
                     layout
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className={`notif-card notif-${item.type} glass-interactive`}
+                    className={`notif-card notif-${item.type} ${!item.read ? 'is-unread' : ''} glass-interactive`}
                   >
                     <div className="notif-card-header">
                       <div className="notif-card-left">
                         {renderIcon(item.type)}
                         <span className="notif-card-title">{item.title}</span>
+                        {item.category && (
+                          <span className="notif-cat-chip">
+                            {renderCategoryIcon(item.category)}
+                            <span>{item.category.toUpperCase()}</span>
+                          </span>
+                        )}
+                        {!item.read && <span className="unread-dot" />}
                       </div>
                       <div className="notif-card-right">
-                        <span className="notif-card-time">{formatTime(item.timestamp)}</span>
+                        <span className="notif-card-time" title={new Date(item.timestamp).toLocaleString()}>
+                          {formatTime(item.timestamp)}
+                        </span>
                         <button
                           className="notif-dismiss-btn"
                           onClick={() => onDismiss(item.id)}
@@ -166,6 +337,35 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                     </div>
 
                     <p className="notif-card-message">{item.message}</p>
+
+                    {/* Expandable Technical Details Drawer */}
+                    {item.details && (
+                      <div className="notif-details-container">
+                        <button
+                          className="notif-toggle-details-btn"
+                          onClick={() => toggleDetails(item.id)}
+                        >
+                          {expandedDetails[item.id] ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                          <span>{expandedDetails[item.id] ? 'Hide Details' : 'Show Error Stack / Logs'}</span>
+                        </button>
+                        {expandedDetails[item.id] && (
+                          <div className="notif-details-content glass-panel">
+                            <div className="details-header">
+                              <span>DIAGNOSTIC OUTPUT</span>
+                              <button
+                                className="copy-details-btn"
+                                onClick={() => copyDetails(item.id, item.details!)}
+                                title="Copy technical details"
+                              >
+                                <Copy size={10} />
+                                <span>{copiedId === item.id ? 'Copied!' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <pre className="details-pre custom-scrollbar">{item.details}</pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="notif-card-footer">
                       {item.source && (
@@ -200,15 +400,15 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               position: absolute;
               top: 46px;
               right: 140px;
-              width: 380px;
+              width: 440px;
               max-width: calc(100vw - 32px);
-              max-height: 480px;
-              border-radius: var(--radius-lg);
-              background: rgba(14, 18, 28, 0.92);
-              backdrop-filter: blur(28px);
-              -webkit-backdrop-filter: blur(28px);
-              border: var(--specular-border);
-              box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+              max-height: 560px;
+              border-radius: var(--radius-lg, 14px);
+              background: rgba(14, 18, 28, 0.94);
+              backdrop-filter: blur(32px);
+              -webkit-backdrop-filter: blur(32px);
+              border: var(--specular-border, 1px solid rgba(255, 255, 255, 0.14));
+              box-shadow: 0 20px 56px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.2);
               z-index: 1200;
               display: flex;
               flex-direction: column;
@@ -232,51 +432,72 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             }
 
             .notif-bell-icon {
-              color: var(--accent-cyan);
+              color: var(--accent-cyan, #00F0FF);
             }
 
             .notif-title {
               font-size: 11px;
               font-weight: 700;
               letter-spacing: 0.6px;
-              color: var(--text-primary);
+              color: var(--text-primary, #F8FAFC);
             }
 
             .notif-count-pill {
-              font-family: var(--font-mono);
-              font-size: 10px;
+              font-family: var(--font-mono, monospace);
+              font-size: 9.5px;
+              font-weight: 700;
+              padding: 1px 6px;
+              border-radius: 999px;
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid rgba(255, 255, 255, 0.12);
+              color: #CBD5E1;
+            }
+
+            .notif-unread-pill {
+              font-family: var(--font-mono, monospace);
+              font-size: 9.5px;
               font-weight: 700;
               padding: 1px 6px;
               border-radius: 999px;
               background: rgba(10, 132, 255, 0.2);
-              border: 1px solid rgba(10, 132, 255, 0.35);
+              border: 1px solid rgba(10, 132, 255, 0.4);
               color: #64D2FF;
             }
 
             .notif-header-actions {
               display: flex;
               align-items: center;
-              gap: 6px;
+              gap: 5px;
             }
 
             .notif-action-btn {
               display: flex;
               align-items: center;
               gap: 4px;
-              font-size: 11px;
+              font-size: 10.5px;
               font-weight: 500;
-              color: var(--text-secondary);
+              color: var(--text-secondary, #94A3B8);
               background: rgba(255, 255, 255, 0.05);
               border: 1px solid rgba(255, 255, 255, 0.08);
-              border-radius: var(--radius-sm);
-              padding: 3px 8px;
+              border-radius: var(--radius-sm, 6px);
+              padding: 3px 7px;
               cursor: pointer;
-              transition: all var(--transition-fast);
+              transition: all var(--transition-fast, 0.15s ease);
             }
 
             .notif-action-btn:hover {
-              color: var(--text-primary);
-              background: rgba(255, 255, 255, 0.1);
+              color: var(--text-primary, #FFF);
+              background: rgba(255, 255, 255, 0.12);
+            }
+
+            .notif-action-btn.active-mute {
+              background: rgba(255, 159, 10, 0.15);
+              border-color: rgba(255, 159, 10, 0.35);
+            }
+
+            .notif-action-btn.active-dnd {
+              background: rgba(255, 69, 58, 0.15);
+              border-color: rgba(255, 69, 58, 0.35);
             }
 
             .dismiss-all-btn:hover {
@@ -289,10 +510,84 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               padding: 4px 6px;
             }
 
+            .notif-toolbar {
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
+              padding: 8px 12px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              background: rgba(0, 0, 0, 0.15);
+            }
+
+            .notif-search-box {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              padding: 4px 8px;
+              border-radius: 6px;
+              background: rgba(255, 255, 255, 0.04);
+              border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            .notif-search-box input {
+              background: transparent;
+              border: none;
+              outline: none;
+              color: #E2E8F0;
+              font-size: 11px;
+              flex: 1;
+            }
+
+            .search-icon {
+              color: rgba(255, 255, 255, 0.4);
+            }
+
+            .search-clear-btn {
+              background: transparent;
+              border: none;
+              color: rgba(255, 255, 255, 0.4);
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              padding: 2px;
+            }
+
+            .notif-tabs-row {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              overflow-x: auto;
+            }
+
+            .notif-tab {
+              background: transparent;
+              border: none;
+              color: #94A3B8;
+              font-size: 10.5px;
+              font-weight: 500;
+              padding: 3px 7px;
+              border-radius: 5px;
+              cursor: pointer;
+              white-space: nowrap;
+              transition: all 0.15s ease;
+            }
+
+            .notif-tab:hover {
+              color: #FFF;
+              background: rgba(255, 255, 255, 0.05);
+            }
+
+            .notif-tab.active {
+              color: #FFF;
+              background: rgba(10, 132, 255, 0.22);
+              border: 1px solid rgba(10, 132, 255, 0.35);
+              font-weight: 600;
+            }
+
             .notif-body {
               padding: 10px;
               overflow-y: auto;
-              max-height: 420px;
+              max-height: 440px;
               display: flex;
               flex-direction: column;
             }
@@ -304,6 +599,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               justify-content: center;
               padding: 36px 16px;
               text-align: center;
+              gap: 8px;
             }
 
             .empty-bell-glow {
@@ -315,8 +611,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               display: flex;
               align-items: center;
               justify-content: center;
-              margin-bottom: 12px;
-              box-shadow: 0 0 20px rgba(48, 209, 88, 0.2);
+              margin-bottom: 4px;
             }
 
             .empty-check-icon {
@@ -325,14 +620,15 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
             .empty-title {
               font-size: 13px;
-              font-weight: 700;
-              color: var(--text-primary);
-              margin-bottom: 4px;
+              font-weight: 600;
+              color: #F8FAFC;
             }
 
             .empty-desc {
               font-size: 11px;
-              color: var(--text-muted);
+              color: #64748B;
+              max-width: 240px;
+              line-height: 1.4;
             }
 
             .notif-list {
@@ -342,35 +638,25 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             }
 
             .notif-card {
+              position: relative;
               padding: 10px 12px;
-              border-radius: var(--radius-md);
-              background: rgba(255, 255, 255, 0.035);
-              border: 1px solid rgba(255, 255, 255, 0.08);
+              border-radius: var(--radius-md, 10px);
+              background: rgba(255, 255, 255, 0.025);
+              border: 1px solid rgba(255, 255, 255, 0.06);
               display: flex;
               flex-direction: column;
-              gap: 6px;
-              transition: all var(--transition-fast);
+              gap: 5px;
+              transition: all var(--transition-fast, 0.15s ease);
+            }
+
+            .notif-card.is-unread {
+              background: rgba(10, 132, 255, 0.05);
+              border-color: rgba(10, 132, 255, 0.22);
             }
 
             .notif-card:hover {
-              border-color: rgba(255, 255, 255, 0.18);
-              background: rgba(255, 255, 255, 0.06);
-            }
-
-            .notif-card.notif-warning {
-              border-left: 3px solid #FFD60A;
-            }
-
-            .notif-card.notif-error {
-              border-left: 3px solid #FF453A;
-            }
-
-            .notif-card.notif-info {
-              border-left: 3px solid #0A84FF;
-            }
-
-            .notif-card.notif-success {
-              border-left: 3px solid #30D158;
+              background: rgba(255, 255, 255, 0.05);
+              border-color: rgba(255, 255, 255, 0.12);
             }
 
             .notif-card-header {
@@ -384,36 +670,45 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               display: flex;
               align-items: center;
               gap: 6px;
-              min-width: 0;
+              flex: 1;
+              overflow: hidden;
             }
 
-            .notif-icon-warning {
-              color: #FFD60A;
-              flex-shrink: 0;
-            }
-
-            .notif-icon-error {
-              color: #FF453A;
-              flex-shrink: 0;
-            }
-
-            .notif-icon-info {
-              color: #64D2FF;
-              flex-shrink: 0;
-            }
-
-            .notif-icon-success {
-              color: #30D158;
-              flex-shrink: 0;
-            }
+            .notif-icon-error { color: #FF453A; }
+            .notif-icon-warning { color: #FF9F0A; }
+            .notif-icon-success { color: #30D158; }
+            .notif-icon-info { color: #0A84FF; }
 
             .notif-card-title {
               font-size: 11.5px;
-              font-weight: 700;
-              color: var(--text-primary);
+              font-weight: 600;
+              color: #F1F5F9;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
+            }
+
+            .notif-cat-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 3px;
+              padding: 1px 5px;
+              border-radius: 999px;
+              font-size: 8px;
+              font-weight: 700;
+              font-family: var(--font-mono, monospace);
+              background: rgba(255, 255, 255, 0.06);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              color: #94A3B8;
+            }
+
+            .unread-dot {
+              width: 6px;
+              height: 6px;
+              border-radius: 50%;
+              background: #0A84FF;
+              box-shadow: 0 0 6px #0A84FF;
+              flex-shrink: 0;
             }
 
             .notif-card-right {
@@ -425,86 +720,158 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
             .notif-card-time {
               font-size: 10px;
-              color: var(--text-muted);
+              color: #64748B;
+              font-family: var(--font-mono, monospace);
             }
 
             .notif-dismiss-btn {
-              width: 20px;
-              height: 20px;
-              border-radius: var(--radius-xs);
               background: transparent;
               border: none;
-              color: var(--text-muted);
+              color: rgba(255, 255, 255, 0.35);
               cursor: pointer;
+              padding: 2px;
+              border-radius: 4px;
               display: flex;
               align-items: center;
-              justify-content: center;
-              transition: all var(--transition-fast);
             }
 
             .notif-dismiss-btn:hover {
-              color: var(--text-primary);
-              background: rgba(255, 255, 255, 0.1);
+              color: #FF453A;
+              background: rgba(255, 69, 58, 0.1);
             }
 
             .notif-card-message {
               font-size: 11px;
               line-height: 1.45;
-              color: var(--text-secondary);
+              color: #94A3B8;
               margin: 0;
+              word-break: break-word;
+            }
+
+            .notif-details-container {
+              margin-top: 3px;
+            }
+
+            .notif-toggle-details-btn {
+              background: transparent;
+              border: none;
+              color: #64D2FF;
+              font-size: 10px;
+              font-weight: 500;
+              cursor: pointer;
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              padding: 2px 0;
+            }
+
+            .notif-toggle-details-btn:hover {
+              text-decoration: underline;
+            }
+
+            .notif-details-content {
+              margin-top: 4px;
+              padding: 6px 8px;
+              border-radius: 6px;
+              background: rgba(0, 0, 0, 0.35);
+              border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            .details-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              font-size: 9px;
+              font-weight: 700;
+              color: #64748B;
+              margin-bottom: 4px;
+            }
+
+            .copy-details-btn {
+              background: rgba(255, 255, 255, 0.06);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              color: #CBD5E1;
+              border-radius: 4px;
+              padding: 1px 5px;
+              font-size: 9.5px;
+              cursor: pointer;
+              display: inline-flex;
+              align-items: center;
+              gap: 3px;
+            }
+
+            .copy-details-btn:hover {
+              background: rgba(255, 255, 255, 0.12);
+              color: #FFF;
+            }
+
+            .details-pre {
+              font-size: 10px;
+              font-family: var(--font-mono, monospace);
+              color: #F87171;
+              margin: 0;
+              white-space: pre-wrap;
+              word-break: break-all;
+              max-height: 120px;
+              overflow-y: auto;
             }
 
             .notif-card-footer {
               display: flex;
               align-items: center;
               justify-content: space-between;
-              gap: 8px;
-              margin-top: 2px;
+              margin-top: 4px;
+              flex-wrap: wrap;
+              gap: 6px;
             }
 
             .notif-source-badge {
-              font-size: 9px;
-              font-weight: 600;
-              padding: 1px 5px;
-              border-radius: 3px;
-              background: rgba(255, 255, 255, 0.05);
-              color: var(--text-muted);
+              font-size: 9.5px;
+              font-weight: 500;
+              color: #64748B;
+              background: rgba(255, 255, 255, 0.04);
+              padding: 2px 6px;
+              border-radius: 4px;
+              border: 1px solid rgba(255, 255, 255, 0.06);
             }
 
             .notif-actions-row {
               display: flex;
               align-items: center;
               gap: 6px;
-              margin-left: auto;
             }
 
             .notif-btn {
-              display: flex;
+              display: inline-flex;
               align-items: center;
               gap: 4px;
+              padding: 3px 8px;
+              border-radius: 5px;
               font-size: 10px;
               font-weight: 600;
-              padding: 3px 8px;
-              border-radius: var(--radius-xs);
               cursor: pointer;
-              transition: all var(--transition-fast);
-              border: 1px solid transparent;
+              transition: all 0.15s ease;
+              border: none;
             }
 
             .notif-btn.primary {
-              background: rgba(10, 132, 255, 0.25);
-              border-color: rgba(10, 132, 255, 0.4);
-              color: #64D2FF;
+              background: linear-gradient(135deg, #0A84FF, #5E5CE6);
+              color: #FFF;
             }
 
             .notif-btn.primary:hover {
-              background: rgba(10, 132, 255, 0.4);
-              box-shadow: 0 0 10px rgba(10, 132, 255, 0.3);
+              background: linear-gradient(135deg, #0070E0, #4A48C8);
             }
 
             .notif-btn.secondary {
-              background: rgba(255, 255, 255, 0.06);
-              color: var(--text-primary);
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid rgba(255, 255, 255, 0.12);
+              color: #E2E8F0;
+            }
+
+            .notif-btn.secondary:hover {
+              background: rgba(255, 255, 255, 0.15);
+              color: #FFF;
             }
           `}</style>
         </motion.div>

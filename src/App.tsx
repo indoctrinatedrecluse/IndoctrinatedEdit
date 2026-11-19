@@ -21,6 +21,7 @@ import { McpStudioModal } from './components/McpStudio/McpStudioModal'
 import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
 import { DebugToolbar } from './components/Debug/DebugToolbar'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
+import { ToastContainer } from './components/NotificationCenter/ToastContainer'
 import { notificationService, NotificationItem } from './services/notificationService'
 import { rendererUpdateService } from './services/updateService'
 import { commandRegistry } from './services/commandRegistry'
@@ -1885,7 +1886,7 @@ export const App: React.FC = () => {
         activeTabName={activeTab?.name}
       />
 
-      {/* Notification Center Popover */}
+      {/* Notification Center Popover & Floating Glass Toast Stack */}
       <NotificationCenter
         isOpen={isNotificationCenterOpen}
         onClose={() => setIsNotificationCenterOpen(false)}
@@ -1894,6 +1895,7 @@ export const App: React.FC = () => {
         onDismissAll={() => notificationService.dismissAll()}
         onMarkAllAsRead={() => notificationService.markAllAsRead()}
       />
+      <ToastContainer />
 
       {/* Top Frameless Title Bar */}
       <WindowFrame

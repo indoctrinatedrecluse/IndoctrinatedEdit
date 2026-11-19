@@ -168,6 +168,19 @@ class PackageManagerService {
         }
       }
 
+      // Inspect installed package licenses from local node_modules when present
+      for (const dep of result.dependencies) {
+        try {
+          const raw = await window.electronAPI.readFile(`${root}/node_modules/${dep.name}/package.json`)
+          const installed = JSON.parse(raw)
+          if (installed.license) {
+            dep.license = typeof installed.license === 'string' ? installed.license : (installed.license.type || dep.license)
+          }
+        } catch {
+          // Keep inferred license if not installed or unreadable
+        }
+      }
+
       result.outdatedCount = result.dependencies.filter((d) => d.isOutdated).length
       result.vulnerabilitiesCount = result.dependencies.reduce((acc, d) => acc + (d.vulnerabilitiesCount || 0), 0)
     }
@@ -243,7 +256,7 @@ class PackageManagerService {
           latestVersion: cleanVer,
           isOutdated: false,
           ecosystem: 'npm',
-          license: this.getMockLicense(name),
+          license: this.inferDefaultLicense(name),
           vulnerabilitiesCount: adv.count,
           highestSeverity: adv.severity,
           description: adv.note ? `Advisory ${adv.note}` : `Declared in ${filePath}`,
@@ -411,10 +424,11 @@ class PackageManagerService {
     }
   }
 
-  private getMockLicense(name: string): string {
+  private inferDefaultLicense(name: string): string {
     if (name.startsWith('@types/')) return 'MIT'
     if (name.includes('gpl')) return 'GPL-3.0'
     if (name.includes('apache')) return 'Apache-2.0'
+    if (name.includes('bsd')) return 'BSD-3-Clause'
     return 'MIT'
   }
 }

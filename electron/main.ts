@@ -29,6 +29,16 @@ import {
   rebaseBranch,
   showCommitDetails,
   getRemoteInfo,
+  listTags,
+  createTag,
+  deleteTag,
+  resetToCommit,
+  checkGhCli,
+  ghPrList,
+  ghPrCheckout,
+  ghReleaseList,
+  ghRunView,
+  ghRunLogs,
 } from './git-service'
 import { setupDebugIPC, disposeDebugSessions } from './debug-adapter-service'
 import { setupLspIPC, disposeLspClients } from './lsp-client-service'
@@ -560,6 +570,36 @@ ipcMain.handle('git:showCommit', async (_, hash: string, cwd?: string) => {
 })
 ipcMain.handle('git:remoteInfo', async (_, cwd?: string) => {
   return await getRemoteInfo(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:listTags', async (_, cwd?: string) => {
+  return await listTags(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:createTag', async (_, tagName: string, message?: string, commitHash?: string, cwd?: string) => {
+  return await createTag(cwd || process.env.APP_ROOT || process.cwd(), tagName, message, commitHash)
+})
+ipcMain.handle('git:deleteTag', async (_, tagName: string, cwd?: string) => {
+  return await deleteTag(cwd || process.env.APP_ROOT || process.cwd(), tagName)
+})
+ipcMain.handle('git:resetToCommit', async (_, hash: string, mode: 'soft' | 'mixed' | 'hard', cwd?: string) => {
+  return await resetToCommit(cwd || process.env.APP_ROOT || process.cwd(), hash, mode)
+})
+ipcMain.handle('git:checkGhCli', async (_, cwd?: string) => {
+  return await checkGhCli(cwd || process.env.APP_ROOT || process.cwd())
+})
+ipcMain.handle('git:ghPrList', async (_, limit?: number, cwd?: string) => {
+  return await ghPrList(cwd || process.env.APP_ROOT || process.cwd(), limit)
+})
+ipcMain.handle('git:ghPrCheckout', async (_, prNumber: number, cwd?: string) => {
+  return await ghPrCheckout(cwd || process.env.APP_ROOT || process.cwd(), prNumber)
+})
+ipcMain.handle('git:ghReleaseList', async (_, limit?: number, cwd?: string) => {
+  return await ghReleaseList(cwd || process.env.APP_ROOT || process.cwd(), limit)
+})
+ipcMain.handle('git:ghRunView', async (_, runId: string, cwd?: string) => {
+  return await ghRunView(cwd || process.env.APP_ROOT || process.cwd(), runId)
+})
+ipcMain.handle('git:ghRunLogs', async (_, runId: string, jobId?: string, failedOnly?: boolean, cwd?: string) => {
+  return await ghRunLogs(cwd || process.env.APP_ROOT || process.cwd(), runId, jobId, failedOnly)
 })
 
 // ==========================================
