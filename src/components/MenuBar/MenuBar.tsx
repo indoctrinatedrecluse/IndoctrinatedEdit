@@ -54,6 +54,7 @@ export interface MenuActionHandlers {
   onShowSearch?: () => void
   onShowDebug?: () => void
   onToggleAi?: () => void
+  onOpenAiKeyVault?: () => void
   onToggleSidebar?: () => void
   onOpenSettings?: () => void
   onToggleNotifications?: () => void
@@ -226,6 +227,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({ handlers }) => {
           shortcut: 'Ctrl+Alt+A',
           icon: <Bot size={14} />,
           onClick: handlers.onToggleAi,
+        },
+        {
+          id: 'view.aiKeyVault',
+          label: 'AI Key & Endpoint Vault...',
+          shortcut: 'Ctrl+Alt+Shift+K',
+          icon: <KeyRound size={14} />,
+          onClick: handlers.onOpenAiKeyVault,
         },
         {
           id: 'view.database',

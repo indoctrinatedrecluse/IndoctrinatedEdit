@@ -297,6 +297,10 @@ export class NotificationService {
     this.notifyListeners()
   }
 
+  public clearAll(): void {
+    this.dismissAll()
+  }
+
   public subscribe(listener: (notifications: NotificationItem[]) => void): () => void {
     this.listeners.add(listener)
     listener(this.getNotifications())

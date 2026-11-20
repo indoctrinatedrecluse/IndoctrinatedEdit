@@ -43,6 +43,7 @@ interface ShortcutHandlers {
   onToggleColors?: () => void
   onToggleJson?: () => void
   onToggleMcpStudio?: () => void
+  onOpenAiKeyVault?: () => void
   onWorkspaceSymbols?: () => void
   onAiExplain?: () => void
   onGitRefresh?: () => void
@@ -578,9 +579,16 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
 
       // Ctrl+Alt+U -> Open MCP Server Studio
-      if (e.altKey && key === 'u') {
+      if (e.altKey && !e.shiftKey && key === 'u') {
         e.preventDefault()
         handlers.onToggleMcpStudio?.()
+        return
+      }
+
+      // Ctrl+Alt+Shift+K -> Open AI Key & Endpoint Vault
+      if (e.altKey && e.shiftKey && key === 'k') {
+        e.preventDefault()
+        handlers.onOpenAiKeyVault?.()
         return
       }
 

@@ -308,3 +308,65 @@
   align-items: center;
   gap: 6px;
 }
+
+/* Standalone Dialog Modal Overlay */
+.ai-key-vault-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(4, 7, 16, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ai-key-vault-modal-dialog {
+  width: 100%;
+  max-width: 680px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(14, 18, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(10, 132, 255, 0.2);
+  overflow: hidden;
+}
+
+.ai-key-vault-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ai-key-vault-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-key-vault-modal-header-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+
+.ai-key-vault-modal-header-sub {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 1px;
+}
+
+.ai-key-vault-modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+

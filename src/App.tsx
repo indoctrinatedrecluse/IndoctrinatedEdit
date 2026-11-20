@@ -18,6 +18,9 @@ import { RunWithArgsModal } from './components/Modals/RunWithArgsModal'
 import { UnsavedChangesModal } from './components/Modals/UnsavedChangesModal'
 import { UpdateModal } from './components/Modals/UpdateModal'
 import { McpStudioModal } from './components/McpStudio/McpStudioModal'
+import { AiKeyVaultModal } from './components/AI/AiKeyVaultModal'
+import { aiVaultService } from './services/aiVaultService'
+import { AiService } from './services/aiService'
 import { BottomPanel, BottomPanelTab } from './components/BottomPanel/BottomPanel'
 import { DebugToolbar } from './components/Debug/DebugToolbar'
 import { NotificationCenter } from './components/NotificationCenter/NotificationCenter'
@@ -1274,6 +1277,7 @@ export const App: React.FC = () => {
   const [isLicenseOpen, setIsLicenseOpen] = useState<boolean>(false)
   const [isLicenseLockout, setIsLicenseLockout] = useState<boolean>(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false)
+  const [isAiKeyVaultOpen, setIsAiKeyVaultOpen] = useState<boolean>(false)
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState<boolean>(false)
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState<boolean>(false)
   const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal')
@@ -1461,6 +1465,7 @@ export const App: React.FC = () => {
       onShowGitGraph: () => setActiveView('git'),
       onShowSearch: () => setActiveView('search'),
       onToggleAi: handleToggleAi,
+      onOpenAiKeyVault: () => setIsAiKeyVaultOpen(true),
       onToggleDatabase: handleToggleDatabase,
       onToggleRestClient: handleToggleRestClient,
       onTogglePorts: handleTogglePorts,
@@ -1574,7 +1579,11 @@ export const App: React.FC = () => {
       { id: 'file.openFolder', title: 'Open Workspace Folder...', category: 'File', shortcut: 'Ctrl+K Ctrl+O', description: 'Open folder tree in workspace', handler: handleOpenFolderNative },
       { id: 'file.save', title: 'Save File', category: 'File', shortcut: 'Ctrl+S', description: 'Save current active document', handler: handleSaveFile },
       { id: 'file.saveAs', title: 'Save File As...', category: 'File', shortcut: 'Ctrl+Shift+S', description: 'Save active document under a new name', handler: handleSaveFileAs },
+      { id: 'file.saveAll', title: 'File: Save All Dirty Files', category: 'File', shortcut: 'Ctrl+K S', description: 'Save all modified editor tabs to disk', handler: () => { tabs.filter((t) => t.isDirty).forEach(() => handleSaveFile()); notificationService.notifySuccess('Files', 'Saved all modified buffers'); } },
+      { id: 'file.copyPath', title: 'File: Copy Active File Path', category: 'File', shortcut: 'Shift+Alt+C', description: 'Copy absolute filesystem path of active document to clipboard', handler: async () => { if (activeTabId) { await navigator.clipboard.writeText(activeTabId); notificationService.notifySuccess('Clipboard', `Copied file path: ${activeTabId}`); } } },
+      { id: 'file.copyRelativePath', title: 'File: Copy Relative File Path', category: 'File', shortcut: 'Ctrl+K Ctrl+Shift+C', description: 'Copy workspace-relative path of active document to clipboard', handler: async () => { if (activeTabId) { const rel = workspacePath && activeTabId.startsWith(workspacePath) ? activeTabId.slice(workspacePath.length).replace(/^[/\\]+/, '') : activeTabId; await navigator.clipboard.writeText(rel); notificationService.notifySuccess('Clipboard', `Copied relative path: ${rel}`); } } },
       { id: 'file.close', title: 'Close Current Tab', category: 'File', shortcut: 'Ctrl+W', description: 'Close active editor buffer', handler: () => handleCloseTab(activeTabId) },
+      { id: 'file.closeAll', title: 'File: Close All Tabs', category: 'File', shortcut: 'Ctrl+K Ctrl+W', description: 'Close all open editor tabs and clear workspace buffer list', handler: () => { setTabs([]); setActiveTabId(''); } },
       
       // Navigation & Search
       { id: 'view.commandPalette', title: 'Command Palette: Show All Commands', category: 'View', shortcut: 'Ctrl+Shift+P', description: 'Open action launcher', handler: () => openPalette('>') },
@@ -1633,6 +1642,8 @@ export const App: React.FC = () => {
       { id: 'view.foldAll', title: 'Fold All Code Blocks', category: 'View', description: 'Collapse all functions and classes', handler: () => getActiveEditor()?.triggerAction('editor.foldAll') },
       { id: 'view.unfoldAll', title: 'Unfold All Code Blocks', category: 'View', description: 'Expand all functions and classes', handler: () => getActiveEditor()?.triggerAction('editor.unfoldAll') },
       { id: 'view.themes', title: 'Open Liquid Glass Themes Drawer', category: 'View', description: 'Browse and switch themes', handler: () => setActiveView('themes') },
+      { id: 'view.extensions', title: 'Extensions: Show Extensions & Plugins Manager', category: 'View', shortcut: 'Ctrl+Shift+X', description: 'Browse and manage installed extensions, language packs, and marketplace plugins', handler: () => setActiveView('extensions') },
+      { id: 'notifications.clearAll', title: 'Notifications: Clear All System Alerts & Logs', category: 'View', description: 'Clear all transient notifications and activity alerts', handler: () => { notificationService.clearAll(); notificationService.notifyInfo('Notifications', 'Cleared all notifications'); } },
       { id: 'view.settings', title: 'Open Preferences / Settings', category: 'Preferences', shortcut: 'Ctrl+,', description: 'Configure editor options', handler: () => setActiveView('settings') },
 
       // Terminal & Diagnostics Subsystems
@@ -1661,6 +1672,13 @@ export const App: React.FC = () => {
 
       // Git & Toolchain
       { id: 'git.refresh', title: 'Git: Refresh Repository Status', category: 'Git', description: 'Re-query git status for all files', handler: refreshGitStatus },
+      { id: 'git.graph', title: 'Git: Open Interactive Commit Graph & Branch Tree', category: 'Git', description: 'View full visual DAG commit tree and merge branches', handler: () => setActiveView('git') },
+      { id: 'git.ghWorkflows', title: 'Git: View GitHub Actions Workflow Runs (gh run list)', category: 'Git', description: 'Inspect CI/CD status and workflow jobs via GitHub CLI', handler: () => { setActiveView('git'); notificationService.notifyInfo('GitHub CLI', 'Inspecting GitHub Actions workflows in Source Control dock'); } },
+      { id: 'git.ghPrs', title: 'Git: View Pull Requests (gh pr list)', category: 'Git', description: 'List and inspect open pull requests in current repository', handler: () => { setActiveView('git'); notificationService.notifyInfo('GitHub CLI', 'Listing pull requests in Source Control dock'); } },
+      { id: 'git.stageAll', title: 'Git: Stage All Changed Files (git add -A)', category: 'Git', description: 'Add all modified, created, and deleted files to the staging index', handler: async () => { await window.electronAPI?.workspace?.execCommand?.({ command: 'git add -A', cwd: workspacePath }); refreshGitStatus(); notificationService.notifySuccess('Git', 'Staged all changed files'); } },
+      { id: 'git.unstageAll', title: 'Git: Unstage All Files (git reset)', category: 'Git', description: 'Remove all files from the staging index', handler: async () => { await window.electronAPI?.workspace?.execCommand?.({ command: 'git reset', cwd: workspacePath }); refreshGitStatus(); notificationService.notifyInfo('Git', 'Unstaged all files'); } },
+      { id: 'git.pull', title: 'Git: Pull from Remote (git pull)', category: 'Git', description: 'Fetch and merge changes from upstream tracking branch', handler: async () => { await window.electronAPI?.workspace?.execCommand?.({ command: 'git pull', cwd: workspacePath }); refreshGitStatus(); } },
+      { id: 'git.push', title: 'Git: Push to Remote (git push)', category: 'Git', description: 'Push committed changes to upstream remote repository', handler: async () => { await window.electronAPI?.workspace?.execCommand?.({ command: 'git push', cwd: workspacePath }); refreshGitStatus(); } },
 
       // Google Antigravity Studio (Official ACP Client)
       { id: 'antigravity.toggle', title: 'Google Antigravity: Toggle ACP Studio', category: 'AI', shortcut: 'Ctrl+Alt+G', description: 'Open Google Antigravity Studio connected to the official agy acp CLI (Pro/Ultra/Business subscriptions)', handler: handleToggleAntigravity },
@@ -1748,8 +1766,15 @@ export const App: React.FC = () => {
       { id: 'view.resetZoom', title: 'View: Reset Zoom', category: 'View', shortcut: 'Ctrl+0', description: 'Reset UI zoom to 100%', handler: () => { void window.electronAPI?.setZoom?.('reset') } },
       { id: 'view.fullscreen', title: 'View: Toggle Fullscreen', category: 'View', shortcut: 'F11', description: 'Toggle distraction-free fullscreen window', handler: () => { void window.electronAPI?.toggleFullscreen?.() } },
 
-      // AI Multi-Model Assistant
+      // AI Multi-Model Assistant & Unified Key Vault
       { id: 'ai.toggle', title: 'Toggle AI Multi-Model Assistant', category: 'AI', shortcut: 'Ctrl+Alt+A', description: 'Open AI chat and refactor dock', handler: handleToggleAi },
+      { id: 'ai.keyVault', title: 'AI: Manage API Keys, Endpoints & Vault...', category: 'AI', shortcut: 'Ctrl+Alt+Shift+K', description: 'Open unified liquid glass API key vault to manage keys, endpoints, live test probes, and MCP synchronization', handler: () => setIsAiKeyVaultOpen(true) },
+      { id: 'ai.syncMcp', title: 'AI: Synchronize Credentials to MCP Runtime Environment', category: 'AI', description: 'Export all configured API keys and URLs into the Model Context Protocol process environment', handler: () => { const env = aiVaultService.getMcpEnvironmentMap(); const count = Object.keys(env).length; notificationService.notifySuccess('MCP Sync', `Synchronized ${count} credentials to Model Context Protocol environment`); } },
+      { id: 'ai.exportVault', title: 'AI: Export Encrypted Profile Backup (AES-256-GCM)...', category: 'AI', description: 'Export AES-256-GCM encrypted backup of all AI API keys and endpoints with master passphrase', handler: () => setIsAiKeyVaultOpen(true) },
+      { id: 'ai.importVault', title: 'AI: Restore Encrypted Profile Backup (AES-256-GCM)...', category: 'AI', description: 'Import and decrypt an AI vault backup bundle using master passphrase', handler: () => setIsAiKeyVaultOpen(true) },
+      { id: 'ai.modePlan', title: 'AI: Switch Mode to Plan (Architecture & Research)', category: 'AI', description: 'Switch AI Assistant to read-only architecture, planning, and design mode without modifying files', handler: () => { setIsRightPaneOpen(true); setRightPaneTab('ai'); AiService.setActiveMode('plan'); notificationService.notifyInfo('AI Chat', 'Switched AI Assistant to Plan Mode'); } },
+      { id: 'ai.modeAct', title: 'AI: Switch Mode to Act (Autonomous Coding & Execution)', category: 'AI', description: 'Switch AI Assistant to active implementation mode with code editing and command execution capabilities', handler: () => { setIsRightPaneOpen(true); setRightPaneTab('ai'); AiService.setActiveMode('act'); notificationService.notifyInfo('AI Chat', 'Switched AI Assistant to Act Mode'); } },
+      { id: 'ai.chatSettings', title: 'AI: Open AI Settings & Guardrail Permissions', category: 'AI', description: 'Configure autonomous tool auto-approve permissions and model parameters', handler: () => { setIsRightPaneOpen(true); setRightPaneTab('ai'); } },
       { id: 'ai.explain', title: 'AI: Explain Code / Active Selection', category: 'AI', shortcut: 'Ctrl+Shift+I', description: 'Ask AI to analyze selected code', handler: () => openAiWithPrompt('Explain how this code works, including edge cases and data flow.') },
       { id: 'ai.bugs', title: 'AI: Find Bugs & Security Flaws', category: 'AI', description: 'Scan active buffer for vulnerabilities', handler: () => openAiWithPrompt('Audit this code for bugs, race conditions, and security vulnerabilities, and propose fixes.') },
       { id: 'ai.refactor', title: 'AI: Refactor & Modernize Code', category: 'AI', description: 'Clean architecture refactoring', handler: () => openAiWithPrompt('Refactor this code for clarity, maintainability, and performance while preserving behavior.') },
@@ -1777,7 +1802,7 @@ export const App: React.FC = () => {
       { id: 'help.license', title: 'License & Subscription: View Pro Lifetime Status', category: 'Help', description: 'Inspect license and subscription', handler: () => setIsLicenseOpen(true) },
       { id: 'help.about', title: 'Help: About IndoctrinatedEdit', category: 'Help', description: 'Application info and version', handler: () => setIsAboutOpen(true) },
     ])
-  }, [activeTabId, cursorPos.line, workspacePath, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleAntigravity, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleToggleJson, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleToggleJupyter, handleCreateNotebook, handleRunActiveFile, handleRunWithArgs, handleOpenRunConfig, openAiWithPrompt, handleSelectTheme, openPalette, tabs, getActiveEditor, setIsMcpStudioOpen])
+  }, [activeTabId, cursorPos.line, workspacePath, handleNewFile, handleOpenFileNative, handleOpenFolderNative, handleSaveFile, handleSaveFileAs, handleToggleSidebar, handleToggleNotifications, handleToggleTerminal, handleOpenTerminalConfig, handleOpenProblems, refreshGitStatus, handleToggleAi, handleToggleAntigravity, handleToggleDatabase, handleToggleRestClient, handleToggleRemote, handleToggleCrypto, handleTogglePreview, handleToggleDocker, handleToggleSocket, handleToggleRegex, handleTogglePackages, handleToggleTasks, handleToggleDiff, handleToggleHex, handleToggleSnippets, handleToggleColors, handleToggleJson, handleTogglePorts, handleToggleRedis, handleToggleEnv, handleToggleMockLab, handleToggleGraphQL, handleToggleDiagram, handleToggleBundle, handleToggleSvg, handleToggleJupyter, handleCreateNotebook, handleRunActiveFile, handleRunWithArgs, handleOpenRunConfig, openAiWithPrompt, handleSelectTheme, openPalette, tabs, getActiveEditor, setIsMcpStudioOpen, setIsAiKeyVaultOpen, setActiveView, setIsRightPaneOpen, setRightPaneTab])
 
   // Bind Standard VS Code Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -1800,6 +1825,7 @@ export const App: React.FC = () => {
     onFindReferences: () => getActiveEditor()?.findReferences(),
     onRenameSymbol: () => getActiveEditor()?.openRename(),
     onToggleAi: handleToggleAi,
+    onOpenAiKeyVault: () => setIsAiKeyVaultOpen(true),
     onToggleDatabase: handleToggleDatabase,
     onToggleRestClient: handleToggleRestClient,
     onToggleRemote: handleToggleRemote,
@@ -2261,6 +2287,12 @@ export const App: React.FC = () => {
       <McpStudioModal
         isOpen={isMcpStudioOpen}
         onClose={() => setIsMcpStudioOpen(false)}
+      />
+
+      {/* AI Key & Endpoint Vault Modal */}
+      <AiKeyVaultModal
+        isOpen={isAiKeyVaultOpen}
+        onClose={() => setIsAiKeyVaultOpen(false)}
       />
 
       <style>{`
