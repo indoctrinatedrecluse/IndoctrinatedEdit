@@ -254,14 +254,36 @@ function getLanguageFromFilename(filename: string, content?: string): string {
 }
 
 export const App: React.FC = () => {
+  // Synchronously load previous session from localStorage so the editor does not mount with welcome.ts before restoring
+  const initialSession = useMemo(() => {
+    try {
+      return sessionService.loadSession()
+    } catch {
+      return null
+    }
+  }, [])
+
   const [activeView, setActiveView] = useState<ActivityView | null>('files')
-  const [workspaceName, setWorkspaceName] = useState<string>('IndoctrinatedEdit')
-  const [workspacePath, setWorkspacePath] = useState<string | undefined>(undefined)
+  const [workspaceName, setWorkspaceName] = useState<string>(() => initialSession?.workspaceName || 'IndoctrinatedEdit')
+  const [workspacePath, setWorkspacePath] = useState<string | undefined>(() => initialSession?.workspacePath || undefined)
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFileItem[]>(demoFiles)
   const [gitBranch, setGitBranch] = useState<string>('master')
   const [gitChangesCount, setGitChangesCount] = useState<number>(0)
-  const [tabs, setTabs] = useState<TabItem[]>(initialTabs)
-  const [activeTabId, setActiveTabId] = useState<string>('welcome.ts')
+  const [tabs, setTabs] = useState<TabItem[]>(() => {
+    if (initialSession?.tabs && initialSession.tabs.length > 0) {
+      return initialSession.tabs
+    }
+    return initialTabs
+  })
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    if (initialSession?.activeTabId && initialSession.tabs?.some((t) => t.id === initialSession.activeTabId)) {
+      return initialSession.activeTabId
+    }
+    if (initialSession?.tabs && initialSession.tabs.length > 0) {
+      return initialSession.tabs[0].id
+    }
+    return 'welcome.ts'
+  })
   const [fileContents, setFileContents] = useState<Record<string, string>>(initialFileContents)
   const [currentTheme, setCurrentTheme] = useState(registeredThemes[0])
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })

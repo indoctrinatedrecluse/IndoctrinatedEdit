@@ -21,6 +21,73 @@ import { InlineCopilotWidget } from '../AI/InlineCopilotWidget'
 // Force @monaco-editor/react to use local monaco bundle, bypassing cdn.jsdelivr.net completely
 loader.config({ monaco })
 
+import { toMonacoModelPath } from './monacoConfig'
+export { toMonacoModelPath }
+
+/**
+ * Configures TypeScript/JavaScript compiler and diagnostic options across Monaco instances
+ * prior to model mounting. Disables unresolvable browser-environment semantic errors (e.g.
+ * missing 3rd party node_modules) while preserving genuine syntax errors.
+ */
+export function configureMonacoCompilerOptions(monacoInstance: typeof monaco | any) {
+  try {
+    const tsLang = monacoInstance?.languages?.typescript as any
+    if (tsLang?.typescriptDefaults?.setCompilerOptions) {
+      tsLang.typescriptDefaults.setCompilerOptions({
+        target: tsLang.ScriptTarget?.ESNext ?? 99,
+        module: tsLang.ModuleKind?.ESNext ?? 99,
+        moduleResolution: tsLang.ModuleResolutionKind?.NodeJs ?? 2,
+        jsx: tsLang.JsxEmit?.ReactJSX ?? 4,
+        experimentalDecorators: true,
+        emitDecoratorMetadata: true,
+        allowNonTsExtensions: true,
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true,
+        allowJs: true,
+        checkJs: false,
+      })
+      if (tsLang.typescriptDefaults.setDiagnosticsOptions) {
+        tsLang.typescriptDefaults.setDiagnosticsOptions({
+          noSemanticValidation: true, // Prevent unresolved external imports from painting newly opened files with red squiggles
+          noSyntaxValidation: false, // Keep genuine syntax errors active
+          noSuggestionDiagnostics: true,
+        })
+      }
+    }
+    if (tsLang?.javascriptDefaults?.setCompilerOptions) {
+      tsLang.javascriptDefaults.setCompilerOptions({
+        target: tsLang.ScriptTarget?.ESNext ?? 99,
+        module: tsLang.ModuleKind?.ESNext ?? 99,
+        moduleResolution: tsLang.ModuleResolutionKind?.NodeJs ?? 2,
+        jsx: tsLang.JsxEmit?.ReactJSX ?? 4,
+        allowNonTsExtensions: true,
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true,
+        allowJs: true,
+        checkJs: false,
+      })
+      if (tsLang.javascriptDefaults.setDiagnosticsOptions) {
+        tsLang.javascriptDefaults.setDiagnosticsOptions({
+          noSemanticValidation: true,
+          noSyntaxValidation: false,
+          noSuggestionDiagnostics: true,
+        })
+      }
+    }
+    if (monacoInstance?.languages?.json?.jsonDefaults?.setDiagnosticsOptions) {
+      monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
+        validate: true,
+        allowComments: true,
+      })
+    }
+  } catch {
+    // Ignore in mocked/headless Monaco environments
+  }
+}
+
+// Immediately configure global Monaco TypeScript compiler & diagnostic settings at import time
+configureMonacoCompilerOptions(monaco)
+
 // Initialize built-in Monaco language extensions immediately
 extensionRegistry.initializeMonacoExtensions(monaco)
 
@@ -774,28 +841,28 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     decorationsRef.current = editor.deltaDecorations(decorationsRef.current, newDecorations)
   }, [activeFilePath])
 
+  const handleEditorBeforeMount = useCallback((monacoInstance: typeof monaco) => {
+    configureMonacoCompilerOptions(monacoInstance)
+  }, [])
+
   const handleEditorDidMount: OnMount = (editor, monacoInstance) => {
     editorRef.current = editor
     monacoRef.current = monacoInstance
 
     // Configure TypeScript/JavaScript compiler options so React TSX JSX & Angular/NestJS @Decorators validate cleanly
-    try {
-      const tsLang = monacoInstance.languages?.typescript as any
-      if (tsLang?.typescriptDefaults?.setCompilerOptions) {
-        tsLang.typescriptDefaults.setCompilerOptions({
-          target: tsLang.ScriptTarget?.ESNext ?? 99,
-          module: tsLang.ModuleKind?.ESNext ?? 99,
-          moduleResolution: tsLang.ModuleResolutionKind?.NodeJs ?? 2,
-          jsx: tsLang.JsxEmit?.ReactJSX ?? 4,
-          experimentalDecorators: true,
-          emitDecoratorMetadata: true,
-          allowNonTsExtensions: true,
-          allowSyntheticDefaultImports: true,
-          esModuleInterop: true,
-        })
+    configureMonacoCompilerOptions(monacoInstance)
+
+    const initialModel = editor.getModel()
+    if (initialModel) {
+      if (language && initialModel.getLanguageId() !== language) {
+        monacoInstance.editor.setModelLanguage(initialModel, language)
       }
-    } catch {
-      // Ignore in mocked/headless Monaco environments
+      // Purge any transient red underlines from initial mounting or language transitions
+      monacoInstance.editor.setModelMarkers(initialModel, 'typescript', [])
+      monacoInstance.editor.setModelMarkers(initialModel, 'javascript', [])
+      monacoInstance.editor.setModelMarkers(initialModel, 'json', [])
+      monacoInstance.editor.setModelMarkers(initialModel, 'css', [])
+      monacoInstance.editor.setModelMarkers(initialModel, 'html', [])
     }
 
     registerAndApplyTheme(monacoInstance, theme)
@@ -941,6 +1008,25 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     }
   }, [theme])
 
+  // Ensure active model language stays synchronized and stale markers from prior language passes are purged
+  useEffect(() => {
+    const editor = editorRef.current
+    const m = monacoRef.current
+    if (!editor || !m) return
+    const model = editor.getModel()
+    if (!model) return
+
+    if (language && model.getLanguageId() !== language) {
+      m.editor.setModelLanguage(model, language)
+    }
+
+    m.editor.setModelMarkers(model, 'typescript', [])
+    m.editor.setModelMarkers(model, 'javascript', [])
+    m.editor.setModelMarkers(model, 'json', [])
+    m.editor.setModelMarkers(model, 'css', [])
+    m.editor.setModelMarkers(model, 'html', [])
+  }, [activeFilePath, language])
+
   return (
     <div className="editor-host-container" ref={hostContainerRef}>
       {/* Document Breadcrumbs Bar */}
@@ -1069,11 +1155,13 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
 
       <div className="monaco-host-wrapper">
         <Editor
+          path={toMonacoModelPath(activeFilePath)}
           height="100%"
           width="100%"
           language={language}
           value={content}
           onChange={onChange}
+          beforeMount={handleEditorBeforeMount}
           onMount={handleEditorDidMount}
           options={{
             fontFamily: "var(--font-mono)",
