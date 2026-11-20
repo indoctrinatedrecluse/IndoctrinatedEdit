@@ -5,6 +5,19 @@ All notable changes to **IndoctrinatedEdit** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.2] - 2026-11-20
+
+### 🚀 Hotfix Release: Monaco Editor First-Launch Red Underlines & Marker Normalization
+
+IndoctrinatedEdit **6.1.2** is a targeted hotfix release resolving the Monaco Editor startup issue where the initially opened document rendered with false-positive red syntax/semantic error squiggles until navigating tabs:
+
+#### ⚡ Monaco Model & Diagnostic Pipeline Fixes
+- **Pre-Mount Diagnostic & Compiler Configuration**: Configured TypeScript and JavaScript compiler settings (`noSemanticValidation: true`, `noSyntaxValidation: false`, `jsx: ReactJSX`, `target: ESNext`, `module: ESNext`) before model instantiation, preventing unresolvable in-browser external module imports from falsely triggering semantic errors while keeping real syntax validation active.
+- **Deterministic Model File Paths**: Assigned real normalized `file:///...` URIs with file extensions to the Monaco `<Editor path={...} />` component, ensuring the language service workers accurately identify `.tsx`, `.ts`, `.py`, `.rs`, `.md`, and `.json` grammar on first mount.
+- **Transient Marker Flushing**: Automatically purged stale default language service markers on initial mount and model language synchronization to eliminate lingering red squiggles.
+- **Synchronous Session Pre-Hydration**: Restored previous workspace tabs and active file state synchronously from local storage during React initialization, eliminating the brief `welcome.ts` language flash before session restoration.
+- **Regression Protection**: Added comprehensive automated regression tests verifying model path URI normalization, pre-mount compiler configuration, and synchronous session state hydration.
+
 ## [6.1.1] - 2026-11-19
 
 ### 🚀 Hotfix Release: Supercharged Git Graph, GitHub CLI (gh) Integration & Top-of-the-Line Notification Center

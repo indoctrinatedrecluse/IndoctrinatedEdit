@@ -98,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [editorPrefs, setEditorPrefs] = useState<EditorPreferences>(() => editorPreferencesService.getPreferences())
   const [extensionsList, setExtensionsList] = useState(() => extensionRegistry.getAll())
   const [extSearch, setExtSearch] = useState('')
-  const [appVersion, setAppVersion] = useState('6.1.1')
+  const [appVersion, setAppVersion] = useState('6.1.2')
   const [selectedExtId, setSelectedExtId] = useState<string | null>(null)
   const [expandedDirs, setExpandedDirs] = useState<Record<string, WorkspaceFileItem[]>>({})
 

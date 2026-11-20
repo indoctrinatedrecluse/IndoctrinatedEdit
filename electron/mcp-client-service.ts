@@ -123,7 +123,7 @@ export class McpStdioSession {
     const res = await this.sendRequest('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'IndoctrinatedEdit', version: '6.1.1' },
+      clientInfo: { name: 'IndoctrinatedEdit', version: '6.1.2' },
     })
     this.sendNotification('notifications/initialized', {})
     this.initialized = true

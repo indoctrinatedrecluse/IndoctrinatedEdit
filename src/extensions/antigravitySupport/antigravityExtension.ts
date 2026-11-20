@@ -38,7 +38,7 @@ export const antigravitySnippets: SnippetDefinition[] = [
 export const antigravityExtensionManifest: ExtensionManifest = {
   id: 'indoctrinated.ext.antigravity',
   name: 'Google Antigravity Suite & ACP Agent Client',
-  version: '6.1.1',
+  version: '6.1.2',
   description:
     'Native Agent Client Protocol (ACP v1) studio connecting to the official Google Antigravity CLI (`agy acp`) so personal Pro/Ultra and Business subscriptions run directly inside IndoctrinatedEdit.',
   author: 'indoctrinatedrecluse',

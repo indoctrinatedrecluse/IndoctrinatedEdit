@@ -267,9 +267,9 @@ export class RendererUpdateService {
       this.status = 'error'
       const errInfo: UpdateInfo = {
         updateAvailable: false,
-        currentVersion: '6.1.1',
-        latestVersion: '6.1.1',
-        releaseName: 'IndoctrinatedEdit 6.1.1',
+        currentVersion: '6.1.2',
+        latestVersion: '6.1.2',
+        releaseName: 'IndoctrinatedEdit 6.1.2',
         releaseNotes: 'Could not connect to update servers. Check your internet connection.',
         publishedAt: new Date().toISOString(),
         releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',
@@ -432,8 +432,8 @@ export class RendererUpdateService {
     const release = Array.isArray(data)
       ? (data.find((r: any) => (channel === 'beta' ? r.tag_name?.includes('beta') : !r.draft)) || data[0])
       : data
-    const currentVersion = '6.1.1'
-    const latestVersion = (release?.tag_name || 'v6.1.1').replace(/^v/i, '')
+    const currentVersion = '6.1.2'
+    const latestVersion = (release?.tag_name || 'v6.1.2').replace(/^v/i, '')
     const isNewer = RendererUpdateService.compareSemVer(latestVersion, currentVersion) > 0
 
     return {

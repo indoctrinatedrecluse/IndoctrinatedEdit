@@ -2219,7 +2219,7 @@ export const App: React.FC = () => {
             setIsLicenseOpen(false)
           }
         }}
-        version="6.1.1"
+        version="6.1.2"
         isForceLockout={isLicenseLockout}
       />
 

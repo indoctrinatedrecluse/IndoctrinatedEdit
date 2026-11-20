@@ -78,9 +78,9 @@ describe('Phase R2-1 — Shell Wiring, Extension Lifecycle, Output Channel, Upda
       updater: {
         checkForUpdates: vi.fn().mockResolvedValue({
           updateAvailable: false,
-          currentVersion: '6.1.1',
-          latestVersion: '6.1.1',
-          releaseName: 'IndoctrinatedEdit 6.1.1',
+          currentVersion: '6.1.2',
+          latestVersion: '6.1.2',
+          releaseName: 'IndoctrinatedEdit 6.1.2',
           releaseNotes: '',
           publishedAt: new Date().toISOString(),
           releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases',

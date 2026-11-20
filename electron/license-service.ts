@@ -66,7 +66,7 @@ export interface LicenseServiceOptions {
 
 const LICENSOR_SERVER_URL = process.env.LICENSOR_SERVER_URL || 'https://licensor-h5zdysrkqa-uc.a.run.app'
 const PRODUCT_ID = 'indoctrinated-edit'
-const APP_VERSION = '6.1.1'
+const APP_VERSION = '6.1.2'
 const REG_KEY_USER = 'HKCU\\Software\\Indoctrinated\\IndoctrinatedEdit'
 const REG_KEY_MACHINE = 'HKLM\\Software\\Indoctrinated\\IndoctrinatedEdit'
 const REG_PAYLOAD_VALUE = 'LicensePayload'
