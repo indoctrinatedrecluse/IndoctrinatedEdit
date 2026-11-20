@@ -37,6 +37,7 @@
 
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  --font-code: var(--font-mono);
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -158,4 +159,161 @@ html, body, #root {
 
 .window-no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Consolidated High-DPI Liquid Glass UI System across Extensions & Studios */
+::selection {
+  background: var(--accent-primary);
+  color: #FFFFFF;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: var(--glass-blur-sm);
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 13px;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--glass-bg-subtle);
+  border: var(--specular-border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-button:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.glass-button:active {
+  background: var(--glass-bg-active);
+  transform: translateY(0) scale(0.98);
+}
+
+.glass-button.primary {
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.85) 0%, rgba(94, 92, 230, 0.85) 100%);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.35);
+  color: #FFFFFF;
+}
+
+.glass-button.primary:hover {
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.95) 0%, rgba(94, 92, 230, 0.95) 100%);
+  box-shadow: 0 6px 22px rgba(10, 132, 255, 0.55);
+}
+
+.glass-button.danger {
+  background: rgba(255, 69, 58, 0.18);
+  border-color: rgba(255, 69, 58, 0.38);
+  color: #FF453A;
+}
+
+.glass-button.danger:hover {
+  background: rgba(255, 69, 58, 0.32);
+  border-color: rgba(255, 69, 58, 0.6);
+}
+
+.glass-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: var(--font-ui);
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: all 0.18s ease;
+}
+
+.glass-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.22);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.glass-input::placeholder {
+  color: var(--text-muted);
+}
+
+.glass-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+.glass-card {
+  background: var(--glass-bg-elevated);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--specular-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-glass);
+  padding: 16px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 10px 0;
+}
+
+.glass-code {
+  font-family: var(--font-mono);
+  font-size: 0.80rem;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xs);
+  color: #5AC8FA;
 }

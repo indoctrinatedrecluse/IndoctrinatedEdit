@@ -33,25 +33,70 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({
   }, [])
 
   useEffect(() => {
-    if (window.electronAPI?.isMaximized) {
-      window.electronAPI.isMaximized().then(setIsMaximized)
+    const updateMaxState = () => {
+      if (window.electronAPI?.isMaximized) {
+        window.electronAPI.isMaximized().then(setIsMaximized)
+      } else if (typeof document !== 'undefined') {
+        setIsMaximized(Boolean(document.fullscreenElement))
+      }
     }
+
+    updateMaxState()
+
     const cleanup = window.electronAPI?.onMaximizedChange?.((max) => {
       setIsMaximized(max)
     })
-    return () => cleanup?.()
+
+    const handleResize = () => {
+      updateMaxState()
+    }
+    const handleFullscreenChange = () => {
+      setIsMaximized(Boolean(document.fullscreenElement))
+    }
+
+    window.addEventListener('resize', handleResize)
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+
+    return () => {
+      cleanup?.()
+      window.removeEventListener('resize', handleResize)
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
   }, [])
 
-  const handleMinimize = () => window.electronAPI?.minimize()
+  const handleMinimize = () => {
+    if (window.electronAPI?.minimize) {
+      window.electronAPI.minimize()
+    }
+  }
+
   const handleMaximize = async () => {
     if (window.electronAPI?.maximize) {
-      const isMax = await window.electronAPI.maximize()
-      if (typeof isMax === 'boolean') {
-        setIsMaximized(isMax)
+      const nextMax = await window.electronAPI.maximize()
+      if (typeof nextMax === 'boolean') {
+        setIsMaximized(nextMax)
+      } else if (window.electronAPI.isMaximized) {
+        const checked = await window.electronAPI.isMaximized()
+        setIsMaximized(checked)
+      }
+    } else if (typeof document !== 'undefined') {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {})
+        setIsMaximized(true)
+      } else {
+        document.exitFullscreen?.().catch(() => {})
+        setIsMaximized(false)
       }
     }
   }
-  const handleClose = () => window.electronAPI?.close()
+
+  const handleClose = () => {
+    if (window.electronAPI?.close) {
+      window.electronAPI.close()
+    } else {
+      window.close()
+    }
+  }
 
   return (
     <header className="window-frame">
