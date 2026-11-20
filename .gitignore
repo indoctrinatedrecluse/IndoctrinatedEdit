@@ -15,6 +15,7 @@ bin/
 *.deb
 *.rpm
 *.snap
+*.tsbuildinfo
 
 # Logs
 logs/
