@@ -1900,12 +1900,17 @@ export const App: React.FC = () => {
         workspaceFiles={workspaceFiles}
         tabs={tabs}
         onOpenFile={(f) => handleOpenFileItem({ name: f.name, path: f.path, isDirectory: false })}
+        onCloseTab={(tabId) => handleCloseTab(tabId)}
         symbols={getActiveEditor()?.getOutlineSymbols() || []}
         onGoToLine={(line, col) => {
           getActiveEditor()?.goToLine(line, col)
           setIsPaletteOpen(false)
         }}
         activeTabName={activeTab?.name}
+        totalLines={getActiveEditor()?.getLineCount()}
+        onPreviewTheme={(themeId) => handleSelectTheme(themeId)}
+        onSelectTheme={(themeId) => handleSelectTheme(themeId)}
+        currentThemeId={currentTheme.id}
       />
 
       {/* Notification Center Popover & Floating Glass Toast Stack */}

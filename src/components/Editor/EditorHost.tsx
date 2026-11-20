@@ -129,6 +129,7 @@ export interface EditorHostHandle {
   openRename: () => void
   openMergeStudio: () => void
   openCopilot: () => void
+  getLineCount: () => number
 }
 
 interface EditorHostProps {
@@ -735,6 +736,9 @@ export const EditorHost = forwardRef<EditorHostHandle, EditorHostProps>(({
     },
     openCopilot: () => {
       void openInlineCopilotGated()
+    },
+    getLineCount: () => {
+      return editorRef.current?.getModel()?.getLineCount() || 0
     },
   }))
 
