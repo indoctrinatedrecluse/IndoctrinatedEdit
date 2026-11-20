@@ -10,6 +10,7 @@ import {
 import { streamAiResponse, cancelAiStream } from '@sdk/aiCore'
 import { McpService } from './mcpService'
 import { AiTokenizer } from './aiTokenizer'
+import { aiVaultService } from './aiVaultService'
 
 export interface ProviderSetting {
   apiKey: string
@@ -18,7 +19,7 @@ export interface ProviderSetting {
 
 export type AiSettingsMap = Record<AiProvider, ProviderSetting>
 
-const DEFAULT_SETTINGS: AiSettingsMap = {
+export const DEFAULT_SETTINGS: AiSettingsMap = {
   deepseek: { apiKey: '', endpoint: 'https://api.deepseek.com' },
   gemini: { apiKey: '', endpoint: 'https://generativelanguage.googleapis.com' },
   claude: { apiKey: '', endpoint: 'https://api.anthropic.com' },
@@ -288,7 +289,6 @@ export const PRESET_MODELS: AiModelOption[] = [
   },
 ]
 
-const SETTINGS_STORAGE_KEY = 'indoctrinated_ai_settings'
 const ACTIVE_MODEL_STORAGE_KEY = 'indoctrinated_ai_active_model'
 const PLAN_MODEL_STORAGE_KEY = 'indoctrinated_ai_plan_model'
 const ACT_MODEL_STORAGE_KEY = 'indoctrinated_ai_act_model'
@@ -296,7 +296,6 @@ const ACTIVE_MODE_STORAGE_KEY = 'indoctrinated_ai_active_mode'
 const AUTO_APPROVE_STORAGE_KEY = 'indoctrinated_ai_auto_approve'
 
 export class AiService {
-  private static settings: AiSettingsMap | null = null
   private static autoApproveSettings: AiAutoApproveSettings | null = null
   private static autoApproveListeners: Set<(settings: AiAutoApproveSettings) => void> = new Set()
 
@@ -370,34 +369,11 @@ export class AiService {
   }
 
   static getSettings(): AiSettingsMap {
-    if (!this.settings) {
-      try {
-        if (typeof localStorage !== 'undefined') {
-          const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
-          if (raw) {
-            this.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
-          } else {
-            this.settings = { ...DEFAULT_SETTINGS }
-          }
-        } else {
-          this.settings = { ...DEFAULT_SETTINGS }
-        }
-      } catch {
-        this.settings = { ...DEFAULT_SETTINGS }
-      }
-    }
-    return this.settings!
+    return aiVaultService.getSettings()
   }
 
   static saveSettings(newSettings: AiSettingsMap): void {
-    this.settings = newSettings
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings))
-      }
-    } catch (err) {
-      console.error('Failed to persist AI settings to localStorage', err)
-    }
+    aiVaultService.saveSettings(newSettings)
   }
 
   static getAutoApproveSettings(): AiAutoApproveSettings {

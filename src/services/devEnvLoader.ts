@@ -8,32 +8,11 @@
  * Has zero effect in production builds where VITE_DEV_* vars are not injected.
  */
 
-const SETTINGS_STORAGE_KEY = 'indoctrinated_ai_settings'
-
-interface ProviderSetting {
-  apiKey: string
-  endpoint?: string
-}
-
-type AiSettingsMap = Record<string, ProviderSetting>
-
-const DEFAULT_SETTINGS: AiSettingsMap = {
-  deepseek: { apiKey: '', endpoint: 'https://api.deepseek.com' },
-  gemini: { apiKey: '', endpoint: 'https://generativelanguage.googleapis.com' },
-  claude: { apiKey: '', endpoint: 'https://api.anthropic.com' },
-  openai: { apiKey: '', endpoint: 'https://api.openai.com/v1' },
-  ollama: { apiKey: '', endpoint: 'http://localhost:11434' },
-  antigravity: { apiKey: '', endpoint: '' },
-}
+import { aiVaultService } from './aiVaultService'
 
 export function loadDevApiKeys(): void {
   try {
-    // Read current settings from localStorage
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
-    const current: AiSettingsMap = raw
-      ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
-      : { ...DEFAULT_SETTINGS }
-
+    const current = aiVaultService.getSettings()
     let changed = false
 
     // Gemini key
@@ -65,8 +44,8 @@ export function loadDevApiKeys(): void {
     }
 
     if (changed) {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(current))
-      console.info('[DevEnvLoader] Pre-filled AI API keys from .env.local')
+      aiVaultService.saveSettings(current)
+      console.info('[DevEnvLoader] Pre-filled AI API keys into vault from .env.local')
     }
   } catch (err) {
     console.warn('[DevEnvLoader] Failed to load dev API keys:', err)

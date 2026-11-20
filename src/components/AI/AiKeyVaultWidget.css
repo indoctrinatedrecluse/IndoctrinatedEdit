@@ -1,0 +1,310 @@
+/* IndoctrinatedEdit - Unified AI Key & Endpoint Vault Widget */
+
+.ai-vault-widget-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.ai-vault-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vault-toolbar-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vault-title-text {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.vault-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vault-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vault-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.vault-tool-btn.highlight {
+  background: rgba(10, 132, 255, 0.2);
+  border-color: rgba(10, 132, 255, 0.5);
+  color: #64d2ff;
+}
+
+.vault-providers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vault-provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(18, 22, 36, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.vault-provider-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.vault-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vault-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vault-brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.vault-prov-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+
+.vault-status-pill {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vault-status-pill.active {
+  background: rgba(48, 209, 88, 0.15);
+  color: #30d158;
+  border: 1px solid rgba(48, 209, 88, 0.35);
+}
+
+.vault-status-pill.unconfigured {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vault-status-pill.valid {
+  background: rgba(48, 209, 88, 0.22);
+  color: #32d74b;
+  border: 1px solid rgba(48, 209, 88, 0.5);
+}
+
+.vault-status-pill.invalid {
+  background: rgba(255, 69, 58, 0.18);
+  color: #ff453a;
+  border: 1px solid rgba(255, 69, 58, 0.4);
+}
+
+.vault-status-pill.testing {
+  background: rgba(10, 132, 255, 0.2);
+  color: #64d2ff;
+  border: 1px solid rgba(10, 132, 255, 0.4);
+}
+
+.vault-card-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vault-console-link {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #64d2ff;
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.vault-console-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.vault-helper-desc {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.vault-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vault-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vault-format-badge {
+  font-size: 0.62rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.vault-format-badge.ok {
+  color: #30d158;
+}
+
+.vault-format-badge.warn {
+  color: #ffd60a;
+}
+
+.vault-input-composite {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px 4px;
+  transition: border-color 0.15s ease;
+}
+
+.vault-input-composite:focus-within {
+  border-color: rgba(10, 132, 255, 0.6);
+  box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.25);
+}
+
+.vault-text-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #fff;
+}
+
+.vault-text-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.vault-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vault-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.vault-btn-icon.del:hover {
+  color: #ff453a;
+  background: rgba(255, 69, 58, 0.15);
+}
+
+.vault-probe-feedback {
+  font-size: 0.66rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vault-probe-feedback.success {
+  background: rgba(48, 209, 88, 0.12);
+  color: #30d158;
+  border: 1px solid rgba(48, 209, 88, 0.3);
+}
+
+.vault-probe-feedback.error {
+  background: rgba(255, 69, 58, 0.12);
+  color: #ff453a;
+  border: 1px solid rgba(255, 69, 58, 0.3);
+}
+
+/* Backup / Export Drawer Modal */
+.vault-modal-card {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(14, 18, 30, 0.95);
+  border: 1px solid rgba(10, 132, 255, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vault-modal-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #64d2ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

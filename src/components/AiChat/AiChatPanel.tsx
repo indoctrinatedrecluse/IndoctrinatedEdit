@@ -13,9 +13,6 @@ import {
   Code2,
   ChevronDown,
   ChevronRight,
-  RefreshCw,
-  Eye,
-  EyeOff,
   Layers,
   ArrowDownToLine,
   Replace,
@@ -67,6 +64,7 @@ import {
   AUTO_APPROVE_PRESETS,
   hasActionablePlan,
 } from '../../services/aiService'
+import { AiKeyVaultWidget } from '../AI/AiKeyVaultWidget'
 import { AiTokenizer, TokenBreakdown } from '../../services/aiTokenizer'
 import { SelectionInfo } from '../Editor/EditorHost'
 import { terminalService } from '../../services/terminalService'
@@ -316,7 +314,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'keys' | 'permissions' | 'modes'>('keys')
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
-  const [showKey, setShowKey] = useState<Record<string, boolean>>({})
 
   const DEFAULT_WELCOME_MSG: AiChatMessage = {
     id: 'welcome-msg',
@@ -1152,19 +1149,6 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
     setCancelFn(null)
   }
 
-  const handleSaveSettings = (provider: AiProvider, field: 'apiKey' | 'endpoint', value: string) => {
-    const cleanVal = field === 'apiKey' ? value.trim() : value
-    const updated = {
-      ...settings,
-      [provider]: {
-        ...settings[provider],
-        [field]: cleanVal,
-      },
-    }
-    setSettings(updated)
-    AiService.saveSettings(updated)
-  }
-
   const handleRefreshOllama = async () => {
     const ollamaModels = await AiService.fetchOllamaModels(settings.ollama.endpoint)
     if (ollamaModels.length > 0) {
@@ -1893,136 +1877,10 @@ export const AiChatPanel: React.FC<AiChatPanelProps> = ({
 
           {settingsTab === 'keys' && (
             <div className="settings-scroll-list">
-              {([
-                {
-                  id: 'openrouter',
-                  name: 'OpenRouter (300+ Models Gateway)',
-                  defaultUrl: 'https://openrouter.ai/api/v1',
-                  keyPlaceholder: 'sk-or-v1-...',
-                  helper: 'Unified BYOK gateway for Claude 3.7, DeepSeek R1, GPT-4o, Gemini 2.0 & Qwen.',
-                  dashboardUrl: 'https://openrouter.ai/keys',
-                },
-                {
-                  id: 'gemini',
-                  name: 'Google Gemini (Google AI Studio)',
-                  defaultUrl: 'https://generativelanguage.googleapis.com',
-                  keyPlaceholder: 'AIza...',
-                  helper: 'Direct AI Studio API: 1M context window & native CoT thinking.',
-                  dashboardUrl: 'https://aistudio.google.com/app/apikey',
-                },
-                {
-                  id: 'deepseek',
-                  name: 'DeepSeek API',
-                  defaultUrl: 'https://api.deepseek.com',
-                  keyPlaceholder: 'sk-...',
-                  helper: 'Direct DeepSeek API: V3 Chat & R1 Deep Reasoning at state-of-the-art cost efficiency.',
-                  dashboardUrl: 'https://platform.deepseek.com/api_keys',
-                },
-                {
-                  id: 'claude',
-                  name: 'Anthropic Claude API',
-                  defaultUrl: 'https://api.anthropic.com',
-                  keyPlaceholder: 'sk-ant-...',
-                  helper: 'Direct Anthropic API: Claude 3.7 Sonnet, 3.5 Sonnet, and Opus frontier models.',
-                  dashboardUrl: 'https://console.anthropic.com/settings/keys',
-                },
-                {
-                  id: 'openai',
-                  name: 'OpenAI API',
-                  defaultUrl: 'https://api.openai.com/v1',
-                  keyPlaceholder: 'sk-...',
-                  helper: 'Direct OpenAI API: GPT-4o, o3-mini, and GPT-4o-mini.',
-                  dashboardUrl: 'https://platform.openai.com/api-keys',
-                },
-                {
-                  id: 'custom',
-                  name: 'Custom OpenAI-Compatible',
-                  defaultUrl: 'http://localhost:1234/v1',
-                  keyPlaceholder: 'Optional for local',
-                  helper: 'Connect to LM Studio, vLLM, Groq, Together AI, Cerebras, or self-hosted proxy.',
-                },
-                {
-                  id: 'ollama',
-                  name: 'Ollama (Local Models)',
-                  defaultUrl: 'http://localhost:11434',
-                  keyPlaceholder: '',
-                  helper: 'Local offline models running on your machine via Ollama.',
-                },
-              ] as const).map((provInfo) => {
-                const prov = provInfo.id as AiProvider
-                const cfg = settings[prov] || { apiKey: '', endpoint: '' }
-                const isOllama = prov === 'ollama'
-                const isRevealed = showKey[prov]
-
-                return (
-                  <div key={prov} className="provider-card glass-subcard">
-                    <div className="prov-card-header">
-                      <div className="prov-title-left">
-                        <span
-                          className="provider-dot"
-                          style={{ backgroundColor: getProviderColor(prov) }}
-                        />
-                        <span className="prov-name">{provInfo.name.toUpperCase()}</span>
-                      </div>
-                      <div className="prov-header-actions">
-                        {(provInfo as any).dashboardUrl && (
-                          <a
-                            href={(provInfo as any).dashboardUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="prov-link"
-                            title={`Get API Key from ${provInfo.name}`}
-                          >
-                            Get Key ↗
-                          </a>
-                        )}
-                        {isOllama && (
-                          <button
-                            className="refresh-btn glass-interactive"
-                            onClick={handleRefreshOllama}
-                            title="Scan for local Ollama models"
-                          >
-                            <RefreshCw size={11} />
-                            <span>Detect Models</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="prov-helper-text">{provInfo.helper}</div>
-
-                    {!isOllama && (
-                      <div className="prov-input-row">
-                        <label>API Key</label>
-                        <div className="input-with-icon">
-                          <input
-                            type={isRevealed ? 'text' : 'password'}
-                            placeholder={provInfo.keyPlaceholder ? `Enter ${provInfo.name} Key (${provInfo.keyPlaceholder})` : `Enter API Key...`}
-                            value={cfg.apiKey || ''}
-                            onChange={(e) => handleSaveSettings(prov, 'apiKey', e.target.value)}
-                          />
-                          <button
-                            className="toggle-vis-btn"
-                            onClick={() => setShowKey((prev) => ({ ...prev, [prov]: !prev[prov] }))}
-                          >
-                            {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="prov-input-row">
-                      <label>{isOllama ? 'Host URL' : 'Endpoint / Proxy (Optional)'}</label>
-                      <input
-                        type="text"
-                        placeholder={provInfo.defaultUrl}
-                        value={cfg.endpoint || ''}
-                        onChange={(e) => handleSaveSettings(prov, 'endpoint', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
+              <AiKeyVaultWidget
+                onSettingsChanged={(newSettings) => setSettings(newSettings)}
+                onRefreshOllama={handleRefreshOllama}
+              />
             </div>
           )}
         </div>
