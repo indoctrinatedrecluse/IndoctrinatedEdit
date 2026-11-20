@@ -171,16 +171,16 @@ describe('Auto-Updater Subsystem Tests', () => {
       // Mock updateInfo with an available update and matched asset
       ;(service as any).updateInfo = {
         updateAvailable: true,
-        currentVersion: '6.1.2',
-        latestVersion: '6.2.0',
-        releaseName: 'IndoctrinatedEdit 6.2.0',
+        currentVersion: '6.2.0',
+        latestVersion: '6.3.0',
+        releaseName: 'IndoctrinatedEdit 6.3.0',
         releaseNotes: 'Awesome new features',
         publishedAt: new Date().toISOString(),
-        releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases/v6.2.0',
+        releaseUrl: 'https://github.com/indoctrinatedrecluse/IndoctrinatedEdit/releases/v6.3.0',
         matchedAsset: {
           asset: {
-            name: 'IndoctrinatedEdit-6.2.0-Setup.exe',
-            browser_download_url: 'https://github.com/releases/download/v6.2.0/IndoctrinatedEdit-6.2.0-Setup.exe',
+            name: 'IndoctrinatedEdit-6.3.0-Setup.exe',
+            browser_download_url: 'https://github.com/releases/download/v6.3.0/IndoctrinatedEdit-6.3.0-Setup.exe',
             size: 80000000,
             content_type: 'application/x-msdos-program',
           },

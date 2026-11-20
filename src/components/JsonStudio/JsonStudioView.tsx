@@ -24,7 +24,7 @@ export const JsonStudioView: React.FC = () => {
     JSON.stringify(
       {
         appName: 'IndoctrinatedEdit',
-        version: '6.1.2',
+        version: '6.2.0',
         activeProfile: 'Liquid Glass Dark Velvet',
         telemetry: { enabled: true, heartbeatMs: 5000 },
         users: [
@@ -383,7 +383,7 @@ export const JsonStudioView: React.FC = () => {
                 className="json-textarea"
                 value={transformInput}
                 onChange={(e) => setTransformInput(e.target.value)}
-                placeholder={transFrom === 'yaml' ? 'name: IndoctrinatedEdit\nversion: 6.1.2\nfeatures:\n  - lsp\n  - git' : 'Using main JSON payload...'}
+                placeholder={transFrom === 'yaml' ? 'name: IndoctrinatedEdit\nversion: 6.2.0\nfeatures:\n  - lsp\n  - git' : 'Using main JSON payload...'}
                 rows={4}
               />
             </div>

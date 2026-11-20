@@ -112,7 +112,7 @@ CMD ["node", "server.js"]
     it('generates declarative docker-compose service blocks with restart policies and resource limits', () => {
       const composeYaml = dockerService.generateComposeService({
         serviceName: 'backend-api',
-        image: 'indoctrinated/backend:6.1.2',
+        image: 'indoctrinated/backend:6.2.0',
         port: 8080,
         restartPolicy: 'unless-stopped',
         memoryLimitMb: 512,
@@ -123,7 +123,7 @@ CMD ["node", "server.js"]
       })
 
       expect(composeYaml).toContain('backend-api:')
-      expect(composeYaml).toContain('image: indoctrinated/backend:6.1.2')
+      expect(composeYaml).toContain('image: indoctrinated/backend:6.2.0')
       expect(composeYaml).toContain('restart: unless-stopped')
       expect(composeYaml).toContain('"8080:8080"')
       expect(composeYaml).toContain('NODE_ENV=production')
