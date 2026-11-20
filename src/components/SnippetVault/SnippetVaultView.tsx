@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Bookmark,
   Search,
@@ -9,18 +9,22 @@ import {
   Trash2,
   Tag,
   ArrowRight,
+  Sparkles,
 } from 'lucide-react'
 import { snippetVaultService, CodeSnippet } from '../../services/snippetVaultService'
 import './SnippetVaultView.css'
 
 interface SnippetVaultViewProps {
+  activeFileName?: string
   onInsertSnippet?: (code: string) => void
 }
 
 export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
+  activeFileName,
   onInsertSnippet,
 }) => {
   const [activeTab, setActiveTab] = useState<'snippets' | 'scratchpad' | 'new'>('snippets')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'builtin'>('all')
   const [selectedLang, setSelectedLang] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [snippets, setSnippets] = useState<CodeSnippet[]>(() => snippetVaultService.getAllSnippets())
@@ -141,18 +145,13 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
     new Set(['all', ...snippets.map((s) => s.language.toLowerCase())])
   )
 
-  const filteredSnippets = snippets.filter((s) => {
-    const matchesLang = selectedLang === 'all' || s.language.toLowerCase() === selectedLang.toLowerCase()
-    const q = searchQuery.toLowerCase().trim()
-    const matchesQuery =
-      !q ||
-      s.title.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q) ||
-      s.code.toLowerCase().includes(q) ||
-      s.language.toLowerCase().includes(q) ||
-      s.tags.some((t) => t.toLowerCase().includes(q))
-    return matchesLang && matchesQuery
-  })
+  const filteredSnippets = useMemo(() => {
+    return snippetVaultService.filterSnippets({
+      type: typeFilter,
+      language: selectedLang,
+      query: searchQuery,
+    })
+  }, [snippets, typeFilter, selectedLang, searchQuery])
 
   return (
     <div className="snippet-vault-root">
@@ -229,6 +228,20 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
                 />
               </div>
 
+              {/* Type Filter Pills */}
+              <div style={{ display: 'flex', gap: 6, margin: '6px 0 2px 0' }}>
+                {(['all', 'custom', 'builtin'] as const).map((t) => (
+                  <button
+                    key={t}
+                    className={`lang-chip ${typeFilter === t ? 'active' : ''}`}
+                    style={{ fontSize: '0.66rem', padding: '2px 8px' }}
+                    onClick={() => setTypeFilter(t)}
+                  >
+                    {t === 'all' ? 'ALL SOURCES' : t.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
               <div
                 className="lang-chips-strip"
                 onWheel={(e) => {
@@ -263,13 +276,29 @@ export const SnippetVaultView: React.FC<SnippetVaultViewProps> = ({
 
                       <div className="snippet-actions">
                         {onInsertSnippet && (
-                          <button
-                            className="snippet-tool-btn glass-interactive"
-                            onClick={() => onInsertSnippet(s.code)}
-                            title="Insert into active editor"
-                          >
-                            <ArrowRight size={11} /> Insert
-                          </button>
+                          <>
+                            <button
+                              className="snippet-tool-btn glass-interactive"
+                              onClick={() => onInsertSnippet(s.code)}
+                              title="Insert raw code into active editor"
+                            >
+                              <ArrowRight size={11} /> Insert
+                            </button>
+                            <button
+                              className="snippet-tool-btn glass-interactive"
+                              onClick={() =>
+                                onInsertSnippet(
+                                  snippetVaultService.expandSnippetVariables(s.code, {
+                                    fileName: activeFileName,
+                                  })
+                                )
+                              }
+                              title="Expand tokens ($CURRENT_YEAR, $UUID, etc.) and insert"
+                              style={{ color: '#0A84FF' }}
+                            >
+                              <Sparkles size={11} /> Expand
+                            </button>
+                          </>
                         )}
                         <button
                           className="snippet-tool-btn glass-interactive"

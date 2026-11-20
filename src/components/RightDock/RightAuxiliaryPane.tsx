@@ -591,6 +591,7 @@ export const RightAuxiliaryPane: React.FC<RightAuxiliaryPaneProps> = ({
 
         {activeTab === 'snippets' && (
           <SnippetVaultView
+            activeFileName={activeFileName}
             onInsertSnippet={onInsertAtCursor}
           />
         )}

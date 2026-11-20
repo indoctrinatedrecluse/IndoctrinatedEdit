@@ -253,6 +253,68 @@ class DiffStudioService {
   }
 
   /**
+   * Word-level diff tokenizing on whitespace and word boundaries.
+   */
+  public computeWordDiff(left: string, right: string): {
+    left: Array<{ type: 'del' | 'same'; text: string }>
+    right: Array<{ type: 'add' | 'same'; text: string }>
+  } {
+    const tokenize = (s: string) => s.match(/\s+|[^\s\w]+|\w+/g) || [s]
+    const leftTokens = tokenize(left)
+    const rightTokens = tokenize(right)
+
+    let prefix = 0
+    while (prefix < leftTokens.length && prefix < rightTokens.length && leftTokens[prefix] === rightTokens[prefix]) {
+      prefix++
+    }
+    let suffix = 0
+    while (
+      suffix < leftTokens.length - prefix &&
+      suffix < rightTokens.length - prefix &&
+      leftTokens[leftTokens.length - 1 - suffix] === rightTokens[rightTokens.length - 1 - suffix]
+    ) {
+      suffix++
+    }
+
+    const leftChunks: Array<{ type: 'del' | 'same'; text: string }> = []
+    const rightChunks: Array<{ type: 'add' | 'same'; text: string }> = []
+
+    if (prefix > 0) {
+      const preText = leftTokens.slice(0, prefix).join('')
+      leftChunks.push({ type: 'same', text: preText })
+      rightChunks.push({ type: 'same', text: preText })
+    }
+
+    const lMid = leftTokens.slice(prefix, leftTokens.length - suffix).join('')
+    const rMid = rightTokens.slice(prefix, rightTokens.length - suffix).join('')
+    if (lMid) leftChunks.push({ type: 'del', text: lMid })
+    if (rMid) rightChunks.push({ type: 'add', text: rMid })
+
+    if (suffix > 0) {
+      const sufText = leftTokens.slice(leftTokens.length - suffix).join('')
+      leftChunks.push({ type: 'same', text: sufText })
+      rightChunks.push({ type: 'same', text: sufText })
+    }
+
+    return { left: leftChunks, right: rightChunks }
+  }
+
+  /**
+   * Triggers client-side download of unified .patch file.
+   */
+  public downloadPatchFile(filename: string, patchContent: string): void {
+    if (typeof document === 'undefined') return
+    const patchName = filename.endsWith('.patch') ? filename : `${filename}.patch`
+    const blob = new Blob([patchContent], { type: 'text/x-diff;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = patchName
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  /**
    * Generate standard multi-hunk unified patch (-U3 context) compatible with `git apply`
    */
   public generateUnifiedPatch(filename: string, originalText: string, modifiedText: string, contextLines = 3): string {

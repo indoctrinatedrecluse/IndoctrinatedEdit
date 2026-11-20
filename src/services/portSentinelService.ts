@@ -29,6 +29,14 @@ export interface PortPingResult {
   checkedAt: string
 }
 
+export interface PortFilterOptions {
+  searchQuery?: string
+  protocol?: 'ALL' | 'TCP' | 'UDP'
+  state?: 'ALL' | 'LISTENING' | 'ESTABLISHED'
+  category?: 'ALL' | ActivePort['category']
+  conflictsOnly?: boolean
+}
+
 export const KNOWN_DEV_PORTS: Record<number, { name: string; category: ActivePort['category']; description: string }> = {
   80: { name: 'HTTP Standard', category: 'web', description: 'Standard Web Server' },
   443: { name: 'HTTPS Standard', category: 'web', description: 'Encrypted Web Server' },
@@ -161,7 +169,7 @@ class PortSentinelService {
    * Scans active OS listening ports via Electron IPC (`netstat`/`tasklist` or `lsof`/`ss`),
    * merges persisted user watchlist entries, and detects real multi-PID port conflicts.
    */
-  public async scanActivePorts(customFilter?: string): Promise<ActivePort[]> {
+  public async scanActivePorts(customFilter?: string | PortFilterOptions): Promise<ActivePort[]> {
     let list: ActivePort[]
 
     if (typeof window !== 'undefined' && window.electronAPI?.infra?.portsScan) {
@@ -201,18 +209,51 @@ class PortSentinelService {
     }
 
     if (customFilter) {
-      const q = customFilter.toLowerCase().trim()
-      list = list.filter(
+      if (typeof customFilter === 'string') {
+        return this.filterPorts(list, { searchQuery: customFilter })
+      }
+      return this.filterPorts(list, customFilter)
+    }
+
+    return list.sort((a, b) => a.port - b.port)
+  }
+
+  /**
+   * Filters and sorts port entries using protocol, state, category, conflict status, and query.
+   */
+  public filterPorts(ports: ActivePort[], options: PortFilterOptions): ActivePort[] {
+    let result = [...ports]
+
+    if (options.protocol && options.protocol !== 'ALL') {
+      result = result.filter((p) => p.protocol.toUpperCase() === options.protocol)
+    }
+
+    if (options.state && options.state !== 'ALL') {
+      result = result.filter((p) => p.state.toUpperCase() === options.state)
+    }
+
+    if (options.category && options.category !== 'ALL') {
+      result = result.filter((p) => p.category === options.category)
+    }
+
+    if (options.conflictsOnly) {
+      result = result.filter((p) => p.isConflict)
+    }
+
+    if (options.searchQuery && options.searchQuery.trim()) {
+      const q = options.searchQuery.toLowerCase().trim()
+      result = result.filter(
         (p) =>
           p.port.toString().includes(q) ||
           p.pid.toString().includes(q) ||
           p.processName.toLowerCase().includes(q) ||
           p.description.toLowerCase().includes(q) ||
-          p.protocol.toLowerCase().includes(q)
+          p.protocol.toLowerCase().includes(q) ||
+          p.localAddress.toLowerCase().includes(q)
       )
     }
 
-    return list.sort((a, b) => a.port - b.port)
+    return result.sort((a, b) => a.port - b.port)
   }
 
   /**

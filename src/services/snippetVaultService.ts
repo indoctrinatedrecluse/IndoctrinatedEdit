@@ -270,6 +270,84 @@ echo "Executing safe script..."`,
     this.scratchpadText = text
     this.saveToStorage()
   }
+
+  /**
+   * Expands template variable tokens ($CURRENT_YEAR, $CURRENT_DATE, $CURRENT_TIME, $FILE_NAME, $FILE_EXT, $AUTHOR, $UUID, $RANDOM_HEX)
+   * into their evaluated runtime values.
+   */
+  public expandSnippetVariables(
+    template: string,
+    context?: { fileName?: string; author?: string }
+  ): string {
+    const now = new Date()
+    const yyyy = String(now.getFullYear())
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const hh = String(now.getHours()).padStart(2, '0')
+    const min = String(now.getMinutes()).padStart(2, '0')
+    const ss = String(now.getSeconds()).padStart(2, '0')
+
+    const dateStr = `${yyyy}-${mm}-${dd}`
+    const timeStr = `${hh}:${min}:${ss}`
+    const fileName = context?.fileName || 'untitled'
+    const extMatch = fileName.match(/\.([^.]+)$/)
+    const fileExt = extMatch ? extMatch[1] : ''
+    const author = context?.author || 'indoctrinatedrecluse'
+
+    return template
+      .replace(/\$CURRENT_YEAR/g, yyyy)
+      .replace(/\$CURRENT_DATE/g, dateStr)
+      .replace(/\$CURRENT_TIME/g, timeStr)
+      .replace(/\$FILE_NAME/g, fileName)
+      .replace(/\$FILE_EXT/g, fileExt)
+      .replace(/\$AUTHOR/g, author)
+      .replace(/\$UUID/g, () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID()
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0
+          const v = c === 'x' ? r : (r & 0x3) | 0x8
+          return v.toString(16)
+        })
+      })
+      .replace(/\$RANDOM_HEX/g, () => Math.random().toString(16).substring(2, 10))
+  }
+
+  /**
+   * Filters snippet collection across type (all / custom / builtin), language, and search query.
+   */
+  public filterSnippets(options: {
+    type?: 'all' | 'custom' | 'builtin'
+    language?: string
+    query?: string
+  }): CodeSnippet[] {
+    let list = this.getAllSnippets()
+    if (options.type === 'custom') {
+      list = list.filter((s) => s.isCustom)
+    } else if (options.type === 'builtin') {
+      list = list.filter((s) => !s.isCustom)
+    }
+
+    if (options.language && options.language !== 'all') {
+      const l = options.language.toLowerCase()
+      list = list.filter((s) => s.language.toLowerCase() === l)
+    }
+
+    if (options.query && options.query.trim()) {
+      const q = options.query.toLowerCase().trim()
+      list = list.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.description.toLowerCase().includes(q) ||
+          s.code.toLowerCase().includes(q) ||
+          s.language.toLowerCase().includes(q) ||
+          s.tags.some((t) => t.toLowerCase().includes(q))
+      )
+    }
+
+    return list
+  }
 }
 
 export const snippetVaultService = new SnippetVaultService()

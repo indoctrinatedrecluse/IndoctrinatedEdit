@@ -513,6 +513,55 @@ class SocketService {
     return [...this.messages]
   }
 
+  /**
+   * Filter socket messages by search query, packet direction, and type.
+   */
+  public filterMessages(
+    messages: SocketMessage[],
+    options: { query?: string; direction?: 'in' | 'out' | 'all'; type?: string }
+  ): SocketMessage[] {
+    let result = [...messages]
+    if (options.direction && options.direction !== 'all') {
+      result = result.filter((m) => m.direction === options.direction)
+    }
+    if (options.type && options.type !== 'all') {
+      result = result.filter((m) => m.type === options.type)
+    }
+    if (options.query && options.query.trim()) {
+      const q = options.query.toLowerCase().trim()
+      result = result.filter(
+        (m) =>
+          m.data.toLowerCase().includes(q) ||
+          (m.eventName && m.eventName.toLowerCase().includes(q)) ||
+          m.type.toLowerCase().includes(q)
+      )
+    }
+    return result
+  }
+
+  /**
+   * Export all recorded stream packets as formatted JSON string.
+   */
+  public exportMessagesJson(): string {
+    return JSON.stringify(this.messages, null, 2)
+  }
+
+  /**
+   * Alias for send()
+   */
+  public sendMessage(payload: string): boolean {
+    return this.send(payload)
+  }
+
+  /**
+   * Replays an existing message payload to the currently active socket.
+   */
+  public replayMessage(messageId: string): boolean {
+    const msg = this.messages.find((m) => m.id === messageId)
+    if (!msg || !msg.data) return false
+    return this.send(msg.data)
+  }
+
   public clearMessages(): void {
     this.messages = []
     this.notifyListeners()

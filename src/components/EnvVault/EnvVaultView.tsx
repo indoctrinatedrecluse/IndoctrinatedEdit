@@ -44,7 +44,7 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({})
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<string | null>(null)
-  const [exportLang, setExportLang] = useState<'typescript' | 'python' | 'go' | 'docker' | 'k8s'>('typescript')
+  const [exportLang, setExportLang] = useState<'typescript' | 'python' | 'go' | 'docker' | 'k8s' | 'k8s-configmap' | 'json'>('typescript')
   const [vaultPassword, setVaultPassword] = useState<string>('')
   const [decryptBundle, setDecryptBundle] = useState<string>('')
   const [vaultError, setVaultError] = useState<string | null>(null)
@@ -319,6 +319,28 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
                           style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'monospace', fontWeight: 600, minWidth: 120 }}
                           title="Edit variable key"
                         />
+                        {v.isSecret && v.value && (() => {
+                          const str = envVaultService.assessSecretStrength(v.value)
+                          return (
+                            <span
+                              className="entropy-pill"
+                              style={{
+                                fontSize: '0.62rem',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: `${str.color}22`,
+                                color: str.color,
+                                border: `1px solid ${str.color}55`,
+                                marginLeft: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title={`Entropy: ${str.entropy} bits/char - ${str.description}`}
+                            >
+                              {str.scoreLabel} ({str.entropy}b)
+                            </span>
+                          )
+                        })()}
                       </div>
                       <div className="card-actions">
                         {v.isSecret && (
@@ -519,14 +541,14 @@ export const EnvVaultView: React.FC<EnvVaultViewProps> = ({ workspaceRoot }) => 
         {/* TAB 5: CODE & ENCRYPTION */}
         {activeView === 'export' && (
           <div className="export-view-pane">
-            <div className="export-lang-tabs">
-              {(['typescript', 'python', 'go', 'docker', 'k8s'] as const).map((lang) => (
+            <div className="export-lang-tabs" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(['typescript', 'python', 'go', 'docker', 'k8s', 'k8s-configmap', 'json'] as const).map((lang) => (
                 <button
                   key={lang}
                   className={`lang-tab-btn glass-interactive ${exportLang === lang ? 'active' : ''}`}
                   onClick={() => setExportLang(lang)}
                 >
-                  {lang.toUpperCase()}
+                  {lang === 'k8s-configmap' ? 'K8S CONFIGMAP' : lang.toUpperCase()}
                 </button>
               ))}
             </div>

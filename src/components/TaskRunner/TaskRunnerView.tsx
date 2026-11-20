@@ -18,6 +18,8 @@ interface TaskRunnerViewProps {
 export const TaskRunnerView: React.FC<TaskRunnerViewProps> = ({ workspaceRoot }) => {
   const [activeTab, setActiveTab] = useState<'tasks' | 'cron'>('tasks')
   const [tasks, setTasks] = useState<ProjectTask[]>(() => taskRunnerService.getTasks())
+  const [sourceFilter, setSourceFilter] = useState<string>('All')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -151,8 +153,38 @@ export const TaskRunnerView: React.FC<TaskRunnerViewProps> = ({ workspaceRoot })
                 </div>
               </div>
             )}
+            {/* Search and Source Filters */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+              <input
+                type="text"
+                className="cron-input"
+                placeholder="Search tasks or commands..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+              />
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {['All', 'package.json', 'Makefile', 'Cargo.toml', 'Python', 'Go', 'Deno', 'Custom'].map((src) => (
+                  <button
+                    key={src}
+                    className={`task-run-btn glass-interactive ${sourceFilter === src ? 'active' : ''}`}
+                    style={{
+                      fontSize: '0.65rem',
+                      padding: '2px 7px',
+                      background: sourceFilter === src ? 'rgba(10, 132, 255, 0.3)' : 'rgba(255, 255, 255, 0.05)',
+                      borderColor: sourceFilter === src ? '#0A84FF' : 'rgba(255, 255, 255, 0.1)',
+                      color: sourceFilter === src ? '#FFF' : 'rgba(255, 255, 255, 0.7)',
+                    }}
+                    onClick={() => setSourceFilter(src)}
+                  >
+                    {src}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="tasks-list">
-              {tasks.map((task) => {
+              {taskRunnerService.filterTasks(tasks, { source: sourceFilter, query: searchQuery }).map((task) => {
                 const isRunning = runningTaskId === task.id
                 return (
                   <div key={task.id} className="task-card glass-panel">

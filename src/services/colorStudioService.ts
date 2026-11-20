@@ -28,6 +28,14 @@ export interface GlassPalette {
   textMuted: string
 }
 
+export interface ColorHarmonies {
+  complementary: string
+  analogous: string[]
+  triadic: string[]
+  tetradic: string[]
+  monochromatic: string[]
+}
+
 export interface ContrastAuditResult {
   ratio: number
   ratioFormatted: string
@@ -346,9 +354,9 @@ class ColorStudioService {
   }
 
   /**
-   * Generate harmonious color scheme (Complementary, Triadic, Analogous)
+   * Generate harmonious color scheme (Complementary, Triadic, Analogous, Tetradic, Monochromatic)
    */
-  public generateHarmonies(hex: string): { complementary: string; analogous: string[]; triadic: string[] } {
+  public generateHarmonies(hex: string): ColorHarmonies {
     const { hsl } = this.parseColor(hex)
     const compH = (hsl.h + 180) % 360
     const an1H = (hsl.h + 30) % 360
@@ -356,11 +364,76 @@ class ColorStudioService {
     const tri1H = (hsl.h + 120) % 360
     const tri2H = (hsl.h + 240) % 360
 
+    const tet1H = (hsl.h + 90) % 360
+    const tet2H = (hsl.h + 180) % 360
+    const tet3H = (hsl.h + 270) % 360
+
+    const mono1L = Math.max(10, hsl.l - 25)
+    const mono2L = Math.max(10, hsl.l - 12)
+    const mono3L = Math.min(95, hsl.l + 12)
+    const mono4L = Math.min(95, hsl.l + 25)
+
     return {
       complementary: this.hslToHex(compH, hsl.s, hsl.l),
       analogous: [this.hslToHex(an1H, hsl.s, hsl.l), this.hslToHex(an2H, hsl.s, hsl.l)],
       triadic: [this.hslToHex(tri1H, hsl.s, hsl.l), this.hslToHex(tri2H, hsl.s, hsl.l)],
+      tetradic: [
+        this.hslToHex(tet1H, hsl.s, hsl.l),
+        this.hslToHex(tet2H, hsl.s, hsl.l),
+        this.hslToHex(tet3H, hsl.s, hsl.l),
+      ],
+      monochromatic: [
+        this.hslToHex(hsl.h, hsl.s, mono1L),
+        this.hslToHex(hsl.h, hsl.s, mono2L),
+        this.hslToHex(hsl.h, hsl.s, mono3L),
+        this.hslToHex(hsl.h, hsl.s, mono4L),
+      ],
     }
+  }
+
+  /**
+   * Simulates Color Vision Deficiency (CVD) perception for accessibility analysis.
+   */
+  public simulateCVD(
+    hex: string,
+    type: 'protanopia' | 'deuteranopia' | 'tritanopia' | 'achromatopsia'
+  ): string {
+    const { rgb } = this.parseColor(hex)
+    let r = rgb.r
+    let g = rgb.g
+    let b = rgb.b
+
+    switch (type) {
+      case 'protanopia':
+        r = 0.56667 * rgb.r + 0.43333 * rgb.g
+        g = 0.55833 * rgb.r + 0.44167 * rgb.g
+        b = 0.24167 * rgb.g + 0.75833 * rgb.b
+        break
+      case 'deuteranopia':
+        r = 0.625 * rgb.r + 0.375 * rgb.g
+        g = 0.70 * rgb.r + 0.30 * rgb.g
+        b = 0.30 * rgb.g + 0.70 * rgb.b
+        break
+      case 'tritanopia':
+        r = 0.95 * rgb.r + 0.05 * rgb.g
+        g = 0.43333 * rgb.g + 0.56667 * rgb.b
+        b = 0.475 * rgb.g + 0.525 * rgb.b
+        break
+      case 'achromatopsia': {
+        const gray = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b
+        r = gray
+        g = gray
+        b = gray
+        break
+      }
+    }
+
+    const clamp = (v: number) => Math.min(255, Math.max(0, Math.round(v)))
+    const rHex = clamp(r).toString(16).padStart(2, '0')
+    const gHex = clamp(g).toString(16).padStart(2, '0')
+    const bHex = clamp(b).toString(16).padStart(2, '0')
+
+    return `#${rHex}${gHex}${bHex}`.toUpperCase()
   }
 
   private hslToHex(h: number, s: number, l: number): string {

@@ -381,6 +381,41 @@ export const ColorStudioView: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* Color Vision Deficiency (CVD) Simulator */}
+            <div className="wcag-checklist glass-panel" style={{ marginTop: 12 }}>
+              <span className="section-label">COLOR VISION DEFICIENCY (CVD) ACCESSIBILITY SIMULATION</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                {[
+                  { type: 'protanopia' as const, label: 'Protanopia (Red-Blind, ~1% M)' },
+                  { type: 'deuteranopia' as const, label: 'Deuteranopia (Green-Blind, ~5% M)' },
+                  { type: 'tritanopia' as const, label: 'Tritanopia (Blue-Blind, ~0.01%)' },
+                  { type: 'achromatopsia' as const, label: 'Achromatopsia (Monochromacy)' },
+                ].map(({ type, label }) => {
+                  const simFg = colorStudioService.simulateCVD(colorDetails.hex, type)
+                  const simBg = colorStudioService.simulateCVD(bgDetails.hex, type)
+                  const simContrast = colorStudioService.calculateContrastRatio(simFg, simBg)
+                  return (
+                    <div
+                      key={type}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 6,
+                        backgroundColor: simBg,
+                        color: simFg,
+                        border: '1px solid rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.72rem', fontWeight: 600, opacity: 0.9 }}>{label}</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, margin: '4px 0' }}>Sample Text Aa</div>
+                      <div style={{ fontSize: '0.65rem', opacity: 0.75 }}>
+                        {simFg} / {simContrast.ratioFormatted} ({simContrast.rating})
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -461,6 +496,56 @@ export const ColorStudioView: React.FC = () => {
                     title="Click to copy HEX"
                   >
                     <span>{copiedKey === `tri_${i}` ? 'Copied!' : h}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="harmony-block glass-panel">
+              <span className="harmony-title">Tetradic / Rectangle (90° Spread)</span>
+              <div className="palette-strip">
+                <div
+                  className="swatch-item"
+                  style={{ backgroundColor: colorDetails.hex, cursor: 'pointer' }}
+                  onClick={() => copyToClipboard(colorDetails.hex, 'tet_base')}
+                  title="Click to copy HEX"
+                >
+                  <span>{copiedKey === 'tet_base' ? 'Copied!' : colorDetails.hex}</span>
+                </div>
+                {harmonies.tetradic.map((h, i) => (
+                  <div
+                    key={i}
+                    className="swatch-item"
+                    style={{ backgroundColor: h, cursor: 'pointer' }}
+                    onClick={() => copyToClipboard(h, `tet_${i}`)}
+                    title="Click to copy HEX"
+                  >
+                    <span>{copiedKey === `tet_${i}` ? 'Copied!' : h}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="harmony-block glass-panel">
+              <span className="harmony-title">Monochromatic (Lightness Scale)</span>
+              <div className="palette-strip">
+                <div
+                  className="swatch-item"
+                  style={{ backgroundColor: colorDetails.hex, cursor: 'pointer' }}
+                  onClick={() => copyToClipboard(colorDetails.hex, 'mono_base')}
+                  title="Click to copy HEX"
+                >
+                  <span>{copiedKey === 'mono_base' ? 'Copied!' : colorDetails.hex}</span>
+                </div>
+                {harmonies.monochromatic.map((h, i) => (
+                  <div
+                    key={i}
+                    className="swatch-item"
+                    style={{ backgroundColor: h, cursor: 'pointer' }}
+                    onClick={() => copyToClipboard(h, `mono_${i}`)}
+                    title="Click to copy HEX"
+                  >
+                    <span>{copiedKey === `mono_${i}` ? 'Copied!' : h}</span>
                   </div>
                 ))}
               </div>

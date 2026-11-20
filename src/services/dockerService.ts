@@ -1323,6 +1323,15 @@ spec:
         hasUser = true
       }
 
+      if (trimmed.startsWith('RUN') && trimmed.includes('apt-get update') && !trimmed.includes('--no-install-recommends')) {
+        issues.push({
+          line: lineNum,
+          rule: 'apt-no-install-recommends',
+          severity: 'info',
+          message: 'Include "--no-install-recommends" with "apt-get install" to minimize Docker image layer size.',
+        })
+      }
+
       if (trimmed.startsWith('RUN') && trimmed.includes('sudo')) {
         issues.push({
           line: lineNum,
@@ -1351,7 +1360,59 @@ spec:
       })
     }
 
+    if (!lines.some((l) => l.trim().startsWith('HEALTHCHECK')) && lines.some((l) => l.trim().startsWith('EXPOSE'))) {
+      issues.push({
+        line: 1,
+        rule: 'missing-healthcheck',
+        severity: 'info',
+        message: 'Port exposed without HEALTHCHECK instruction. Define a HEALTHCHECK for orchestrator liveness monitoring.',
+      })
+    }
+
     return issues
+  }
+
+  /**
+   * Generates a standard docker-compose service definition with restart policies and resource limits.
+   */
+  public generateComposeService(config: {
+    serviceName: string
+    image: string
+    port?: number
+    restartPolicy?: 'no' | 'always' | 'on-failure' | 'unless-stopped'
+    memoryLimitMb?: number
+    env?: Record<string, string>
+  }): string {
+    const sName = config.serviceName.trim() || 'app'
+    const restart = config.restartPolicy || 'unless-stopped'
+    const lines: string[] = [
+      `  ${sName}:`,
+      `    image: ${config.image}`,
+      `    container_name: ${sName}-service`,
+      `    restart: ${restart}`,
+    ]
+
+    if (config.port) {
+      lines.push(`    ports:`, `      - "${config.port}:${config.port}"`)
+    }
+
+    if (config.env && Object.keys(config.env).length > 0) {
+      lines.push(`    environment:`)
+      for (const [k, v] of Object.entries(config.env)) {
+        lines.push(`      - ${k}=${v}`)
+      }
+    }
+
+    if (config.memoryLimitMb && config.memoryLimitMb > 0) {
+      lines.push(
+        `    deploy:`,
+        `      resources:`,
+        `        limits:`,
+        `          memory: ${config.memoryLimitMb}M`
+      )
+    }
+
+    return lines.join('\n')
   }
 }
 

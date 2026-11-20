@@ -21,8 +21,13 @@ export const PortSentinelView: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [selectedPort, setSelectedPort] = useState<ActivePort | null>(null)
+  const [protocolFilter, setProtocolFilter] = useState<'ALL' | 'TCP' | 'UDP'>('ALL')
+  const [stateFilter, setStateFilter] = useState<'ALL' | 'LISTENING' | 'ESTABLISHED'>('ALL')
+  const [conflictsOnly, setConflictsOnly] = useState<boolean>(false)
   const [pingResult, setPingResult] = useState<PortPingResult | null>(null)
   const [isPinging, setIsPinging] = useState<boolean>(false)
+  const [probeHost, setProbeHost] = useState<string>('127.0.0.1')
+  const [probePort, setProbePort] = useState<string>('')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
@@ -34,7 +39,12 @@ export const PortSentinelView: React.FC = () => {
   const loadPorts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const data = await portSentinelService.scanActivePorts(searchQuery)
+      const data = await portSentinelService.scanActivePorts({
+        searchQuery,
+        protocol: protocolFilter,
+        state: stateFilter,
+        conflictsOnly,
+      })
       setPorts(data)
       setSelectedPort((prev) => {
         if (prev && data.some((p) => p.port === prev.port && p.pid === prev.pid)) return prev
@@ -43,7 +53,7 @@ export const PortSentinelView: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery])
+  }, [searchQuery, protocolFilter, stateFilter, conflictsOnly])
 
   useEffect(() => {
     loadPorts()
@@ -52,13 +62,20 @@ export const PortSentinelView: React.FC = () => {
   // Clear stale ping result whenever selected port changes
   useEffect(() => {
     setPingResult(null)
+    if (selectedPort) {
+      setProbePort(String(selectedPort.port))
+    }
   }, [selectedPort?.port, selectedPort?.pid])
 
-  const handlePing = async (port: number) => {
+  const handlePing = async (portToPing?: number, hostToPing?: string) => {
+    const targetPort = portToPing ?? parseInt(probePort, 10)
+    const targetHost = (hostToPing ?? probeHost).trim() || '127.0.0.1'
+    if (isNaN(targetPort) || targetPort <= 0 || targetPort > 65535) return
+
     setIsPinging(true)
     setPingResult(null)
     try {
-      const res = await portSentinelService.pingPort(port)
+      const res = await portSentinelService.pingPort(targetPort, targetHost)
       setPingResult(res)
     } finally {
       setIsPinging(false)
@@ -135,6 +152,67 @@ export const PortSentinelView: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="sentinel-filter-strip" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          {(['ALL', 'TCP', 'UDP'] as const).map((proto) => (
+            <button
+              key={proto}
+              className={`sentinel-pill glass-interactive ${protocolFilter === proto ? 'active' : ''}`}
+              style={{
+                fontSize: '0.68rem',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: '1px solid',
+                borderColor: protocolFilter === proto ? 'rgba(10, 132, 255, 0.6)' : 'rgba(255, 255, 255, 0.1)',
+                background: protocolFilter === proto ? 'rgba(10, 132, 255, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                color: protocolFilter === proto ? '#FFF' : 'rgba(255, 255, 255, 0.7)',
+                cursor: 'pointer',
+              }}
+              onClick={() => setProtocolFilter(proto)}
+            >
+              {proto}
+            </button>
+          ))}
+
+          {(['ALL', 'LISTENING', 'ESTABLISHED'] as const).map((st) => (
+            <button
+              key={st}
+              className={`sentinel-pill glass-interactive ${stateFilter === st ? 'active' : ''}`}
+              style={{
+                fontSize: '0.68rem',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: '1px solid',
+                borderColor: stateFilter === st ? 'rgba(48, 209, 88, 0.6)' : 'rgba(255, 255, 255, 0.1)',
+                background: stateFilter === st ? 'rgba(48, 209, 88, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                color: stateFilter === st ? '#FFF' : 'rgba(255, 255, 255, 0.7)',
+                cursor: 'pointer',
+              }}
+              onClick={() => setStateFilter(st)}
+            >
+              {st}
+            </button>
+          ))}
+
+          <button
+            className={`sentinel-pill glass-interactive ${conflictsOnly ? 'active' : ''}`}
+            style={{
+              fontSize: '0.68rem',
+              padding: '2px 8px',
+              borderRadius: 4,
+              border: '1px solid',
+              borderColor: conflictsOnly ? 'rgba(255, 69, 58, 0.6)' : 'rgba(255, 255, 255, 0.1)',
+              background: conflictsOnly ? 'rgba(255, 69, 58, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+              color: conflictsOnly ? '#FFF' : 'rgba(255, 255, 255, 0.7)',
+              cursor: 'pointer',
+            }}
+            onClick={() => setConflictsOnly((prev) => !prev)}
+            title="Show conflicting ports only"
+          >
+            Conflicts Only
+          </button>
         </div>
       </div>
 
@@ -225,11 +303,60 @@ export const PortSentinelView: React.FC = () => {
                   </div>
                   <button
                     className="probe-btn glass-interactive"
-                    onClick={() => handlePing(selectedPort.port)}
+                    onClick={() => handlePing(selectedPort.port, probeHost)}
                     disabled={isPinging}
                   >
                     <Zap size={11} className={isPinging ? 'spinning' : ''} />
                     <span>{isPinging ? 'Probing...' : 'Ping Port'}</span>
+                  </button>
+                </div>
+
+                <div className="probe-target-row" style={{ display: 'flex', gap: 6, margin: '8px 0', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={probeHost}
+                    onChange={(e) => setProbeHost(e.target.value)}
+                    placeholder="Host (127.0.0.1)"
+                    style={{
+                      flex: 2,
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 4,
+                      padding: '3px 7px',
+                      color: '#FFF',
+                      fontSize: '0.72rem',
+                    }}
+                  />
+                  <input
+                    type="number"
+                    value={probePort}
+                    onChange={(e) => setProbePort(e.target.value)}
+                    placeholder="Port"
+                    style={{
+                      flex: 1,
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 4,
+                      padding: '3px 7px',
+                      color: '#FFF',
+                      fontSize: '0.72rem',
+                    }}
+                  />
+                  <button
+                    className="glass-interactive"
+                    onClick={() => handlePing()}
+                    disabled={isPinging}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '3px 8px',
+                      borderRadius: 4,
+                      border: '1px solid rgba(10, 132, 255, 0.5)',
+                      background: 'rgba(10, 132, 255, 0.2)',
+                      color: '#FFF',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Custom Probe
                   </button>
                 </div>
 

@@ -447,13 +447,26 @@ export const DiffStudioView: React.FC<DiffStudioViewProps> = ({
                 <FileText size={14} color="#64D2FF" />
                 <span>UNIFIED DIFF PATCH ({activeFileName})</span>
               </div>
-              <button
-                className="copy-patch-btn glass-interactive"
-                onClick={() => copyToClipboard(diffStudioService.generateUnifiedPatch(activeFileName, origText, modText))}
-              >
-                {copied ? <Check size={12} color="#30D158" /> : <Copy size={12} />}
-                <span>{copied ? 'Copied!' : 'Copy Patch'}</span>
-              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  className="copy-patch-btn glass-interactive"
+                  onClick={() => {
+                    const patch = diffStudioService.generateUnifiedPatch(activeFileName, origText, modText)
+                    diffStudioService.downloadPatchFile(activeFileName, patch)
+                  }}
+                  title="Download .patch file to disk"
+                >
+                  <Download size={12} color="#0A84FF" />
+                  <span>Download .patch</span>
+                </button>
+                <button
+                  className="copy-patch-btn glass-interactive"
+                  onClick={() => copyToClipboard(diffStudioService.generateUnifiedPatch(activeFileName, origText, modText))}
+                >
+                  {copied ? <Check size={12} color="#30D158" /> : <Copy size={12} />}
+                  <span>{copied ? 'Copied!' : 'Copy Patch'}</span>
+                </button>
+              </div>
             </div>
             <pre className="patch-code-viewer glass-panel">
               <code>{diffStudioService.generateUnifiedPatch(activeFileName, origText, modText)}</code>

@@ -523,7 +523,110 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
     return btoa(bin)
   }
 
-  public exportCodeSnippet(variables: EnvVariable[], language: 'typescript' | 'python' | 'go' | 'docker' | 'k8s'): string {
+  /**
+   * Calculates Shannon Entropy H(X) in bits per character for a string.
+   * Useful for distinguishing low-entropy placeholder passwords from high-entropy keys/tokens.
+   */
+  public calculateShannonEntropy(value: string): number {
+    if (!value || value.length === 0) return 0
+    const freqs: Record<string, number> = {}
+    for (let i = 0; i < value.length; i++) {
+      const ch = value[i]
+      freqs[ch] = (freqs[ch] || 0) + 1
+    }
+    const len = value.length
+    let entropy = 0
+    for (const count of Object.values(freqs)) {
+      const p = count / len
+      entropy -= p * Math.log2(p)
+    }
+    return Math.round(entropy * 100) / 100
+  }
+
+  /**
+   * Evaluates secret randomness, length, character diversity, and Shannon entropy.
+   */
+  public assessSecretStrength(value: string): {
+    entropy: number
+    score: 'critical_weak' | 'weak' | 'moderate' | 'strong' | 'very_strong'
+    scoreLabel: string
+    color: string
+    description: string
+  } {
+    const entropy = this.calculateShannonEntropy(value)
+    const len = value.length
+
+    if (len === 0) {
+      return {
+        entropy: 0,
+        score: 'critical_weak',
+        scoreLabel: 'Empty',
+        color: '#FF453A',
+        description: 'Secret value is empty.',
+      }
+    }
+
+    const lower = value.toLowerCase()
+    if (
+      lower.includes('placeholder') ||
+      lower.includes('secret') ||
+      lower.includes('password') ||
+      lower === '123456' ||
+      lower === 'admin' ||
+      lower === 'changeme'
+    ) {
+      return {
+        entropy,
+        score: 'critical_weak',
+        scoreLabel: 'Predictable',
+        color: '#FF453A',
+        description: 'Value contains common placeholder or dictionary token.',
+      }
+    }
+
+    if (len < 8 || entropy < 2.0) {
+      return {
+        entropy,
+        score: 'weak',
+        scoreLabel: 'Weak',
+        color: '#FF9F0A',
+        description: `Very low entropy (${entropy} bits/char) or short length (<8 chars).`,
+      }
+    }
+
+    if (len < 16 || entropy < 3.2) {
+      return {
+        entropy,
+        score: 'moderate',
+        scoreLabel: 'Moderate',
+        color: '#FFD60A',
+        description: `Moderate entropy (${entropy} bits/char). Suitable for non-critical services.`,
+      }
+    }
+
+    if (len >= 32 && entropy >= 3.5) {
+      return {
+        entropy,
+        score: 'very_strong',
+        scoreLabel: 'Cryptographic',
+        color: '#30D158',
+        description: `High-entropy cryptographic secret (${entropy} bits/char, ${len} chars).`,
+      }
+    }
+
+    return {
+      entropy,
+      score: 'strong',
+      scoreLabel: 'Strong',
+      color: '#32D74B',
+      description: `Solid entropy (${entropy} bits/char) and sufficient length.`,
+    }
+  }
+
+  public exportCodeSnippet(
+    variables: EnvVariable[],
+    language: 'typescript' | 'python' | 'go' | 'docker' | 'k8s' | 'k8s-configmap' | 'json'
+  ): string {
     switch (language) {
       case 'typescript':
         return `// Type-Safe Environment Variables Schema\nexport const env = {\n${variables
@@ -552,6 +655,25 @@ AWS_ACCESS_KEY_ID=your_aws_access_key
             return `  ${v.key}: "${escaped}"`
           })
           .join('\n')}\n`
+      case 'k8s-configmap':
+        return `# Kubernetes ConfigMap Manifest\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\ndata:\n${variables
+          .filter((v) => !v.isSecret)
+          .map((v) => {
+            const escaped = v.value
+              .replace(/\\/g, '\\\\')
+              .replace(/"/g, '\\"')
+              .replace(/\r/g, '\\r')
+              .replace(/\n/g, '\\n')
+            return `  ${v.key}: "${escaped}"`
+          })
+          .join('\n')}\n`
+      case 'json': {
+        const obj: Record<string, string> = {}
+        for (const v of variables) {
+          obj[v.key] = v.value
+        }
+        return JSON.stringify(obj, null, 2)
+      }
     }
   }
 

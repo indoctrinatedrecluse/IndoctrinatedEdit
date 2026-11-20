@@ -6,7 +6,7 @@ export interface ProjectTask {
   id: string
   name: string
   command: string
-  source: 'package.json' | 'Makefile' | 'Cargo.toml' | 'Python' | 'Custom'
+  source: 'package.json' | 'Makefile' | 'Cargo.toml' | 'Python' | 'Go' | 'Deno' | 'Custom'
   lastRun?: {
     status: 'success' | 'failed' | 'running'
     durationMs: number
@@ -231,9 +231,53 @@ class TaskRunnerService {
       // No pyproject.toml
     }
 
-    // 5. .vscode/tasks.json
+    // 5. Go modules (go.mod)
     try {
-      const vscRaw = await window.electronAPI.readFile(`${root}/.vscode/tasks.json`)
+      await window.electronAPI.readFile(`${root}/go.mod`)
+      discovered.push(
+        { id: 'go_build', name: 'go build', command: 'go build ./...', source: 'Go' },
+        { id: 'go_test', name: 'go test', command: 'go test -v ./...', source: 'Go' },
+        { id: 'go_vet', name: 'go vet', command: 'go vet ./...', source: 'Go' },
+        { id: 'go_run', name: 'go run', command: 'go run .', source: 'Go' }
+      )
+    } catch {
+      // No go.mod
+    }
+
+    // 6. Deno tasks (deno.json / deno.jsonc)
+    try {
+      let denoRaw = ''
+      try {
+        denoRaw = await window.electronAPI.readFile(`${root}/deno.json`)
+      } catch {
+        denoRaw = await window.electronAPI.readFile(`${root}/deno.jsonc`)
+      }
+      const cleaned = denoRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+      const parsed = JSON.parse(cleaned)
+      if (parsed?.tasks && typeof parsed.tasks === 'object') {
+        for (const [taskName, taskCmd] of Object.entries(parsed.tasks)) {
+          if (typeof taskCmd === 'string') {
+            discovered.push({
+              id: `deno_${taskName}`,
+              name: `deno task ${taskName}`,
+              command: `deno task ${taskName}`,
+              source: 'Deno',
+            })
+          }
+        }
+      }
+    } catch {
+      // No deno config
+    }
+
+    // 7. .tasks.json or .vscode/tasks.json
+    try {
+      let vscRaw = ''
+      try {
+        vscRaw = await window.electronAPI.readFile(`${root}/.tasks.json`)
+      } catch {
+        vscRaw = await window.electronAPI.readFile(`${root}/.vscode/tasks.json`)
+      }
       const cleaned = vscRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1')
       const parsed = JSON.parse(cleaned)
       if (Array.isArray(parsed.tasks)) {
@@ -250,7 +294,7 @@ class TaskRunnerService {
         }
       }
     } catch {
-      // No .vscode/tasks.json
+      // No tasks json
     }
 
     if (discovered.length > 0) {
@@ -258,6 +302,26 @@ class TaskRunnerService {
       this.tasks = [...discovered, ...customTasks]
     }
     return this.getTasks()
+  }
+
+  /**
+   * Filter tasks by source and text query.
+   */
+  public filterTasks(tasks: ProjectTask[], filter: { source?: string; query?: string }): ProjectTask[] {
+    let result = [...tasks]
+    if (filter.source && filter.source !== 'All') {
+      result = result.filter((t) => t.source === filter.source)
+    }
+    if (filter.query && filter.query.trim()) {
+      const q = filter.query.toLowerCase().trim()
+      result = result.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.command.toLowerCase().includes(q) ||
+          t.source.toLowerCase().includes(q)
+      )
+    }
+    return result
   }
 
   public async runTask(taskId: string, cwd?: string): Promise<ProjectTask | null> {

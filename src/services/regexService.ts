@@ -76,6 +76,41 @@ class RegexService {
       description: 'Matches standard 3-part Base64URL JSON Web Tokens.',
       sampleText: 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
     },
+    {
+      name: 'ISO-8601 DateTime',
+      pattern: '\\b\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?)?\\b',
+      flags: 'g',
+      description: 'Matches full and partial ISO-8601 calendar date and UTC timestamps.',
+      sampleText: 'Events recorded at 2026-11-20T11:27:25.000Z and 2026-12-01.',
+    },
+    {
+      name: 'IEEE 802 MAC Address',
+      pattern: '\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b',
+      flags: 'g',
+      description: 'Matches 6-octet colon or hyphen-separated Ethernet MAC addresses.',
+      sampleText: 'Network interfaces: 00:1A:2B:3C:4D:5E and f0-18-98-31-02-aa.',
+    },
+    {
+      name: 'Conventional Commits',
+      pattern: '^(feat|fix|docs|style|refactor|perf|test|chore|build|ci)(\\([a-zA-Z0-9_.-]+\\))?: (.+)$',
+      flags: 'gm',
+      description: 'Matches Conventional Commits specifications with type, scope, and description.',
+      sampleText: 'feat(ui): implement dynamic window controls\nfix(parser): resolve unterminated string',
+    },
+    {
+      name: 'CSS Hex Color Code',
+      pattern: '#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3}|[A-Fa-f0-9]{8})\\b',
+      flags: 'g',
+      description: 'Matches 3, 6, or 8-digit hexadecimal CSS color notation.',
+      sampleText: 'Palette: #0A84FF, #30D158, #FFF, and semi-transparent #1c1c1e80.',
+    },
+    {
+      name: 'URL-Safe Slug',
+      pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
+      flags: '',
+      description: 'Validates kebab-case URL slug containing only lowercase alphanumerics and hyphens.',
+      sampleText: 'indoctrinated-edit-v6-release',
+    },
   ]
 
   public testRegex(pattern: string, flags: string, testText: string): RegexTestResult {
